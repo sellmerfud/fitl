@@ -53,7 +53,7 @@ object Human {
     free: Boolean                   = false, // Events grant free commands
     onlyIn: Option[Set[String]]     = None   // Limit command to the given spaces
   ) {
-    val limCmdOnly = maxSpaces == Some(1)
+    val limOpOnly = maxSpaces == Some(1)
   }
 
 
@@ -85,12 +85,10 @@ object Human {
     def toList = groups.toList.sortBy(_._1)
     def size = groups.size
   }
-
+  
   // A human player has opted to take an action on the current card.
   def act(): Unit = {
     object Pass extends Exception
-    // Save the game state to handle the user aborting the action.
-    val savedState = game
     val faction = game.nextUp.get
 
     try {
@@ -100,7 +98,7 @@ object Human {
         val choices: List[(Option[Action], String)] =
           (game.sequence.availableActions map (a => Some(a) -> a.toString)) :+ (None -> "Pass")
 
-        askMenu(choices).head getOrElse { throw Pass }
+        askMenu(choices, "\nChoose one:").head getOrElse { throw Pass }
       }
 
       game = game.copy(sequence = game.sequence.addActor(faction, action))
@@ -118,30 +116,86 @@ object Human {
     catch {
       case Pass =>
         factionPasses(faction)
-        
-      case AbortAction =>
-        println("\n>>>> Aborting the current action <<<<")
-        println(separator())
-        displayGameStateDifferences(game, savedState)
-        game = savedState
     }
   }
 
+  
   def executeEvent(faction: Faction): Unit = {
     println("executeEvent() not implemented")
 
   }
-  // Ask user to select command and execute it.
+  
   def executeCmd(faction: Faction, params: Params = Params()): Unit = {
     SpecialActivity.init(params)
     MovingGroups.init()
 
-    // faction match {
-    //   case Dux       => DuxHuman.executeCmd(params)
-    //   case Civitates => CivHuman.executeCmd(params)
-    //   case Saxon     => SaxHuman.executeCmd(params)
-    //   case Scotti    => ScoHuman.executeCmd(params)
-    // }
+    faction match {
+      case US  | ARVN => executeCoinCmd(faction, params)
+      case NVA | VC   => executeInsurgentCmd(faction, params)
+    }
+  }
+  
+  def executeCoinCmd(faction: Faction, params: Params): Unit = {
+    
+    val choices: List[(Option[CoinOp], String)] =
+      (CoinOp.ALL map (op => Some(op) -> op.toString)) :+ (None -> "Abort current action")
+
+    val op = askMenu(choices, "\nChoose one:").head getOrElse { throw AbortAction }
+    
+    op match {
+      case Train   => executeTrain(faction, params)
+      case Patrol  => executePatrol(faction, params)
+      case Sweep   => executeSweep(faction, params)
+      case Assault => executeAssault(faction, params)
+    }
   }
 
+  def executeInsurgentCmd(faction: Faction, params: Params): Unit = {
+    val choices: List[(Option[InsurgentOp], String)] =
+      (InsurgentOp.ALL map (op => Some(op) -> op.toString)) :+ (None -> "Abort current action")
+
+    val op = askMenu(choices, "\nChoose one:").head getOrElse { throw AbortAction }
+    
+    op match {
+      case Rally  => executeRally(faction, params)
+      case March  => executeMarch(faction, params)
+      case Attack => executeAttack(faction, params)
+      case Terror => executeTerror(faction, params)
+    }
+  }
+
+
+  // ====================================================================
+  // == Coin Operations =================================================
+  // ====================================================================
+  
+  def executeTrain(faction: Faction, params: Params): Unit = {
+  }
+  
+  def executePatrol(faction: Faction, params: Params): Unit = {
+  }
+  
+  def executeSweep(faction: Faction, params: Params): Unit = {
+  }
+  
+  def executeAssault(faction: Faction, params: Params): Unit = {
+  }
+  
+  // ====================================================================
+  // == Insurgent Operations ===========================================
+  // ====================================================================
+
+  def executeRally(faction: Faction, params: Params): Unit = {
+  }
+  
+  def executeMarch(faction: Faction, params: Params): Unit = {
+  }
+  
+  def executeAttack(faction: Faction, params: Params): Unit = {
+  }
+  
+  def executeTerror(faction: Faction, params: Params): Unit = {
+  }
+  
+  
 }

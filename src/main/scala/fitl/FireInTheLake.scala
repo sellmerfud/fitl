@@ -953,6 +953,31 @@ object FireInTheLake {
   // Case sensitive
   def isValidScenario(name: String) = scenarios contains name
 
+  sealed trait CoinOp {
+    val name: String
+    override def toString() = name
+  }
+  case object  Train   extends CoinOp { val name = "Train"   }
+  case object  Patrol  extends CoinOp { val name = "Patrol"  }
+  case object  Sweep   extends CoinOp { val name = "Sweep"   }
+  case object  Assault extends CoinOp { val name = "Assault" }
+  
+  object CoinOp {
+    val ALL = List(Train, Patrol, Sweep, Assault) 
+  }
+  
+  sealed trait InsurgentOp {
+    val name: String
+    override def toString() = name
+  }
+  case object  Rally  extends InsurgentOp { val name = "Rally"   }
+  case object  March  extends InsurgentOp { val name = "March"  }
+  case object  Attack extends InsurgentOp { val name = "Attack"   }
+  case object  Terror extends InsurgentOp { val name = "Terror" }
+
+  object InsurgentOp {
+    val ALL = List(Rally, March, Attack, Terror)
+  }
 
   sealed trait Action {
     val name: String
@@ -1091,16 +1116,22 @@ object FireInTheLake {
     // This is used to mark the current game segment, etc.
     // "#10 Rolling Thunder - 0 acted, US is up"
     def description: String = {
-      val card = deck(currentCard)
-      val b = new StringBuilder(s"$card - ")
-      if (isCoupRound)
-        b.append("Coup! round")
+      val b = new StringBuilder
+      if (cardsDrawn == 0) {
+        b.append("Start of game, no cards have been drawn")
+      }
       else {
-        b.append(s"${sequence.numActors} acted")
-        if (sequence.numPassed > 0)
-          b.append(s", ${sequence.numPassed} passed")
-        nextUp map (_.name) foreach { up =>
-          b.append(s", $up is up")
+        val card = deck(currentCard)
+        b.append(s"$card - ")
+        if (isCoupRound)
+          b.append("Coup! round")
+        else {
+          b.append(s"${sequence.numActors} acted")
+          if (sequence.numPassed > 0)
+            b.append(s", ${sequence.numPassed} passed")
+          nextUp map (_.name) foreach { up =>
+            b.append(s", $up is up")
+          }
         }
       }
       b.toString
@@ -1691,8 +1722,6 @@ object FireInTheLake {
         resolveCoupCard()
       else
         resolveNextActor()
-      
-      // saveGameState(game.description)  // Save the current game state
     }
     catch {
       // The rollback command will have restored the game state from a previosly
@@ -1761,7 +1790,8 @@ object FireInTheLake {
             game.copy(
               prevCardWasCoup = deck(game.currentCard).isCoup,
               currentCard     = game.onDeckCard.get)
-                        
+                 
+            saveGameState(game.description)
           case _ =>
             doCommonCommand(cmd, param)
             nextEndCommand()
@@ -1790,10 +1820,22 @@ object FireInTheLake {
         cmd match {
           case PassCmd =>
             factionPasses(faction)
+            saveGameState(game.description)
             resolveNextActor()
           case ActCmd  =>
-            Human.act()
-            log(s"\nFinished with $faction turn")
+            val savedState = game
+            try {
+              Human.act()
+              log(s"\nFinished with $faction turn")
+              saveGameState(game.description)
+            }
+            catch {
+              case AbortAction =>
+                println("\n>>>> Aborting the current action <<<<")
+                println(separator())
+                displayGameStateDifferences(game, savedState)
+                game = savedState
+            }
             resolveNextActor()
           case BotCmd  =>
             val action = shuffle(game.sequence.availableActions).head
@@ -1804,6 +1846,7 @@ object FireInTheLake {
             
             // Bot.act()
             log(s"\nFinished with $faction turn")
+            saveGameState(game.description)
             resolveNextActor()
           case _ =>
             doCommonCommand(cmd, param)

@@ -148,11 +148,23 @@ object FireInTheLake {
     def compare(x: Card, y: Card) = x.number compare y.number
   }
 
-  val RVN_Leader_DuongVanMinh   = "Duong Van Minh"   // Printed on map
-  val RVN_Leader_NguyenKhanh    = "Nguyen Khanh"     // Coup card #125
-  val RVN_Leader_YoungTurks     = "Young Turks"      // Coup card #126
-  val RVN_Leader_NguyenCaoKy    = "Nguyen Cao Ky"    // Coup card #127
-  val RVN_Leader_NguyenVanThieu = "Nguyen Van Thieu" // Coup card #128
+  val RVN_Leader_DuongVanMinh   = "Duong Van Minh"     // Printed on map
+  val RVN_Leader_NguyenKhanh    = "Nguyen Khanh"       // Coup card #125
+  val RVN_Leader_YoungTurks     = "Young Turks"        // Coup card #126
+  val RVN_Leader_NguyenCaoKy    = "Nguyen Cao Ky"      // Coup card #127
+  val RVN_Leader_NguyenVanThieu = "Nguyen Van Thieu"   // Coup card #128
+  val RVN_Leader_FailedCoup129  = "Failed Coup (#129)" // Coup card #129
+  val RVN_Leader_FailedCoup130  = "Failed Coup (#130)" // Coup card #130
+  
+  val RVN_Leaders = List(
+    RVN_Leader_DuongVanMinh,
+    RVN_Leader_NguyenKhanh,
+    RVN_Leader_YoungTurks,
+    RVN_Leader_NguyenCaoKy,
+    RVN_Leader_NguyenVanThieu,
+    RVN_Leader_FailedCoup129,
+    RVN_Leader_FailedCoup130
+  )
 
   // Pivotal card numbers
   val PivotalUS   = 121
@@ -882,22 +894,24 @@ object FireInTheLake {
   def shadedCapability(name: String)   = Capability(name, true)
   def unshadedCapability(name: String) = Capability(name, false)
 
-  // Momentum markers
-  val Mo_WildWeasels       = "#5 Wild Weasels"          // Shaded   (affects Air Strike)
-  val Mo_ADSID             = "#7 ADSID"                 // Unshaded (affects change to trail value)
-  val Mo_RollingThunder    = "#10 Rolling Thunder"      // Shaded   (prohibits air strike)
-  val Mo_Medevac_Unshaded  = "#15 Medevac (unshaded)"   // (affects commitment phase during coup round)
-  val Mo_Medevac_Shaded    = "#15 Medevac (shaded)"     // (prohibits air lift)
-  val Mo_BlowtorchKomer    = "#16 Blowtorch Komer"      // Unshaded (Pacity costs 1 resource per step/teror)
-  val Mo_Claymores         = "#17 Claymores"            // Unshaded (prohibits ambush, affect guerrilla march)
-  val Mo_DaNang            = "#22 Da Nang"              // Shaded (prohibits air strike)
-  val Mo_McNamaraLine      = "#38 McNamara Line"        // Single event (prohibits infiltrate, prohibits trail improvement by rally)
-  val Mo_Oriskany          = "#39 Oriskany"             // Shaded (prohibits degrade of trail)
-  val Mo_BombingPause      = "#41 Bombing Pause"        // Single event (prohibits air strike)
-  val Mo_559TransportGrp   = "#46 559th Transport Grp"  // Unshaded (Infiltrate is max 1 space)
-  val Mo_BodyCount         = "#72 Body Count"           // Unshaded (affects asasult and patrol)
-  val Mo_GeneralLansdale   = "#78 General Lansdale"     // Shaded (prohibits assault)
-  val Mo_TyphoonKate       = "#115 Typhoon Kate"        // Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
+  val Medevac_prefix = "#15 Medevac"
+  
+  // Momentum markers  
+  val Mo_WildWeasels       = "#5 Wild Weasels"              // Shaded   (affects Air Strike)
+  val Mo_ADSID             = "#7 ADSID"                     // Unshaded (affects change to trail value)
+  val Mo_RollingThunder    = "#10 Rolling Thunder"          // Shaded   (prohibits air strike)
+  val Mo_Medevac_Unshaded  = s"$Medevac_prefix (unshaded)"  // (affects commitment phase during coup round)
+  val Mo_Medevac_Shaded    = s"$Medevac_prefix (shaded)"    // (prohibits air lift)
+  val Mo_BlowtorchKomer    = "#16 Blowtorch Komer"          // Unshaded (Pacity costs 1 resource per step/teror)
+  val Mo_Claymores         = "#17 Claymores"                // Unshaded (prohibits ambush, affect guerrilla march)
+  val Mo_DaNang            = "#22 Da Nang"                  // Shaded (prohibits air strike)
+  val Mo_McNamaraLine      = "#38 McNamara Line"            // Single event (prohibits infiltrate, prohibits trail improvement by rally)
+  val Mo_Oriskany          = "#39 Oriskany"                 // Shaded (prohibits degrade of trail)
+  val Mo_BombingPause      = "#41 Bombing Pause"            // Single event (prohibits air strike)
+  val Mo_559TransportGrp   = "#46 559th Transport Grp"      // Unshaded (Infiltrate is max 1 space)
+  val Mo_BodyCount         = "#72 Body Count"               // Unshaded (affects asasult and patrol)
+  val Mo_GeneralLansdale   = "#78 General Lansdale"         // Shaded (prohibits assault)
+  val Mo_TyphoonKate       = "#115 Typhoon Kate"            // Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
 
   val AllMomentum = List(
     Mo_WildWeasels, Mo_ADSID, Mo_RollingThunder, Mo_Medevac_Unshaded, Mo_Medevac_Shaded,
@@ -1051,8 +1065,9 @@ object FireInTheLake {
     usPolicy: String                  = USPolicy_JFK,
     casualties: Pieces                = Pieces(),  // US pieces only
     outOfPlay: Pieces                 = Pieces(),  // US and ARVN
+    pivotCardsAvailable: Set[Faction] = Set.empty,
     capabilities: List[Capability]    = Nil,
-    rvnLeaders: List[String]          = List(RVN_Leader_DuongVanMinh),
+    rvnLeaders: List[String]          = List(RVN_Leader_DuongVanMinh),  // Head of list is current leader
     momentum: List[String]            = Nil,
     sequence: SequenceOfPlay          = SequenceOfPlay(),
     cardsDrawn: Int                   = 0,
@@ -1060,7 +1075,6 @@ object FireInTheLake {
     onDeckCard: Option[Int]           = None,
     prevCardWasCoup: Boolean          = false,
     coupCardsPlayed: Int              = 0,  // Number of Coup cards played/ignored thus far
-    pivotCardsAvailable: Set[Faction] = Set.empty,
     turn: Int                         = 0,  // turn zero indicates the start of the game
     botDebug: Boolean                 = false,
     history: Vector[GameSegment]      = Vector.empty,
@@ -1305,9 +1319,6 @@ object FireInTheLake {
   }
 
   def outOfPlaySummary: Seq[String] = {
-    val USPieces        = List(USTroops, Irregulars_U, Irregulars_A, USBase)
-    val ARVNPieces      = List(ARVNTroops, ARVNPolice, Rangers_U, Rangers_A, ARVNBase)
-    
     val b = new ListBuffer[String]
     
     def addPieces(types: Seq[PieceType]): Unit = {
@@ -1327,10 +1338,18 @@ object FireInTheLake {
 
   def eventSummary: Seq[String] = {
     val b = new ListBuffer[String]
+    val pivotal = Faction.ALL.toList.sorted map {
+      faction =>
+      if (game.pivotCardsAvailable(faction))
+        s"$faction (available)"
+      else
+        s"$faction (not available)"
+    }
     b += "Active Events"
     b += separator()
     wrap("Capabilities: ", game.capabilities map (_.toString)) foreach (b += _)
     wrap("Momentum    : ", game.momentum)     foreach (b += _)
+    wrap("Pivotal     : ", pivotal) foreach (b += _)
     b += ""
     b.toList
   }
@@ -1470,6 +1489,7 @@ object FireInTheLake {
       scenario.usPolicy,
       Pieces(), // casualties
       scenario.outOfPlay,
+      scenario.pivotCardsAvailable,
       if (usePeriodCapabilities) scenario.periodCapabilities else Nil,
       scenario.rvnLeadersInPlay)      
   }
@@ -1942,26 +1962,65 @@ object FireInTheLake {
   }
 
 
+
+  def logPointsChanges(origGame: GameState, newGame: GameState): Unit = {
+    var loggedHeader = false;
+    def logChange(message: String): Unit = {
+      if (!loggedHeader) {
+        log("\nScore Marker changes")
+        log(separator())
+        loggedHeader = true
+      }
+      log(message)
+    }
+    
+    if (origGame.usPoints != newGame.usPoints)
+      logChange(s"Move the 'Support + Avail US' marker to ${newGame.usPoints}")
+    
+    if (origGame.arvnPoints != newGame.arvnPoints)
+      logChange(s"Move the 'COIN Control + Patronage' marker to ${newGame.arvnPoints}")
+      
+    if (origGame.nvaPoints != newGame.nvaPoints)
+      logChange(s"Move the 'NVA Control + NVA Bases' marker to ${newGame.nvaPoints}")
+      
+    if (origGame.vcPoints != newGame.vcPoints)
+      logChange(s"Move the 'Total Opposition + VC Bases' marker to ${newGame.vcPoints}")
+  }
+  
   // Performs the given code, then logs all spaces that have changed control
   // and logs the updates to edge track markers that are base on control changes.
   // Nested calls to this funciton will not perform any logging.  The outermost
   // call, only, will do the logging.
   private var loggingControlChangesActive = false
+  
   def loggingControlChanges[T](code: => T): T = {
     if (loggingControlChangesActive)
       code
     else {
       loggingControlChangesActive = true
       try {
-        val savedState = game
+        val savedGame  = game
         val result     = code
+        val changed = for {
+          space <- game.spaces.sortBy(_.name)
+          orig = savedGame.getSpace(space.name)
+          if !orig.isLOC && orig.control != space.control 
+        } yield (space.name, orig.control, space.control)
 
-        // Check each space for a control change and log the results
-        for (sp <- game.spaces.sortBy(_.name); orig = savedState.getSpace(sp.name))
-          logControlChange(orig, sp)
+        if (changed.nonEmpty) {
+          log(s"\nControl changes")
+          log(separator())
+          for ((name, origControl, newControl) <- changed) {
+            (origControl, newControl) match {
+              case (Uncontrolled, _)  => log(s"Place ${newControl} marker in ${name}")
+              case (_, Uncontrolled)  => log(s"Remove ${origControl} marker from ${name}")
+              case _                  => log(s"Flip control marker in ${name} to ${newControl}")
+            }            
+          }
+        }
 
-        // Log any edge track control markers that have changed
-        logPointsChanges(savedState, game)
+        // Log changes to points markers that are related to space control
+        logPointsChanges(savedGame, game)
         result
       }
       finally {
@@ -1970,36 +2029,6 @@ object FireInTheLake {
     }
   }
 
-  def logControlChange(orig: Space, updated: Space): Unit = {
-    assert(orig.name == updated.name, "logControlChange: not the same space!")
-    // LOCs do not have control
-    if (!orig.isLOC && orig.control != updated.control) {
-      log(s"\nControl of ${orig.name} has changed")
-      log(separator())
-      (orig.control, updated.control) match {
-        case (x, y) if (x == y) => // No change to log
-        case (Uncontrolled, _)  => log(s"Place ${updated.control} marker in ${orig.name}")
-        case (_, Uncontrolled)  => log(s"Remove ${orig.control} marker from ${orig.name}")
-        case _                  => log(s"Flip control marker in ${orig.name} to: ${updated.control}")
-      }
-    }
-  }
-
-
-  def logPointsChanges(origGame: GameState, newGame: GameState): Unit = {
-    if (origGame.usPoints != newGame.usPoints)
-      log(s"Move the 'Support + Avail US' marker to ${newGame.usPoints}")
-    
-    if (origGame.arvnPoints != newGame.arvnPoints)
-      log(s"Move the 'COIN Control + Patronage' marker to ${newGame.arvnPoints}")
-      
-    if (origGame.nvaPoints != newGame.nvaPoints)
-      log(s"Move the 'NVA Control + NVA Bases' marker to ${newGame.nvaPoints}")
-      
-    if (origGame.vcPoints != newGame.vcPoints)
-      log(s"Move the 'Total Opposition + VC Bases' marker to ${newGame.vcPoints}")
-      
-  }
   
   
   // Returns comma separated string with last choice separated by "and"
@@ -2259,11 +2288,14 @@ object FireInTheLake {
       else if (itemsRemaining.size == 1)
         itemsRemaining.keys.head :: Nil
       else {
+        val width = itemsRemaining.size.toString.size
         println(heading)
         println(separator(char = '='))
         val indexMap = (itemsRemaining.keys.zipWithIndex map (_.swap)).toMap
-        for ((key, i) <- itemsRemaining.keysIterator.zipWithIndex)
-          println(s"${i+1}) ${itemsRemaining(key)}")
+        for ((key, i) <- itemsRemaining.keysIterator.zipWithIndex) {
+          val prefix = String.format(s"%${width}d) ", new Integer(i+1))
+          println(s"${prefix}${itemsRemaining(key)}")
+        }
         val prompt = if (numChoices > 1) s"${ordinal(num)} Selection: "
         else "Selection: "
         println(separator())
@@ -2475,13 +2507,13 @@ object FireInTheLake {
       case "patronage"    => adjustPatronage()
       case "econ"         => adjustEcon()
       case "trail"        => adjustTrail()
-      case "uspolicy"     => adjustUspolicy()
+      case "uspolicy"     => adjustUSPolicy()
       case "casualties"   => adjustCasualties()
       case "out of play"  => adjustOutOfPlay()
       case "capabilities" => adjustCapabilities()
       case "momentum"     => adjustMomentum()
       case "rvnLeaders"   => adjustRvnLeaders()
-      case "pivot cards"  => adjustPivotCards()
+      case "pivot cards"  => adjustPivotalCards()
       case "bot debug"    => adjustBotDebug()
       case name           => adjustSpace(name)
     }
@@ -2594,124 +2626,305 @@ object FireInTheLake {
     }      
   }
   
-  def adjustUspolicy(): Unit = {
+  def adjustUSPolicy(): Unit = {
+    val oldPolicy = game.usPolicy
+    val options = List(USPolicy_JFK, USPolicy_LBJ, USPolicy_Nixon)
+    val choices = options map (opt => opt -> opt)
+
+    println(s"\nCurrent US Policy is: ${game.usPolicy}")
+    val newPolicy = askMenu(choices, "\nChoose US Policy:", allowAbort = false).head
+    if (newPolicy != oldPolicy) {
+      game = game.copy(usPolicy = newPolicy)
+      val desc = adjustmentDesc("US Policy", oldPolicy, newPolicy)
+      log(desc)
+      saveGameState(desc)          
+    }
   }
   
+  // Move US pieces between the casualties box and the available box
   def adjustCasualties(): Unit = {
+    
+    def nextAdjustment(): Unit = {
+      val casualties = game.casualties
+      val available  = game.availablePieces.only(USPieces)
+      val pieceChoices: List[(Option[PieceType], String)] = USPieces flatMap { t =>
+        if (casualties.has(t) || available.has(t))
+          Some(Some(t) -> t.plural)
+        else
+          None
+      }
+      val choices = pieceChoices :+ (None -> "Finished adjusting casualties")
+
+    
+      println(s"\nCasualties Pieces")
+      println(separator())
+      wrap("", casualties.descriptions) foreach println
+      
+      println(s"\nAvailable Pieces")
+      println(separator())
+      wrap("", available.descriptions) foreach println
+
+      askMenu(choices, "\nSelect the type of casualties piece to adjust:", allowAbort = false).head foreach { 
+        pieceType =>
+          val origNum = casualties.numOf(pieceType)
+          val maxNum  = available.numOf(pieceType) + casualties.numOf(pieceType)
+        
+          adjustInt(pieceType.plural, origNum, 0 to maxNum) foreach { value =>
+            if (value != origNum) {
+              val newCasualties = game.casualties.set(value, pieceType)
+              game = game.copy(casualties = newCasualties)
+              log(adjustmentDesc(s"Casualties: ${pieceType.plural}", origNum, value))
+            }
+          }
+          nextAdjustment()
+      }
+    }
+    
+    if (game.casualties.total + game.availablePieces.only(USPieces).total == 0)
+      println("\nThere are no US forces in either the available or casualties box.")
+    else {
+      val savedGame = game
+      nextAdjustment()
+      if (savedGame.casualties != game.casualties) {
+        // Number of available US pieces affects US score
+        logPointsChanges(savedGame, game)
+        saveGameState("Adjustments to US casualties")
+      }      
+    }
   }
   
+  // Move US/ARVN pieces between the out of play box and the available box
   def adjustOutOfPlay(): Unit = {
-  }
-  
-  def adjustCapabilities(): Unit = {
-  }
-  
-  def adjustMomentum(): Unit = {
+    val validTypes = USPieces ::: ARVNPieces
+    def nextAdjustment(): Unit = {
+      val outOfPlay = game.outOfPlay
+      val available = game.availablePieces.only(validTypes)
+      val pieceChoices: List[(Option[PieceType], String)] = validTypes flatMap { t =>
+        if (outOfPlay.has(t) || available.has(t))
+          Some(Some(t) -> t.plural)
+        else
+          None
+      }
+      val choices = pieceChoices :+ (None -> "Finished adjusting out of play pieces")
+
+    
+      println(s"\nOut of Play Pieces")
+      println(separator())
+      wrap("", outOfPlay.descriptions) foreach println
+      
+      println(s"\nAvailable Pieces")
+      println(separator())
+      wrap("", available.descriptions) foreach println
+
+      askMenu(choices, "\nSelect the type of 'Out of Play' piece to adjust:", allowAbort = false).head foreach { 
+        pieceType =>
+          val origNum = outOfPlay.numOf(pieceType)
+          val maxNum  = available.numOf(pieceType) + outOfPlay.numOf(pieceType)
+        
+          adjustInt(pieceType.plural, origNum, 0 to maxNum) foreach { value =>
+            if (value != origNum) {
+              val newOutOfPlay = game.outOfPlay.set(value, pieceType)
+              game = game.copy(outOfPlay = newOutOfPlay)
+              log(adjustmentDesc(s"Out of Play: ${pieceType.plural}", origNum, value))
+            }
+          }
+          nextAdjustment()
+      }
+    }
+    
+    if (game.outOfPlay.total + game.availablePieces.only(validTypes).total == 0)
+      println("\nThere are no US or ARVN forces in either the available or out of play box.")
+    else {
+      val savedGame = game
+      nextAdjustment()
+      if (savedGame.outOfPlay != game.outOfPlay) {
+        // Number of available US pieces affects US score
+        logPointsChanges(savedGame, game)
+        saveGameState("Adjustments to out of play pieces")
+      }      
+    }
   }
   
   def adjustRvnLeaders(): Unit = {
-  }
-  
-  def adjustPivotCards(): Unit = {
-  }
-  
-  
+    val LeaderCards = RVN_Leaders filterNot (_ == RVN_Leader_DuongVanMinh)
 
-  //
-  //
-  // def adjustCapabilities(): Unit = {
-  //   var included = game.capabilities
-  //   var excluded = AllCapabilities filterNot included.contains
-  //
-  //   def nextAdjustment(): Unit = {
-  //     val choices = (included.sorted map (c => c -> s"Remove $c")) ++
-  //                   (excluded.sorted map (c => c -> s"Add $c")) :+
-  //                   ("done" -> "Finished")
-  //     askMenu(choices, "\nAdjusting capabilities:", allowAbort = false).head match {
-  //       case "done" =>
-  //       case cap    =>
-  //         if (included contains cap) {
-  //           included = included filterNot (_ == cap)
-  //           excluded = cap :: excluded
-  //           cap match {
-  //             case CapShadedNiallNoigiallach =>
-  //               game = game.copy(eventData = game.eventData.copy(niallNoigiallachRaiders = 0))
-  //             case _ =>
-  //           }
-  //         }
-  //         else {
-  //           included = cap :: included
-  //           excluded = excluded filterNot (_ == cap)
-  //         }
-  //         nextAdjustment()
-  //     }
-  //   }
-  //
-  //   nextAdjustment()
-  //   if (included != game.capabilities) {
-  //     log(adjustmentDesc("capabilities", game.capabilities.sorted, included.sorted))
-  //     game = game.copy(capabilities = included)
-  //     saveGameState("Adjusted capabilities in play")
-  //
-  //   }
-  // }
-  //
-  //
-  // def adjustMomentum(): Unit = {
-  //   var included = game.momentum
-  //   var excluded = AllMomentum filterNot included.contains
-  //
-  //   def nextAdjustment(): Unit = {
-  //     val choices = (included.sorted map (c => c -> s"Remove $c")) ++
-  //                   (excluded.sorted map (c => c -> s"Add $c")) :+
-  //                   ("done" -> "Finished")
-  //     askMenu(choices, "\nAdjusting Momentum events:", allowAbort = false).head match {
-  //       case "done" =>
-  //       case event    =>
-  //         if (included contains event) {
-  //           included = included filterNot (_ == event)
-  //           excluded = event :: excluded
-  //         }
-  //         else {
-  //           included = event :: included
-  //           excluded = excluded filterNot (_ == event)
-  //           event match {
-  //             case MoUnshadedNiallsRaid =>
-  //               val sea = askSimpleMenu(Seas, "Select sea for Niall's Raid:", allowAbort = false).head
-  //               game = game.copy(eventData = game.eventData.copy(niallsRaidSea = sea))
-  //
-  //             case MoShadedRuinOfTheVillas =>
-  //               val faction = askSimpleMenu(List(Saxon, Scotti), "Select faction for Ruin of the Villas:", allowAbort = false).head
-  //               game = game.copy(eventData = game.eventData.copy(ruinOfTheVillasFaction = faction))
-  //
-  //             case MoShadedFeedingTheRavens =>
-  //               val faction = askSimpleMenu(Faction.ALL.toList.sorted, "Select faction for Feeding the Ravens:", allowAbort = false).head
-  //               game = game.copy(eventData = game.eventData.copy(feedingTheRavensFaction = faction))
-  //             case _ =>
-  //           }
-  //         }
-  //         nextAdjustment()
-  //     }
-  //   }
-  //
-  //   nextAdjustment()
-  //   if (included != game.capabilities) {
-  //     log(adjustmentDesc("momentum", game.momentum.sorted, included.sorted))
-  //     game = game.copy(momentum = included)
-  //     saveGameState("Adjusted momentum events in play")
-  //   }
-  // }
-  //
-  // def adjustNiallRaiders(): Unit = {
-  //   val numAvail = game.scottiRaidersAvailable + game.eventData.niallNoigiallachRaiders
-  //   adjustInt("Scotti raiders on Niall Noigiallach", game.eventData.niallNoigiallachRaiders, 0 to numAvail) foreach { value =>
-  //     val desc = adjustmentDesc("Scotti raiders on Niall Noigiallach", game.eventData.niallNoigiallachRaiders, value)
-  //     game = game.copy(eventData = game.eventData.copy(niallNoigiallachRaiders = value))
-  //     log(desc)
-  //     saveGameState(desc)
-  //   }
-  // }
-  //
+    def nextAdjustment(): Unit = {
+      val available = LeaderCards filterNot game.rvnLeaders.contains map (l => l -> l)
+      val choices = List(
+        choice(available.nonEmpty,       "add",      "Add RVN Leader to the stack"),
+        choice(game.rvnLeaders.size > 1, "remove",   "Remove top RVN leader from the stack"),
+        choice(true,                     "finished", "Finished adjusting RVN Leaders")
+      ).flatten
+
+      println(s"\nRVN Leader Stack (top to bottom)")
+      println(separator())
+      wrap("", game.rvnLeaders) foreach println
+
+      askMenu(choices, "\nChoose one:", allowAbort = false).head match {
+        case "add" => 
+          val leaderChoices = available :+ ("none" -> "Do not add an RVN leader")
+          askMenu(leaderChoices, "Choose an RVN Leader:", allowAbort = false).head match {
+            case "none" => 
+            case leader =>
+              game = game.copy(rvnLeaders = leader :: game.rvnLeaders)
+              log(s"Adjusted RVN leaders: [added ${leader}]")
+          }
+          nextAdjustment()
+          
+        case "remove" =>
+          val leader = game.rvnLeaders.head
+          game = game.copy(rvnLeaders = game.rvnLeaders.tail)
+          log(s"Adjusted RVN leaders: [removed ${leader}]")
+          nextAdjustment()
+
+        case _ =>
+      }
+      
+    }
+    
+    val savedGame = game
+    nextAdjustment()
+    if (savedGame.rvnLeaders != game.rvnLeaders)
+      saveGameState("Adjustments to RVN Leader stack")
+  }
+
+  def adjustCapabilities(): Unit = {
+
+    def askCapability(shaded: Boolean, names: List[String]): Option[Capability] = {
+        val capChoices: List[(Option[Capability], String)] = names map { name =>
+          val cap = Capability(name, shaded)
+          Some(cap) -> s"Add ${cap}"
+        }
+        val choices = capChoices :+ (None -> "Do not add a capability")
+        askMenu(choices, "\nChoose one:", allowAbort = false).head
+    }
+
+    def nextAdjustment(): Unit = {
+      val included = game.capabilities map (_.name)
+      val excluded = AllCapabilities filterNot included.contains
+      
+      val addChoices = List(
+        choice(excluded.nonEmpty, unshadedCapability("add"), "Add unshaded capability"),
+        choice(excluded.nonEmpty, shadedCapability("add"),   "Add shaded capability")
+      ).flatten
+      
+      val removeChoices = game.capabilities map (cap => cap -> s"Remove ${cap}")
+      val choices = addChoices ::: removeChoices ::: List(shadedCapability("finished") -> "Finished adjusting capabilities")
+
+      println("\nCapabilities in play")
+      println(separator())
+      wrap("", game.capabilities map (_.toString)) foreach println
+      askMenu(choices, "\nChoose one:", allowAbort = false).head match {
+        case Capability("finished", _) => 
+        
+        case Capability("add", shaded) =>
+          askCapability(shaded, excluded) foreach { cap =>
+            game = game.copy(capabilities = cap :: game.capabilities)
+            log(s"Adjusted capabilities: [added ${cap}]")
+          }
+          nextAdjustment()
+
+        case cap =>
+          game = game.copy(capabilities = game.capabilities filterNot (_ == cap))
+          log(s"Adjusted capabilities: [removed ${cap}]")
+          nextAdjustment()
+      }
+    }
+
+    val savedGame = game
+    nextAdjustment()
+    if (savedGame.capabilities != game.capabilities)
+      saveGameState("Adjusted capabilities in play")
+  }
+  
+  def adjustMomentum(): Unit = {
+
+    def askMomentum(names: List[String]): Option[String] = {
+        val moChoices: List[(Option[String], String)] = names map { name =>
+          Some(name) -> s"Add ${name}"
+        }
+        val choices = moChoices :+ (None -> "Do not add a momentum card")
+        askMenu(choices, "\nChoose one:", allowAbort = false).head
+    }
+
+    def nextAdjustment(): Unit = {
+      var excluded = AllMomentum filterNot game.momentum.contains
+      if (game.momentum exists (_ startsWith Medevac_prefix))
+        excluded = excluded filterNot (_ startsWith Medevac_prefix)
+      
+      val addChoice = if (excluded.nonEmpty)
+        List("add" -> "Add Momentum card")
+      else
+        Nil
+      val choices = addChoice :::
+                    (game.momentum map (c => c -> s"Remove $c")) :::
+                    List("finished" -> "Finished adjusting Momentum cards")
+                    
+      println("\nMomentum cards in play")
+      println(separator())
+      wrap("", game.momentum) foreach println
+      askMenu(choices, "\nChoose one:", allowAbort = false).head match {
+        case "finished" => 
+
+        case "add" =>
+          askMomentum(excluded) foreach { mo =>
+            game = game.copy(momentum = mo :: game.momentum)
+            log(s"Adjusted momentum cards: [added ${mo}]")
+          }
+          nextAdjustment()
+
+        case mo =>
+          game = game.copy(momentum = game.momentum filterNot (_ == mo))
+          log(s"Adjusted momentum cards: [removed ${mo}]")
+          nextAdjustment()
+      }
+    }
+
+    val savedGame = game
+    nextAdjustment()
+    if (savedGame.momentum != game.momentum)
+      saveGameState("Adjusted momentum cards in play")
+  }
+  
+  def adjustPivotalCards(): Unit = {
+    
+    def nextAdjustment(): Unit = {
+      val pivotal = Faction.ALL.toList.sorted map {
+        faction =>
+        if (game.pivotCardsAvailable(faction))
+          s"$faction (available)"
+        else
+          s"$faction (not available)"
+      }
+      
+      val choices: List[(Option[Faction], String)] = (Faction.ALL.toList.sorted map {
+        faction =>
+        Some(faction) -> s"Toggle $faction pivotal event"
+      }) :+ (None -> "Finished adjusting pivotal event availability")
+      
+      println("\nPivotal Event Availablity")
+      println(separator())
+      wrap("Pivotal     : ", pivotal) foreach println
+      askMenu(choices, "\nChoose one:").head match {
+        case None => 
+        case Some(faction) if game.pivotCardsAvailable(faction) =>
+          game = game.copy(pivotCardsAvailable = game.pivotCardsAvailable - faction)
+          log(s"Adjusted $faction pivotal card: [now unavailable]")
+          nextAdjustment()
+          
+        case Some(faction) =>
+          game = game.copy(pivotCardsAvailable = game.pivotCardsAvailable + faction)
+          log(s"Adjusted $faction pivotal card: [now available]")
+          nextAdjustment()
+      }
+    }
+    
+    val savedGame = game
+    nextAdjustment()
+    if (savedGame.pivotCardsAvailable != game.pivotCardsAvailable)
+      saveGameState("Adjusted pivotal card availability")
+  }
+  
   def adjustBotDebug(): Unit = {
     val newValue = !game.botDebug
     val desc = adjustmentDesc("Bot debug", game.botDebug, newValue)
@@ -2774,8 +2987,8 @@ object FireInTheLake {
     val sp = game.getSpace(name)
     println()
     adjustInt("Number of terror markers", sp.terror, 0 to 10) foreach { value =>
-    game = game.updateSpace(sp.copy(terror = value))
-    log(spaceAdjustmentDesc(name, "terror", sp.terror, value))
+      game = game.updateSpace(sp.copy(terror = value))
+      log(spaceAdjustmentDesc(name, "terror", sp.terror, value))
     }
   }
   
@@ -2822,5 +3035,5 @@ object FireInTheLake {
     
     nextAdjustment()
   }
-
+  
 }

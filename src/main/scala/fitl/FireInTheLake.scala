@@ -53,6 +53,8 @@ object FireInTheLake {
   def d3 = nextInt(3) + 1
   
   val EdgeTrackMax = 75
+  val TrailMin     = 0
+  val TrailMax     = 4
   
   val USPolicy_JFK   = "JFK"
   val USPolicy_LBJ   = "LBJ"
@@ -1958,15 +1960,8 @@ object FireInTheLake {
         for (sp <- game.spaces.sortBy(_.name); orig = savedState.getSpace(sp.name))
           logControlChange(orig, sp)
 
-          def nvaPoints  = game.totalNvaControl + game.nvaBasesOnMap
-          def arvnPoints = game.totalCoinControl + game.patronage
-
         // Log any edge track control markers that have changed
-        if (game.arvnPoints != savedState.arvnPoints)
-          log(s"Move the 'COIN + Patronage' marker to ${game.arvnPoints}")
-        
-        if (game.nvaPoints != savedState.nvaPoints)
-          log(s"Move the 'NVA + Bases' marker to ${game.nvaPoints}")
+        logPointsChanges(savedState, game)
         result
       }
       finally {
@@ -1978,7 +1973,9 @@ object FireInTheLake {
   def logControlChange(orig: Space, updated: Space): Unit = {
     assert(orig.name == updated.name, "logControlChange: not the same space!")
     // LOCs do not have control
-    if (!orig.isLOC) {
+    if (!orig.isLOC && orig.control != updated.control) {
+      log(s"\nControl of ${orig.name} has changed")
+      log(separator())
       (orig.control, updated.control) match {
         case (x, y) if (x == y) => // No change to log
         case (Uncontrolled, _)  => log(s"Place ${updated.control} marker in ${orig.name}")
@@ -1988,6 +1985,23 @@ object FireInTheLake {
     }
   }
 
+
+  def logPointsChanges(origGame: GameState, newGame: GameState): Unit = {
+    if (origGame.usPoints != newGame.usPoints)
+      log(s"Move the 'Support + Avail US' marker to ${newGame.usPoints}")
+    
+    if (origGame.arvnPoints != newGame.arvnPoints)
+      log(s"Move the 'COIN Control + Patronage' marker to ${newGame.arvnPoints}")
+      
+    if (origGame.nvaPoints != newGame.nvaPoints)
+      log(s"Move the 'NVA Control + NVA Bases' marker to ${newGame.nvaPoints}")
+      
+    if (origGame.vcPoints != newGame.vcPoints)
+      log(s"Move the 'Total Opposition + VC Bases' marker to ${newGame.vcPoints}")
+      
+  }
+  
+  
   // Returns comma separated string with last choice separated by "and"
   //    List("apples")                      => "apples"
   //    List("apples", "oranges")           => "apples and oranges"
@@ -2541,15 +2555,43 @@ object FireInTheLake {
   }
   
   def adjustAid(): Unit = {
+    adjustInt("US Aid", game.usAid, 0 to EdgeTrackMax) foreach { value =>
+      val desc = adjustmentDesc("US Aid", game.usAid, value)
+      game = game.copy(usAid = value)
+      log(desc)
+      saveGameState(desc)
+    }      
   }
   
   def adjustPatronage(): Unit = {
+    val origGame = game
+    adjustInt("Patronage", game.patronage, 0 to EdgeTrackMax) foreach { value =>
+      val desc = adjustmentDesc("Patronage", game.patronage, value)
+      game = game.copy(patronage = value)
+      log(desc)
+      logPointsChanges(origGame, game)
+      saveGameState(desc)
+    }      
+    
+    
   }
   
   def adjustEcon(): Unit = {
+    adjustInt("Econ marker", game.econ, 0 to EdgeTrackMax) foreach { value =>
+      val desc = adjustmentDesc("Econ marker", game.econ, value)
+      game = game.copy(econ = value)
+      log(desc)
+      saveGameState(desc)
+    }      
   }
   
   def adjustTrail(): Unit = {
+    adjustInt("Trail marker", game.trail, TrailMin to TrailMax) foreach { value =>
+      val desc = adjustmentDesc("Trail Marker", game.trail, value)
+      game = game.copy(trail = value)
+      log(desc)
+      saveGameState(desc)
+    }      
   }
   
   def adjustUspolicy(): Unit = {
@@ -2715,6 +2757,7 @@ object FireInTheLake {
   
 
   def adjustSupport(name: String): Unit = {
+    val origGame = game
     val sp = game.getSpace(name)
     val options = List(ActiveSupport, PassiveSupport, Neutral, PassiveOpposition, ActiveOpposition)
     val choices = options map (opt => opt -> opt.name)
@@ -2724,6 +2767,7 @@ object FireInTheLake {
     val newSupport = askMenu(choices, allowAbort = false).head
     game = game.updateSpace(sp.copy(support = newSupport))
     log(spaceAdjustmentDesc(name, "support", sp.support, newSupport))
+    logPointsChanges(origGame, game)
   }
   
   def adjustTerror(name: String): Unit = {

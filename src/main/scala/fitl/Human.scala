@@ -1,4 +1,4 @@
-
+ 
 //  _____ _            _         _   _            _          _
 // |  ___(_)_ __ ___  (_)_ __   | |_| |__   ___  | |    __ _| | _____
 // | |_  | | '__/ _ \ | | '_ \  | __| '_ \ / _ \ | |   / _` | |/ / _ \
@@ -47,29 +47,38 @@ import FireInTheLake._
 // Functions to handle human commands/special activities
 object Human {
   
+  private var trainingSpaces = Set.empty[String]
+  
   case class Params(
-    includeSpecialActivity: Boolean = false,
+    includeSpecial: Boolean = false,
     maxSpaces: Option[Int]          = None,
     free: Boolean                   = false, // Events grant free commands
     onlyIn: Option[Set[String]]     = None   // Limit command to the given spaces
   ) {
     val limOpOnly = maxSpaces == Some(1)
+    
+    def spaceAllowed(name: String) = onlyIn.isEmpty || onlyIn.contains(name)
   }
 
 
   // Aid in keeping track of when a special activity can be taken
-  object SpecialActivity {
-    private var allowSpecialActivity = false
-    private var specialActivityTaken = false
+  object Special {
+    private var allowSpecial = false
+    private var specialTaken = false
+    
+    var selectedSpaces = Set.empty[String]
 
     def init(params: Params): Unit = {
-      allowSpecialActivity = params.includeSpecialActivity
-      specialActivityTaken = false
+      allowSpecial   = params.includeSpecial
+      specialTaken   = false
+      selectedSpaces = Set.empty  // For Advise/Govern activities
     }
-    def allowed = allowSpecialActivity && !specialActivityTaken
-    def taken   = specialActivityTaken
-    def completed() = specialActivityTaken = true
-    def cancelled() = specialActivityTaken = false
+    
+    def allowed = allowSpecial && !specialTaken
+    def taken   = specialTaken
+    
+    def completed() = specialTaken = true
+    def cancelled() = specialTaken = false
   }
 
   // Use during a turn to keep track of pieces that have already moved
@@ -107,7 +116,7 @@ object Human {
 
       action match {
         case Event         => executeEvent(faction)
-        case OpPlusSpecial => executeCmd(faction, Params(includeSpecialActivity = true))
+        case OpPlusSpecial => executeCmd(faction, Params(includeSpecial = true))
         case OpOnly        => executeCmd(faction)
         case LimitedOp     => executeCmd(faction, Params(maxSpaces = Some(1)))
       }
@@ -119,6 +128,25 @@ object Human {
     }
   }
 
+  def executeSpecialActivity(faction: Faction, params: Params, activities: List[SpecialActivity]): Unit = {
+    println("\nChoose special ability:")
+    val activity = askMenu(activities map (s => s -> s.toString)).head
+    
+    val savedState = game
+    try {
+      log(s"To be done: $faction executes $activity Special Activitiy")
+      // if (activity.execute(params))
+      Special.completed()
+    }
+    catch {
+      case AbortAction =>
+        println(s"\n>>>> Aborting $activity special activity <<<<")
+        println(separator())
+        displayGameStateDifferences(game, savedState)
+        game = savedState
+    }
+  }
+
   
   def executeEvent(faction: Faction): Unit = {
     println("executeEvent() not implemented")
@@ -126,8 +154,9 @@ object Human {
   }
   
   def executeCmd(faction: Faction, params: Params = Params()): Unit = {
-    SpecialActivity.init(params)
+    Special.init(params)
     MovingGroups.init()
+    trainingSpaces = Set.empty
 
     faction match {
       case US  | ARVN => executeCoinCmd(faction, params)
@@ -169,7 +198,277 @@ object Human {
   // == Coin Operations =================================================
   // ====================================================================
   
+  // Cap_CombActionPlatoons (unshaded)
+  //    US Training places (relocates) 1 added ARVN Police cube
+  //    in one of the Training spaces with US Troops.
+  //    Does not cost any added resources (if no Base/cubes placed in that space)
+  // Cap_CORDS (unshaded)
+  //    US Training may pacify in 2 Training spaces (cost is unchanged)
+  // Cap_CORDS (shaded)
+  //    US Training may pacify only to PassiveSupport (Not ActiveSupport)
   def executeTrain(faction: Faction, params: Params): Unit = {
+    val availableActivities = if (faction == US)
+      Advise::AirLift::AirStrike::Nil
+    else
+      Transport::Govern::Nil
+    val CombActionUnshaded  = unshadedCapability(Cap_CombActionPlatoons)
+    val CORDSUnshaded       = unshadedCapability(Cap_CORDS)
+    val CORDSShaded         = shadedCapability(Cap_CORDS)
+    val canPlaceExtraPolice = faction == US && capabilityInPlay(CombActionUnshaded)
+    var placedExtraPolice   = false // only if CombActionUnshaded in play
+    val maxPacifySpaces     = if (capabilityInPlay(CORDSUnshaded)) 2 else 1
+    val maxPacifyLevel      = if (capabilityInPlay(CORDSShaded)) PassiveSupport else ActiveSupport
+    var selectedSpaces      = List.empty[String]
+    var forcesPlacedIn      = List.empty[String]
+    var pacifySpaces        = List.empty[String]
+    val isCandidate = (sp: Space) => {
+      val valid = if (faction == ARVN) !sp.isLOC && !sp.nvaControlled
+                  else                 !sp.isLOC && sp.pieces.has(USPieces)
+                    
+      valid &&                                   // Valid for faction
+      !sp.isNorthVietnam &&                      // Never North Vietnam
+      params.spaceAllowed(sp.name) &&            // If event limits command to certain spaces
+      !selectedSpaces.contains(sp.name) &&       // Not already selected
+      !Special.selectedSpaces.contains(sp.name)  // Not selected for Advise/Govern Special Activity
+    }
+      
+    
+    def selectTrainSpaces(): Unit = {
+        val candidates = spaceNames(game.spaces filter isCandidate)
+        if (candidates.isEmpty) {
+          val more = if (selectedSpaces.nonEmpty) " more" else ""
+          println(s"\nThere are no${more} spaces eligible for Training")
+        }
+        else {
+          val canSelect = params.maxSpaces map (x => selectedSpaces.size < x) getOrElse true
+          val choices = List(
+            choice(canSelect,       "select",   "Select a space to Train"),
+            choice(Special.allowed, "special",  "Perform a Special Activity"),
+            choice(true,            "finished", "Finished selecting spaces")
+          ).flatten
+
+          println(s"\nTraining spaces selected")
+          println(separator())
+          wrap("", selectedSpaces) foreach println
+          askMenu(choices, "\nChoose one:").head match {
+            case "select" =>
+              val name = askCandidate("\nTrain in which space: ", candidates)
+              selectedSpaces = selectedSpaces :+ name
+              selectTrainSpaces()
+              
+            case "special" =>
+              executeSpecialActivity(faction, params, availableActivities)
+              selectTrainSpaces()
+              
+            case _ => // finished
+          }
+        }
+    }
+    
+    log(s"\n$faction chooses Train operation")
+    log(separator())
+    if (faction == US) {
+      if (capabilityInPlay(CombActionUnshaded))
+        log(s"Capability [$CombActionUnshaded]: Place 1 extra ARVN Police in one space with US Troops")
+      if (capabilityInPlay(CORDSUnshaded))
+        log(s"Capability [$CORDSUnshaded]: May pacify in up to two spaces")
+      if (capabilityInPlay(CORDSShaded))
+        log(s"Capability [$CORDSShaded]: May only pacify up to PassiveSupport")
+      
+    }
+    
+    def promptToAddForces(): Unit = {
+      val unusedSpaces = selectedSpaces filterNot forcesPlacedIn.contains
+      val hasTheCash = game.arvnResources >= 3
+      val irregularsCandidates = if (faction == US && game.piecesToPlace.has(Irregulars))
+        unusedSpaces
+       else
+         Nil
+       
+      val extraPoliceCandidates = if (canPlaceExtraPolice && !placedExtraPolice)
+        spaces(selectedSpaces) filter (_.pieces.has(USTroops)) map (_.name)
+      else
+        Nil
+       
+      val rangersCandidates = if (game.piecesToPlace.has(Rangers))
+        faction match {
+          case US => spaces(unusedSpaces) filter (_.pieces.has(USBase)) map (_.name)
+          case _  => spaces(unusedSpaces) filter (sp => sp.isCity || sp.pieces.has(CoinBase)) map (_.name)
+        }
+        else
+          Nil
+        
+      val cubeCandidates = if (game.piecesToPlace.has(ARVNCubes))
+        faction match {
+          case US => spaces(unusedSpaces) filter (_.pieces.has(USBase)) map (_.name)
+          case _  => spaces(unusedSpaces) filter (sp => sp.isCity || sp.pieces.has(CoinBase)) map (_.name)
+        }
+        else
+          Nil
+        
+      val choices = List(
+        choice(extraPoliceCandidates.nonEmpty,            "extra",      s"Place extra Police [$CombActionUnshaded]"),
+        choice(irregularsCandidates.nonEmpty,             "irregulars", "Place Irregulars"),
+        choice(rangersCandidates.nonEmpty && hasTheCash,  "rangers",    "Place Rangers"),
+        choice(cubeCandidates.nonEmpty && hasTheCash,     "cubes",      "Place Troops/Police"),
+        choice(Special.allowed,               "special",  "Perform a Special Activity"),
+        choice(true,                          "finished", "Finished placing forces")
+        ).flatten
+        
+      askMenu(choices, "\nChoose one:").head match {
+        case "extra" =>
+          val name    = askCandidate("\nPlace extra Police in which space: ", extraPoliceCandidates)
+          val toPlace = askPiecesToPlace(name, ARVNPolice::Nil, maxToPlace = 1)
+          placePieces(name, toPlace)
+          promptToAddForces()
+          
+        case "irregulars" =>
+          val name    = askCandidate("\nPlace Irregulars in which space: ", irregularsCandidates)
+          val toPlace = askPiecesToPlace(name, Irregulars_U::Nil, maxToPlace = 2)
+          forcesPlacedIn = name :: forcesPlacedIn
+          placePieces(name, toPlace)
+          promptToAddForces()
+          
+        case "rangers" =>
+          val name    = askCandidate("\nPlace Rangers in which space: ", rangersCandidates)
+          val toPlace = askPiecesToPlace(name, Rangers_U::Nil, maxToPlace = 2)
+          if (toPlace.total > 0) {
+            log()
+            decreaseResources(ARVN, 3)
+            forcesPlacedIn = name :: forcesPlacedIn
+            placePieces(name, toPlace)            
+          }
+          promptToAddForces()
+          
+        case "cubes" =>
+          val name    = askCandidate("\nPlace ARVN Troops/Police in which space: ", cubeCandidates)
+          val toPlace = askPiecesToPlace(name, ARVNTroops::ARVNPolice::Nil, maxToPlace = 6)
+          if (toPlace.total > 0) {
+            log()
+            decreaseResources(ARVN, 3)
+            forcesPlacedIn = name :: forcesPlacedIn
+            placePieces(name, toPlace)
+          }
+          promptToAddForces()
+          
+        case "special" =>
+          executeSpecialActivity(faction, params, availableActivities)
+          promptToAddForces()
+          
+        case _ =>
+      }
+    }
+    
+    // Prompt for possible pacification, placing ARVN base or 
+    // transfer of ARVN resources to patronage.
+    def promptFinalAction(): Unit = {
+      
+      val canPacify = (sp: Space) =>
+        !(pacifySpaces contains sp.name) &&
+        (sp.terror > 0 || sp.support < maxPacifyLevel) &&
+        sp.coinControlled &&
+        (faction == US || sp.pieces.has(ARVNTroops) && sp.pieces.has(ARVNPolice))
+      
+      val pacifyCandidates = if (pacifySpaces.size < maxPacifySpaces && game.arvnResources >= 3)
+        spaces(selectedSpaces) filter canPacify map (_.name)
+      else
+        Nil
+      
+      val baseCandidates = if (pacifySpaces.isEmpty && game.availablePieces.has(ARVNBase)) {
+        val canPlaceBase = (sp: Space) => sp.totalBases < 2 && sp.pieces.totalOf(ARVNCubes) >= 3
+        faction match {
+          case ARVN if game.arvnResources >= 3 => spaces(selectedSpaces) filter canPlaceBase map (_.name)
+          case ARVN  => spaces(forcesPlacedIn) filter canPlaceBase map (_.name) // Spaces already paid for
+          case _ => Nil  // US cannot place ARVN base
+        }
+      }
+      else
+        Nil
+            
+      val canXferPatronage = pacifySpaces.isEmpty && faction == US && selectedSpaces.contains(Saigon) && game.patronage > 0
+      
+      def pacifySpace(): Unit = {
+        val name        = askCandidate("\nPacify in which space: ", pacifyCandidates)
+        val sp          = game.getSpace(name)
+        val maxShift    = ((maxPacifyLevel.value - sp.support.value) max 0) min 2
+        val maxInSpace  = maxShift + sp.terror
+        val maxPossible = maxInSpace min (game.arvnResources / 3)
+
+        val choices = List.range(maxPossible, -1, -1) map {
+          case 0                    => (0 -> s"Do not pacify in $name")
+          case n if sp.terror == 0  => (n -> s"Shift ${amountOf(n, "level")} to ${SupportType(sp.support.value + n)}")
+          case n if n <= sp.terror  => (n -> s"Remove ${amountOf(n, "terror marker")}")
+          case n                    => (n -> s"Remove ${amountOf(sp.terror, "terror marker")} and shift ${amountOf(n - sp.terror, "level")} to ${SupportType(sp.support.value + n - sp.terror)}")
+        }
+        val p = if (maxPacifyLevel == PassiveSupport)
+          s"\nYou cannot shift to Active Suport [$CORDSShaded]\nChoose one:"
+        else
+          "\nChoose one:"
+        printSummary(spaceSummary(name))
+        val num = askMenu(choices, p, allowAbort = false).head
+        if (num > 0) {
+          val shift = (num - sp.terror) max 0
+          log()
+          decreaseResources(ARVN, num * 3)
+          removeTerror(name, num min sp.terror)
+          increaseSupport(name, shift)
+          pacifySpaces = name :: pacifySpaces
+        }
+      }
+      
+      if (pacifyCandidates.nonEmpty ||
+          baseCandidates.nonEmpty   ||
+          canXferPatronage) {
+        val pacifyMsg = if (pacifySpaces.isEmpty) "Pacify" else s"Pacify second space [$CORDSUnshaded]"
+        val choices = List(
+           choice(pacifyCandidates.nonEmpty, "pacify",  pacifyMsg),
+           choice(baseCandidates.nonEmpty,   "base",    "Place an ARVN base"),
+           choice(canXferPatronage,          "xfer",    "Transfer patronage to ARVN resources"),
+           choice(Special.allowed,           "special", "Perform a Special Activity"),
+           choice(true,                      "none",    "Finished with Train operation")
+        ).flatten
+        
+        askMenu(choices, "\nChoose final Train action:").head match {
+          case "pacify" =>
+            pacifySpace()
+            if (pacifySpaces.size < maxPacifySpaces)
+            promptFinalAction()
+          
+          case "base" =>
+            loggingControlChanges {
+              val name  = askCandidate("\nPlace an ARVN base in which space: ", baseCandidates)
+              val sp    = game.getSpace(name)
+              val cubes = askPieces(sp.pieces, 3, ARVNCubes,  Some("Removing ARVN cubes to replace with base"))
+              removeToAvailable(name, cubes)
+              placePieces(name, Pieces(arvnBases = 1))
+            }
+          
+          case "xfer" =>
+            val amount = askInt(s"Transfer how much patronage to ARVN resources", 0, game.patronage min 3)
+            if (amount > 0) {
+              log()
+              decreasePatronage(amount)
+              increaseResources(ARVN, amount)
+            }
+          
+          case "special" =>
+            executeSpecialActivity(faction, params, availableActivities)
+            promptFinalAction()
+            
+          case _ =>
+        }
+      }
+    }
+    
+    selectTrainSpaces()
+    if (selectedSpaces.nonEmpty) {
+      promptToAddForces()
+      promptFinalAction() // Pacify, Place base, Xfer Patronage to ARVN resources
+    }
+        
+    //  Last chance to perform special activity
+    if (Special.allowed && askYorN("\nDo you wish to perform a special activity? (y/n) "))
+      executeSpecialActivity(faction, params, availableActivities)
   }
   
   def executePatrol(faction: Faction, params: Params): Unit = {

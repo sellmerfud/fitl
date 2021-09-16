@@ -1154,11 +1154,12 @@ object FireInTheLake {
     lazy val allPiecesOnMap = spaces.foldLeft(Pieces()) { (total, space) => total + space.pieces }
     lazy val availablePieces = ForcePool - allPiecesOnMap.normalized - casualties.normalized - outOfPlay.normalized
     // piecesToPlace are either on the map or available (not casualties or out of play)
-    lazy val piecesToPlace = allPiecesOnMap + availablePieces
+    // Does not include US troops or bases
+    lazy val piecesToPlace = (allPiecesOnMap.normalized + availablePieces).except(USTroops::USBase::Nil)
     lazy val currentRvnLeader = rvnLeaders.head
     lazy val locSpaces = spaces filter (_.isLOC)
     lazy val nonLocSpaces = spaces filterNot (_.isLOC)
-
+    
     // Create a one line turn description for the current game state.
     // This is used to mark the current game segment, etc.
     // "#10 Rolling Thunder - 0 acted, US is up"
@@ -1207,7 +1208,7 @@ object FireInTheLake {
       spaces.foldLeft(0) { (total, space) => total + numberPerSpace(space) }
 
     // Count the number of a type of piece that is on the map, casualties, or out or play
-    def piecesInUse(numberPer: Pieces => Int): Int =
+    def numPiecesInUse(numberPer: Pieces => Int): Int =
       totalOnMap(space => numberPer(space.pieces)) + numberPer(casualties) + numberPer(outOfPlay)
 
     def totalCoinControl            = totalOnMap(sp => if (sp.coinControlled) sp.population else 0)
@@ -2243,22 +2244,22 @@ object FireInTheLake {
     }
   }
 
-  // Ask the number of each type of pieces to place in the given space up to the
+  // Ask the number of each type of pieces to place in the given space up to the 
   // given maximum.
   // If there are not sufficient pieces in the available box, then the user is 
   // asked to remove some from the map.
   // If there are not enough in available or in other spaces on the map, then the
   // piece type is skipped.
-  // Assumes that Active pieces are never included in the list of types!!
+  // IMPORTANT:
+  //  -  Assumes that Active pieces are never included in the list of types!!
+  //  -  Do not use this function for USTroops
+  //  -  See askToPlaceBase() for placing bases
   def askPiecesToPlace(spaceName: String, types: List[PieceType], maxToPlace: Int): Pieces = {
     // Get number of each type in available box plus on map
-    val availNum = (types map { pieceType =>
-      val num = game.availablePieces.numOf(pieceType) + 
-                game.totalOnMap(sp => sp.pieces.normalized.numOf(pieceType))
-      (pieceType -> num)
-    }).toMap
-    val maxPieces = maxToPlace min (availNum.values.sum)
-    val availTypes = types filter (availNum(_) > 0)
+    val piecesToPlace = game.piecesToPlace.only(types)
+    val maxPieces     = maxToPlace min piecesToPlace.total
+    val availMap      = (types map (t => t -> piecesToPlace.total)).toMap
+    val availTypes    = types filter (availMap(_) > 0)
     if (availTypes.isEmpty) {
       println(s"\nThere are no ${orList(types)} available to be placed.")
       Pieces()
@@ -2272,7 +2273,7 @@ object FireInTheLake {
           placed
         else {
           val pieceType = remainingTypes.head
-          val maxOfType = availNum(pieceType) min maxRemaining
+          val maxOfType = availMap(pieceType) min maxRemaining
           if (maxOfType == 0) {
             println(s"\nThere are no ${pieceType.genericPlural} available to be placed.")
             nextType(placed, remainingTypes.tail)
@@ -2283,7 +2284,7 @@ object FireInTheLake {
             val finalNum = if (num <= numAvail)
                num
             else {
-              // Ask if they want to voluntarilty remove pieces to make up the difference.
+              // Ask if they want to voluntarily remove pieces to make up the difference.
               numAvail match {
                 case 0 => println(s"\nThere are no ${pieceType.genericPlural} in the available box")
                 case 1 => println(s"\nThere is only 1 ${pieceType.genericSingular} in the available box")
@@ -2304,6 +2305,35 @@ object FireInTheLake {
       }
       
       nextType(Pieces(), availTypes)
+    }
+  }
+  
+  // If there are not sufficient bases in the available box, then the user is 
+  // asked to remove one from the map.
+  // IMPORTANT:
+  //  -  Do not use this function for  USBase
+  //  -  Do not call with Tunneled base types!
+  def askToPlaceBase(spaceName: String, baseType: PieceType): Pieces = {
+    // Get number of each type in available box plus on map
+    val piecesToPlace = game.piecesToPlace.only(baseType)
+    if (piecesToPlace.isEmpty) {
+      println(s"\nThere are no ${baseType.plural} available to be placed.")
+      Pieces()
+    }
+    else {
+      // If there is one available, then no need to ask.
+      if (game.availablePieces.has(baseType))
+        Pieces().set(1, baseType)
+      else {
+        // None available, so ask where to remove one voluntarily
+        println(s"\nThere are no ${baseType.genericPlural} in the available box")
+        if (askYorN("Do you wish to voluntarily remove a base from the map? (y/n) ")) {
+          voluntaryRemoval(1, baseType)
+          Pieces().set(1, baseType)
+        }
+        else
+          Pieces()
+      }
     }
   }
 
@@ -3376,7 +3406,14 @@ object FireInTheLake {
       askMenu(choices, "\nSelect type of piece to adjust:", allowAbort = false).head foreach { 
         pieceType =>
           val origNum = pieces.numOf(pieceType)
-          val maxNum  = available.numOf(normalizedType(pieceType)) + pieces.numOf(pieceType)
+          val maxNum  = {
+            val n = available.numOf(normalizedType(pieceType)) + pieces.numOf(pieceType)
+            if (isBase(pieceType)) {
+              val maxBase = 2 + pieces.numOf(pieceType) - pieces.totalOf(BasePieces)
+               n min maxBase
+            }
+            else n
+          }
         
           adjustInt(pieceType.plural, origNum, 0 to maxNum) foreach { value =>
             if (value != origNum) {

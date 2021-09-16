@@ -128,22 +128,92 @@ object Human {
     }
   }
 
+  // US special activity
+  def doAdvise(params: Params): Unit = {
+    log("\nUS Advise special activity not yet implemented.")
+  }
+  
+  // US special activity
+  def doAirLift(params: Params): Unit = {
+    log("\nUS Air Lift special activity not yet implemented.")
+  }
+  
+  // US special activity
+  def doAirStrike(params: Params): Unit = {
+    log("\nUS Air Strike special activity not yet implemented.")
+  }
+  
+  // ARVN special activity
+  def doGovern(params: Params): Unit = {
+    log("\nARVN Govern special activity not yet implemented.")
+  }
+  
+  // ARVN special activity
+  def doTransport(params: Params): Unit = {
+    log("\nARVN Transport special activity not yet implemented.")
+  }
+  
+  // ARVN special activity
+  def doRaid(params: Params): Unit = {
+    log("\nARVN Raid special activity not yet implemented.")
+  }
+  
+  // NVA special activity
+  def doInfiltrate(params: Params): Unit = {
+    log("\nNVA Infiltrate special activity not yet implemented.")
+  }
+  
+  // NVA special activity
+  def doBombard(params: Params): Unit = {
+    log("\nNVA Bombard special activity not yet implemented.")
+  }
+  
+  // NVA/VC special activity
+  def doAmbush(faction: Faction, params: Params): Unit = {
+    log(s"\n${faction} Ambush special activity not yet implemented.")
+  }
+  
+  // VC special activity
+  def doTax(params: Params): Unit = {
+    log("\nVC Tax special activity not yet implemented.")
+  }
+  
+  // VC special activity
+  def doSubvert(params: Params): Unit = {
+    log("\nVC Subvert special activity not yet implemented.")
+  }
+  
+  
   def executeSpecialActivity(faction: Faction, params: Params, activities: List[SpecialActivity]): Unit = {
-    println("\nChoose special ability:")
-    val activity = askMenu(activities map (s => s -> s.toString)).head
-    
-    val savedState = game
-    try {
-      log(s"To be done: $faction executes $activity Special Activitiy")
-      // if (activity.execute(params))
-      Special.completed()
-    }
-    catch {
-      case AbortAction =>
-        println(s"\n>>>> Aborting $activity special activity <<<<")
-        println(separator())
-        displayGameStateDifferences(game, savedState)
-        game = savedState
+    val choices: List[(Option[SpecialActivity], String)] =
+      (activities map (a => Some(a) -> a.toString)) :+
+      (None -> "Do not perform a Speical Activitiy now")
+
+    askMenu(choices, "\nChoose special activity:").head foreach { activity =>
+      val savedState = game
+      try {
+        activity match {
+          case Advise     => doAdvise(params)
+          case AirLift    => doAirLift(params)
+          case AirStrike  => doAirStrike(params)
+          case Govern     => doGovern(params)
+          case Transport  => doTransport(params)
+          case Raid       => doRaid(params)
+          case Infiltrate => doInfiltrate(params)
+          case Bombard    => doBombard(params)
+          case Ambush     => doAmbush(faction, params)
+          case Tax        => doTax(params)
+          case Subvert    => doSubvert(params)
+        }
+        Special.completed()
+      }
+      catch {
+        case AbortAction =>
+          println(s"\n>>>> Aborting $activity special activity <<<<")
+          println(separator())
+          displayGameStateDifferences(game, savedState)
+          game = savedState
+      }
     }
   }
 
@@ -279,7 +349,8 @@ object Human {
     
     def promptToAddForces(): Unit = {
       val unusedSpaces = selectedSpaces filterNot forcesPlacedIn.contains
-      val hasTheCash = game.arvnResources >= 3
+      val hasTheCash = if (faction == ARVN) game.arvnResources >= 3 
+                       else                 (game.arvnResources - game.econ) >= 3
       val irregularsCandidates = if (faction == US && game.piecesToPlace.has(Irregulars))
         unusedSpaces
        else
@@ -374,7 +445,7 @@ object Human {
       else
         Nil
       
-      val baseCandidates = if (pacifySpaces.isEmpty && game.availablePieces.has(ARVNBase)) {
+      val baseCandidates = if (pacifySpaces.isEmpty && game.piecesToPlace.has(ARVNBase)) {
         val canPlaceBase = (sp: Space) => sp.totalBases < 2 && sp.pieces.totalOf(ARVNCubes) >= 3
         faction match {
           case ARVN if game.arvnResources >= 3 => spaces(selectedSpaces) filter canPlaceBase map (_.name)
@@ -437,10 +508,16 @@ object Human {
           case "base" =>
             loggingControlChanges {
               val name  = askCandidate("\nPlace an ARVN base in which space: ", baseCandidates)
-              val sp    = game.getSpace(name)
-              val cubes = askPieces(sp.pieces, 3, ARVNCubes,  Some("Removing ARVN cubes to replace with base"))
-              removeToAvailable(name, cubes)
-              placePieces(name, Pieces(arvnBases = 1))
+              // askToPlace will ask the user to vountarily remove a base from the map
+              // if necessary.  If the user chooses not to, then it will return an
+              // empty Pieces instance.
+              val toPlace = askToPlaceBase(name, ARVNBase);
+              if (toPlace.nonEmpty) {
+                val sp    = game.getSpace(name)
+                val cubes = askPieces(sp.pieces, 3, ARVNCubes,  Some("Removing ARVN cubes to replace with base"))
+                removeToAvailable(name, cubes)
+                placePieces(name, toPlace)
+              }
             }
           
           case "xfer" =>
@@ -471,7 +548,11 @@ object Human {
       executeSpecialActivity(faction, params, availableActivities)
   }
   
+  // Cap_M48Patton (shaded)
+  //    After US/ARVN patrol NVA removes up to 2 cubes that moved
+  //    (US to casualties)
   def executePatrol(faction: Faction, params: Params): Unit = {
+    
   }
   
   def executeSweep(faction: Faction, params: Params): Unit = {
@@ -495,6 +576,5 @@ object Human {
   
   def executeTerror(faction: Faction, params: Params): Unit = {
   }
-  
-  
+    
 }

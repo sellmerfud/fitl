@@ -349,8 +349,11 @@ object Human {
     
     def promptToAddForces(): Unit = {
       val unusedSpaces = selectedSpaces filterNot forcesPlacedIn.contains
-      val hasTheCash = if (faction == ARVN) game.arvnResources >= 3 
-                       else                 (game.arvnResources - game.econ) >= 3
+      val hasTheCash = params.free || (faction match {
+        case ARVN => game.arvnResources >= 3
+        case _    => (game.arvnResources - game.econ) >= 3  // US for Rangers
+        
+      })
       val irregularsCandidates = if (faction == US && game.piecesToPlace.has(Irregulars))
         unusedSpaces
        else
@@ -405,7 +408,8 @@ object Human {
           val toPlace = askPiecesToPlace(name, Rangers_U::Nil, maxToPlace = 2)
           if (toPlace.total > 0) {
             log()
-            decreaseResources(ARVN, 3)
+            if (!params.free)
+              decreaseResources(ARVN, 3)
             forcesPlacedIn = name :: forcesPlacedIn
             placePieces(name, toPlace)            
           }
@@ -416,7 +420,8 @@ object Human {
           val toPlace = askPiecesToPlace(name, ARVNTroops::ARVNPolice::Nil, maxToPlace = 6)
           if (toPlace.total > 0) {
             log()
-            decreaseResources(ARVN, 3)
+            if (!params.free)
+              decreaseResources(ARVN, 3)
             forcesPlacedIn = name :: forcesPlacedIn
             placePieces(name, toPlace)
           }
@@ -448,7 +453,7 @@ object Human {
       val baseCandidates = if (pacifySpaces.isEmpty && game.piecesToPlace.has(ARVNBase)) {
         val canPlaceBase = (sp: Space) => sp.totalBases < 2 && sp.pieces.totalOf(ARVNCubes) >= 3
         faction match {
-          case ARVN if game.arvnResources >= 3 => spaces(selectedSpaces) filter canPlaceBase map (_.name)
+          case ARVN if params.free || game.arvnResources >= 3 => spaces(selectedSpaces) filter canPlaceBase map (_.name)
           case ARVN  => spaces(forcesPlacedIn) filter canPlaceBase map (_.name) // Spaces already paid for
           case _ => Nil  // US cannot place ARVN base
         }

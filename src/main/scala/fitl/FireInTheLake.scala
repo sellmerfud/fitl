@@ -51,17 +51,17 @@ object FireInTheLake {
 
   def d6 = nextInt(6) + 1
   def d3 = nextInt(3) + 1
-  
+
   val EdgeTrackMax = 75
   val TrailMin     = 0
   val TrailMax     = 4
-  
+
   val TerrorMarkerManifest = 15
-  
+
   val USPolicy_JFK   = "JFK"
   val USPolicy_LBJ   = "LBJ"
   val USPolicy_Nixon = "Nixon"
-  
+
   sealed trait Faction {
     val name: String
     val sortOrder: Int
@@ -157,7 +157,7 @@ object FireInTheLake {
   val RVN_Leader_NguyenVanThieu = "Nguyen Van Thieu"   // Coup card #128
   val RVN_Leader_FailedCoup129  = "Failed Coup (#129)" // Coup card #129
   val RVN_Leader_FailedCoup130  = "Failed Coup (#130)" // Coup card #130
-  
+
   val RVN_Leaders = List(
     RVN_Leader_DuongVanMinh,
     RVN_Leader_NguyenKhanh,
@@ -380,15 +380,21 @@ object FireInTheLake {
   val CoinPieces      = USPieces:::ARVNPieces
   val InsurgentPieces = NVAPieces:::VCPieces
   val NonNVAPieces    = USPieces:::ARVNPieces:::VCPieces
-  val CoinBase        = List(USBase, ARVNBase)
+  val CoinBases       = List(USBase, ARVNBase)
+  val InsurgentBases  = List(NVATunnel, NVABase, VCTunnel, VCBase)
+  val InsurgentNonTunnels = List(NVABase, VCBase)
+  val InsurgentTunnels    = List(NVATunnel, VCTunnel)
   val Irregulars      = List(Irregulars_A, Irregulars_U)
   val Rangers         = List(Rangers_A, Rangers_U)
   val NVAGuerrillas   = List(NVAGuerrillas_A, NVAGuerrillas_U)
   val VCGuerrillas    = List(VCGuerrillas_A, VCGuerrillas_U)
   val ARVNCubes       = List(ARVNTroops, ARVNPolice)
-  val FlippablePieces = List(Irregulars_U, Irregulars_A, Rangers_U, Rangers_A, 
+  val FlippablePieces = List(Irregulars_U, Irregulars_A, Rangers_U, Rangers_A,
                              NVAGuerrillas_U, NVAGuerrillas_A, VCGuerrillas_U, VCGuerrillas_A)
-  
+  val Guerrillas      = List(NVAGuerrillas_A, VCGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_U)
+  val ActiveGuerrillas      = List(NVAGuerrillas_A, VCGuerrillas_A)
+  val UndergroundGuerrillas = List(NVAGuerrillas_U, VCGuerrillas_U)
+
   val factionPieces: Map[Faction, List[PieceType]] = Map(
     US   -> USPieces,
     ARVN -> ARVNPieces,
@@ -403,7 +409,7 @@ object FireInTheLake {
   def isBase(pieceType: PieceType)        = BasePieces contains pieceType
   def isForce(pieceType: PieceType)       = Forces contains pieceType
   def isFlippable(pieceType: PieceType)   = FlippablePieces contains pieceType
-  
+
   //  Normalize active types to their undeground counterparts,
   //  and tunneled bases to their non-tunnel counterparts
   def normalizedType(pieceType: PieceType): PieceType = pieceType match {
@@ -415,7 +421,7 @@ object FireInTheLake {
     case NVATunnel | NVABase               => NVABase
     case _                                 => pieceType
   }
-  
+
   def simiarTypes(pieceType: PieceType): Seq[PieceType] = pieceType match {
     case Irregulars_A | Irregulars_U       => Seq(Irregulars_A, Irregulars_U)
     case Rangers_A | Rangers_U             => Seq(Rangers_A, Rangers_U)
@@ -423,8 +429,8 @@ object FireInTheLake {
     case NVAGuerrillas_A | NVAGuerrillas_U => Seq(NVAGuerrillas_A, NVAGuerrillas_U)
     case _                                 => Seq(pieceType)
   }
-  
-  
+
+
   def owner(pieceType: PieceType): Faction = pieceType match {
     case t if USPieces contains t   => US
     case t if ARVNPieces contains t => ARVN
@@ -460,6 +466,9 @@ object FireInTheLake {
     def totalFaction(faction: Faction)  = totalOf(factionPieces(faction))
     def hasForce(faction: Faction): Boolean = only(Forces).totalFaction(faction) > 0
     def hasBase(faction: Faction) = only(BasePieces).totalFaction(faction) > 0
+    def hasExposedInsurgents = has(NVATroops) ||
+                               has(ActiveGuerrillas) ||
+                               (!has(Guerrillas) && has(InsurgentBases))
 
     def total = Faction.ALL.foldLeft(0) { (sum, faction) => sum + totalFaction(faction) }
 
@@ -498,7 +507,7 @@ object FireInTheLake {
 
     // Return true if this Pieces instance has at least one of any of the given piece types
     def has(pts: Seq[PieceType]): Boolean = totalOf(pts) > 0
-    
+
     def numOf(pieceType: PieceType): Int = pieceType match {
       case USTroops        => usTroops
       case Irregulars_U    => irregulars_U
@@ -519,7 +528,7 @@ object FireInTheLake {
       case VCBase          => vcBases
       case VCTunnel        => vcTunnels
     }
-    
+
     def set(num: Int, pieceType: PieceType): Pieces = pieceType match {
       case USTroops        => copy(usTroops        = num)
       case Irregulars_U    => copy(irregulars_U    = num)
@@ -585,12 +594,12 @@ object FireInTheLake {
 
     def only(pieceTypes: Seq[PieceType]): Pieces =
       pieceTypes.foldLeft(Pieces()) { (pieces, t) => pieces.add(numOf(t), t) }
-      
+
     def only(pieceType: PieceType): Pieces = Pieces().add(numOf(pieceType), pieceType)
 
     def except(pieceTypes: Seq[PieceType]): Pieces =
       pieceTypes.foldLeft(this) { (pieces, t) => pieces.set(0, t) }
-      
+
     def except(pieceType: PieceType): Pieces = except(Seq(pieceType))
 
     def + (added: Pieces): Pieces = Pieces(
@@ -676,7 +685,7 @@ object FireInTheLake {
     val name: String
     val value: Int
     def compare(that: SupportType) = this.value - that.value
-    
+
     override def toString() = name
   }
   case object ActiveSupport     extends SupportType { val name = "Active Support" ;    val value = 4 }
@@ -690,15 +699,15 @@ object FireInTheLake {
     def apply(name: String): SupportType = ALL find (_.name.toLowerCase == name.toLowerCase) getOrElse {
       throw new IllegalArgumentException(s"Invalid SupportType name: $name")
     }
-    
+
     def apply(value: Int): SupportType = ALL.find(_.value == value) getOrElse {
       throw new IllegalArgumentException(s"Invalid SupportType value: $value")
-    }    
+    }
   }
-  
+
   sealed trait Control {
     val name: String
-    
+
     override def toString() = name
   }
   case object Uncontrolled   extends Control { val name = "Uncontrolled"    }
@@ -726,10 +735,10 @@ object FireInTheLake {
     def isHighland = spaceType == HighlandProvince
     def isLowland  = spaceType == LowlandProvince
     def isJungle   = spaceType == JungleProvince
-    
+
     def isNorthVietnam = name == NorthVietnam
 
-    
+
     def coinControlled: Boolean = pieces.totalOf(CoinPieces) > pieces.totalOf(InsurgentPieces)
     def nvaControlled: Boolean  = pieces.totalOf(NVAPieces) > pieces.totalOf(NonNVAPieces)
     def control = if (coinControlled)
@@ -754,7 +763,22 @@ object FireInTheLake {
     def addPieces(newPieces: Pieces): Space = copy(pieces = pieces + newPieces)
     def removePieces(removedPieces: Pieces): Space = copy(pieces = pieces - removedPieces)
     def setPieces(newPieces: Pieces): Space = copy(pieces = newPieces)
-    
+
+    def assaultCubes(faction: Faction) = faction match {
+      case US                   => pieces.numOf(USTroops)
+      case _ if isCity || isLOC => pieces.totalOf(ARVNCubes)
+      case _                    => pieces.numOf(ARVNTroops)
+    }
+
+    def assaultMultiplier(faction: Faction): Double = faction match {
+      case US if pieces.has(USBase) => 2.0
+      case US if isHighland         => 1.0/2.0
+      case US                       => 1.0
+      case _ if isHighland          => 1.0/3.0
+      case _                        => 1.0/2.0
+    }
+
+    def assaultLosses(faction: Faction): Int = (assaultCubes(faction) * assaultMultiplier(faction)).toInt
 
   }
 
@@ -769,7 +793,7 @@ object FireInTheLake {
       case LOC  => 2
       case _    => 1  // All provinces
     }
-    
+
     def compare(a: Space, b: Space) = {
       val catDiff = categoryValue(a) - categoryValue(b)
       if (catDiff == 0)
@@ -907,7 +931,7 @@ object FireInTheLake {
   val Cap_Cadres             = "#116 Cadres"                 // affects VC terror and agitate / VC rally agitate
 
 
-  val AllCapabilities = List(
+  val AllCapabilityNames = List(
     Cap_TopGun, Cap_ArcLight, Cap_Abrams, Cap_Cobras, Cap_M48Patton,
     Cap_CombActionPlatoons, Cap_CORDS, Cap_LaserGuidedBombs, Cap_SearchAndDestroy,
     Cap_AAA, Cap_LongRangeGuns, Cap_MiGs, Cap_SA2s, Cap_PT76, Cap_ArmoredCavalry,
@@ -919,19 +943,60 @@ object FireInTheLake {
     lazy val flavor = if (shaded) "shaded" else "unshaded"
     override def toString() = s"$name ($flavor)"
   }
-  
+
   def shadedCapability(name: String)   = Capability(name, true)
   def unshadedCapability(name: String) = Capability(name, false)
 
+  val TopGun_Unshaded             = unshadedCapability(Cap_TopGun)
+  val ArcLight_Unshaded           = unshadedCapability(Cap_ArcLight)
+  val Abrams_Unshaded             = unshadedCapability(Cap_Abrams)
+  val Cobras_Unshaded             = unshadedCapability(Cap_Cobras)
+  val M48Patton_Unshaded          = unshadedCapability(Cap_M48Patton)
+  val CombActionPlatoons_Unshaded = unshadedCapability(Cap_CombActionPlatoons)
+  val CORDS_Unshaded              = unshadedCapability(Cap_CORDS)
+  val LaserGuidedBombs_Unshaded   = unshadedCapability(Cap_LaserGuidedBombs)
+  val SearchAndDestroy_Unshaded   = unshadedCapability(Cap_SearchAndDestroy)
+  val AAA_Unshaded                = unshadedCapability(Cap_AAA)
+  val LongRangeGuns_Unshaded      = unshadedCapability(Cap_LongRangeGuns)
+  val MiGs_Unshaded               = unshadedCapability(Cap_MiGs)
+  val SA2s_Unshaded               = unshadedCapability(Cap_SA2s)
+  val PT76_Unshaded               = unshadedCapability(Cap_PT76)
+  val ArmoredCavalry_Unshaded     = unshadedCapability(Cap_ArmoredCavalry)
+  val MandateOfHeaver_Unshaded    = unshadedCapability(Cap_MandateOfHeaver)
+  val BoobyTraps_Unshaded         = unshadedCapability(Cap_BoobyTraps)
+  val MainForceBns_Unshaded       = unshadedCapability(Cap_MainForceBns)
+  val Cadres_Unshaded             = unshadedCapability(Cap_Cadres)
+
+  val TopGun_Shaded               = shadedCapability(Cap_TopGun)
+  val ArcLight_Shaded             = shadedCapability(Cap_ArcLight)
+  val Abrams_Shaded               = shadedCapability(Cap_Abrams)
+  val Cobras_Shaded               = shadedCapability(Cap_Cobras)
+  val M48Patton_Shaded            = shadedCapability(Cap_M48Patton)
+  val CombActionPlatoons_Shaded   = shadedCapability(Cap_CombActionPlatoons)
+  val CORDS_Shaded                = shadedCapability(Cap_CORDS)
+  val LaserGuidedBombs_Shaded     = shadedCapability(Cap_LaserGuidedBombs)
+  val SearchAndDestroy_Shaded     = shadedCapability(Cap_SearchAndDestroy)
+  val AAA_Shaded                  = shadedCapability(Cap_AAA)
+  val LongRangeGuns_Shaded        = shadedCapability(Cap_LongRangeGuns)
+  val MiGs_Shaded                 = shadedCapability(Cap_MiGs)
+  val SA2s_Shaded                 = shadedCapability(Cap_SA2s)
+  val PT76_Shaded                 = shadedCapability(Cap_PT76)
+  val ArmoredCavalry_Shaded       = shadedCapability(Cap_ArmoredCavalry)
+  val MandateOfHeaver_Shaded      = shadedCapability(Cap_MandateOfHeaver)
+  val BoobyTraps_Shaded           = shadedCapability(Cap_BoobyTraps)
+  val MainForceBns_Shaded         = shadedCapability(Cap_MainForceBns)
+  val Cadres_Shaded               = shadedCapability(Cap_Cadres)
+
+
   val Medevac_prefix = "#15 Medevac"
-  
-  // Momentum markers  
+
+  // Momentum markers
   val Mo_WildWeasels       = "#5 Wild Weasels"              // Shaded   (affects Air Strike)
   val Mo_ADSID             = "#7 ADSID"                     // Unshaded (affects change to trail value)
   val Mo_RollingThunder    = "#10 Rolling Thunder"          // Shaded   (prohibits air strike)
   val Mo_Medevac_Unshaded  = s"$Medevac_prefix (unshaded)"  // (affects commitment phase during coup round)
   val Mo_Medevac_Shaded    = s"$Medevac_prefix (shaded)"    // (prohibits air lift)
-  val Mo_BlowtorchKomer    = "#16 Blowtorch Komer"          // Unshaded (Pacity costs 1 resource per step/teror)
+  val Mo_BlowtorchKomer    = "#16 Blowtorch Komer"          // Unshaded (Pacity costs 1 resource per step/teror, during Support phase)
   val Mo_Claymores         = "#17 Claymores"                // Unshaded (prohibits ambush, affect guerrilla march)
   val Mo_DaNang            = "#22 Da Nang"                  // Shaded (prohibits air strike)
   val Mo_McNamaraLine      = "#38 McNamara Line"            // Single event (prohibits infiltrate, prohibits trail improvement by rally)
@@ -972,7 +1037,7 @@ object FireInTheLake {
   }
 
   def scenarioEntry(s: Scenario): (String, Scenario) = s.name -> s
-  
+
   val scenarios = ListMap[String, Scenario](
     scenarioEntry(new ShortScenario),
     scenarioEntry(new MediumScenario)
@@ -990,11 +1055,11 @@ object FireInTheLake {
   case object  Patrol  extends CoinOp { val name = "Patrol"  }
   case object  Sweep   extends CoinOp { val name = "Sweep"   }
   case object  Assault extends CoinOp { val name = "Assault" }
-  
+
   object CoinOp {
-    val ALL = List(Train, Patrol, Sweep, Assault) 
+    val ALL = List(Train, Patrol, Sweep, Assault)
   }
-  
+
   sealed trait InsurgentOp {
     val name: String
     override def toString() = name
@@ -1018,7 +1083,7 @@ object FireInTheLake {
   case object  LimitedOp     extends Action { val name = "Limited Op"          }
 
   case class Actor(faction: Faction, action: Action)
-  
+
   sealed trait SpecialActivity {
     val name: String
     override def toString() = name
@@ -1159,7 +1224,7 @@ object FireInTheLake {
     lazy val currentRvnLeader = rvnLeaders.head
     lazy val locSpaces = spaces filter (_.isLOC)
     lazy val nonLocSpaces = spaces filterNot (_.isLOC)
-    
+
     // Create a one line turn description for the current game state.
     // This is used to mark the current game segment, etc.
     // "#10 Rolling Thunder - 0 acted, US is up"
@@ -1190,9 +1255,9 @@ object FireInTheLake {
 
     lazy val useArvnResources = isHuman(US) || isHuman(ARVN)
     lazy val useEcon          = useArvnResources
-    
+
     // Return next eligible faction or None
-    def nextUp: Option[Faction] = if (sequence.numActors < 2) 
+    def nextUp: Option[Faction] = if (sequence.numActors < 2)
       deck(currentCard).factionOrder find sequence.eligibleThisTurn
     else
       None
@@ -1218,7 +1283,7 @@ object FireInTheLake {
     def totalOpposition             = totalOnMap(_.oppositionValue)
     def nvaBasesOnMap               = totalOnMap(_.pieces.totalNVABases)
     def vcBasesOnMap                = totalOnMap(_.pieces.totalVCBases)
-    def terrorMarkersAvailable      = TerrorMarkerManifest - totalOnMap(_.terror) 
+    def terrorMarkersAvailable      = TerrorMarkerManifest - totalOnMap(_.terror)
 
     def usPoints   = totalSupport + availablelUSTroopsAndBases
     def nvaPoints  = totalNvaControl + nvaBasesOnMap
@@ -1228,10 +1293,10 @@ object FireInTheLake {
     def nvaScore   = nvaPoints  - 18
     def arvnScore  = arvnPoints - 50
     def vcScore    = vcPoints   - 35
-    
+
     def numPieceAvailable(pieceType: PieceType): Int = {
       availablePieces.only(normalizedType(pieceType)).total
-    }    
+    }
     def isPieceAvailable(pieceType: PieceType): Boolean = numPieceAvailable(pieceType) > 0
 
     def hasSpace(test: (Space) => Boolean) = spaces exists test
@@ -1243,7 +1308,7 @@ object FireInTheLake {
   }
 
   var game: GameState = _           // Global variable that holds the current game state.
-  
+
   def autoVictory(faction: Faction): Boolean = game.isBot(faction) &&
     (faction match {
       case US   => game.usScore   > 0
@@ -1251,8 +1316,8 @@ object FireInTheLake {
       case ARVN => game.arvnScore > 0
       case VC   => game.vcScore   > 0
       })
-  
-  
+
+
   def scenarioSummary: Seq[String] = {
     val b = new ListBuffer[String]
     val len = Faction.maxNameLen
@@ -1270,7 +1335,7 @@ object FireInTheLake {
   def chanceOfDrawingACoupCard: (Double, Int) = {
     def countCoup(cardNum: Int) = if (deck(cardNum).isCoup) 1 else 0
     val coupCardShowing = game.isCoupRound || game.onDeckIsCoup
-    
+
     if (game.cardsDrawn < 3) {
       val cardsRemaining = game.cardsPerCampaign - game.cardsDrawn
       val chance = if (coupCardShowing) 0.0 else 1.0 / cardsRemaining
@@ -1281,7 +1346,7 @@ object FireInTheLake {
       val lastPlayedPile  = (cardsPlayed - 1) / game.cardsPerCampaign + 1
       val currentCardPile = (cardsPlayed / game.cardsPerCampaign) + 1
       val nextCardPile    = (game.cardsDrawn / game.cardsPerCampaign) + 1
-      
+
       if (nextCardPile == lastPlayedPile) {
         val cardsInCurrent = game.cardsDrawn % game.cardsPerCampaign
         val cardsRemaining = game.cardsPerCampaign - cardsInCurrent
@@ -1301,11 +1366,11 @@ object FireInTheLake {
       else {
         val cardsRemaining = game.cardsPerCampaign - 1
         val chance = if (game.onDeckIsCoup) 0.0 else 1.0 / cardsRemaining
-        (chance, cardsRemaining)          
+        (chance, cardsRemaining)
       }
     }
   }
-  
+
   def statusSummary: Seq[String] = {
     val b = new ListBuffer[String]
     def score(faction: Faction): String = {
@@ -1315,7 +1380,7 @@ object FireInTheLake {
       case ARVN => (game.arvnPoints, game.arvnScore, autoVictory(ARVN))
       case VC   => (game.vcPoints,   game.vcScore,   autoVictory(VC))
       }
-      
+
       val auto_display = if (auto) "** Auto victory **" else ""
       f"$points%2d   ($score%3d)  $auto_display"
     }
@@ -1329,7 +1394,7 @@ object FireInTheLake {
     b += s"Coin Control + Patronage : ${score(NVA)}"
     b += s"NVA Control + NVA Bases  : ${score(NVA)}"
     b += s"Total Opp. + VC Bases    : ${score(NVA)}"
-        
+
     b += separator()
     if (game.useArvnResources)
       b += f"ARVN resources : ${game.arvnResources}%2d"
@@ -1344,7 +1409,7 @@ object FireInTheLake {
     b += f"Trail          : ${game.trail}%2d"
     if (game.isBot(US))
       b += s"US Policy      : ${game.usPolicy}"
-    
+
     if (game.cardsDrawn > 0) {
       b += separator()
       b += s"Current card   : ${deck(game.currentCard).fullString}"
@@ -1352,24 +1417,24 @@ object FireInTheLake {
         b += s"On deck card   : ${deck(num).fullString}"
       }
     }
-    
+
     b += separator()
     b += s"Campaign       : ${ordinal(game.coupCardsPlayed+1)} of ${game.totalCoupCards} ${if (game.isFinalCampaign) " -- Final campaign" else ""}"
     b += s"Cards/Campaign : ${game.cardsPerCampaign}"
     b += f"Coup chance    : $coupCardChance"
-    
+
     b.toList
   }
 
   def availablePiecesSummary: Seq[String] = {
     val b = new ListBuffer[String]
     val avail = game.availablePieces
-    
+
     def addPieces(types: Seq[PieceType]): Unit = {
       for (t <- types; name = t.genericPlural; count = avail.numOf(t))
         b += f"${name}%-15s: ${count}%2d"
     }
-    
+
     b += "Available Pieces"
     b += separator()
     addPieces(USTroops::Irregulars_U::USBase::Nil)
@@ -1384,7 +1449,7 @@ object FireInTheLake {
 
   def casualtiesSummary: Seq[String] = {
     val b = new ListBuffer[String]
-    
+
     def addPieces(types: Seq[PieceType]): Unit = {
       for (t <- types; name = t.genericPlural; count = game.casualties.numOf(t) if count > 0)
         b += f"${name}%-15s: ${count}%2d"
@@ -1400,7 +1465,7 @@ object FireInTheLake {
 
   def outOfPlaySummary: Seq[String] = {
     val b = new ListBuffer[String]
-    
+
     def addPieces(types: Seq[PieceType]): Unit = {
       for (t <- types; name = t.genericPlural; count = game.outOfPlay.numOf(t) if count > 0)
         b += f"${name}%-15s: ${count}%2d"
@@ -1411,7 +1476,7 @@ object FireInTheLake {
       b += "None"
     else {
       addPieces(USPieces)
-      addPieces(ARVNPieces)      
+      addPieces(ARVNPieces)
     }
     b.toList
   }
@@ -1433,7 +1498,7 @@ object FireInTheLake {
     b += ""
     b.toList
   }
-  
+
   def sequenceList: Seq[String] = {
     val b = new ListBuffer[String]
     if (game.cardsDrawn > 0) {
@@ -1449,9 +1514,9 @@ object FireInTheLake {
         wrap("Acted         : ", actors) foreach (b += _)
         wrap("Passed        : ", passed) foreach (b += _)
         wrap("Ineligible    : ", ineligible) foreach (b += _)
-      }      
+      }
     }
-    b.toList    
+    b.toList
   }
 
   def sequenceSummary: Seq[String] = {
@@ -1463,7 +1528,7 @@ object FireInTheLake {
     }
     b.toList
   }
-  
+
 
   def spaceSummary(name: String, prefix: String = ""): Seq[String] = {
     val b = new ListBuffer[String]
@@ -1477,7 +1542,7 @@ object FireInTheLake {
       b += s"Population: ${sp.population}"
       b += s"Control   : ${sp.control}"
       b += s"Support   : ${sp.support}"
-      b += s"Terror    : ${sp.terror}"      
+      b += s"Terror    : ${sp.terror}"
     }
     wrap("Pieces    : ", sp.pieces.descriptions) foreach (b += _)
     b.toList
@@ -1504,7 +1569,7 @@ object FireInTheLake {
       askWhichGame() match {
         case Some(name) =>
           // loadMostRecent(name)
-      
+
         case None => // Start a new game
           println()
           val scenarioName = {
@@ -1519,26 +1584,26 @@ object FireInTheLake {
           val scenario = scenarios(scenarioName)
           val usePeriodEvents = askYorN("\nAre you using period events? (y/n) ")
           val humanFaction = askFaction("Which faction do you wish to play", allowAbort = false)
-          
+
           // println()
           // gameName = Some(askGameName("Enter a name for your new game: "))
 
           game = initialGameState(scenario, humanFaction, usePeriodEvents)
-          
+
           logSummary(scenarioSummary)
           log()
           scenario.additionalSetup()
-          
+
           //  If VC is a Bot then we use the vcResources as the Agitate Total
           //  This is initialized by rolling a d3
           val agitateTotal = d3
           log(s"\nRolling d3 to set the Agitate Total (VC resources cylinder)")
           if (game.isBot(VC))
             setAgitateTotal(d3)
-          
-          
+
+
       }
-      
+
       mainLoop()
     }
     catch {
@@ -1571,7 +1636,7 @@ object FireInTheLake {
       scenario.outOfPlay,
       scenario.pivotCardsAvailable,
       if (usePeriodCapabilities) scenario.periodCapabilities else Nil,
-      scenario.rvnLeadersInPlay)      
+      scenario.rvnLeadersInPlay)
   }
 
 
@@ -1627,7 +1692,7 @@ object FireInTheLake {
                  |  show sequence  - current sequence of play
                  |  show all       - entire game state
                  |  show <space>   - state of a single space""".stripMargin
-                 
+
   }
 
   object HistoryCmd extends Command {
@@ -1639,7 +1704,7 @@ object FireInTheLake {
                  |  history  >file     - Saves the log from the most recent game segment to file
                  |  history n >file    - Saves the log from n the most recent game segments to file
                  |  history all >file  - Saves the entire log to file""".stripMargin
-                 
+
   }
 
   object AdjustCmd extends Command {
@@ -1662,7 +1727,7 @@ object FireInTheLake {
                               |  adjust niall           - Number of Saxon raider on Niall Noigiallach card
                               |  adjust bot debug       - Toggle debug output of bot logic
                               |  adjust <space>         - Space specific settings""".stripMargin
-  
+
   }
 
   object RollbackCmd extends Command {
@@ -1704,13 +1769,13 @@ object FireInTheLake {
   // Prompt the user for one or two cards if necessary.
   // Then update the game state with the new card numbers.
   def drawNextCard(param: Option[String]): Unit = {
-    
+
     def paramValue(p: Option[String]): Option[Int] =
       p match {
         case Some(num) if checkCardNum(num) => Some(num.toInt)
         case _ => None
       }
-      
+
     if (game.cardsDrawn == 0) {
       val card1 = paramValue(param) getOrElse askCardNumber("Enter the # of the first event card: ")
       val card2 = askCardNumber("\nEnter the # of the second event card: ")
@@ -1744,14 +1809,14 @@ object FireInTheLake {
     }
     promptLines += separator()
     promptLines += s"($opts): "
-    
+
     val prompt = promptLines.mkString("\n", "\n", "")
-        
+
     val (cmd, param) = askCommand(prompt, DrawCardCmd :: CommonCmds)
     cmd match {
       case DrawCardCmd =>
         drawNextCard(param)
-      
+
       case _ =>
         // Handle history, show, etc.
         doCommonCommand(cmd, param)
@@ -1763,10 +1828,10 @@ object FireInTheLake {
   // Process all top level user commands.
   @tailrec def mainLoop(): Unit = {
     game = game.copy(turn = game.turn + 1)
-    
+
     try {
       askCardDrawCommand()
-        
+
       if (game.isCoupRound)
         resolveCoupCard()
       else
@@ -1777,18 +1842,18 @@ object FireInTheLake {
       // saved turn.
       case Rollback =>
     }
-    
+
     // Loop infinitely
     // We will terminate when we get an ExitGame exception (caught in main())
     mainLoop()
   }
-  
-  
+
+
   // Resolve the Coup phase, then reset the sequence of play and draw the next card.
   def resolveCoupCard(): Unit = {
     game = game.copy(coupCardsPlayed = game.coupCardsPlayed + 1)
     log("Epoch resolution has not been implemented.")
-    // NOTE: Check game.prevCardWasCoup 
+    // NOTE: Check game.prevCardWasCoup
     //       IF so resolve the RVN Leader and any immediate effects
     //       but do not conduct Coup round.
     //       If it is the final Coup card determine victory
@@ -1799,11 +1864,11 @@ object FireInTheLake {
   def adjustFactionEligibility(): Unit = {
     val oldSequence = game.sequence
     val newSequence = oldSequence.adjustEligibility
-    val eligible    = (newSequence.eligibleThisTurn filterNot oldSequence.eligibleThisTurn).toList.sorted 
-    val ineligible  = (newSequence.ineligibleThisTurn filterNot oldSequence.ineligibleThisTurn).toList.sorted 
+    val eligible    = (newSequence.eligibleThisTurn filterNot oldSequence.eligibleThisTurn).toList.sorted
+    val ineligible  = (newSequence.ineligibleThisTurn filterNot oldSequence.ineligibleThisTurn).toList.sorted
 
     game = game.copy(sequence = newSequence)
-    
+
     log("\nAdjust eligiblity")
     log(separator())
     if (eligible.nonEmpty)
@@ -1811,7 +1876,7 @@ object FireInTheLake {
     if (ineligible.nonEmpty)
       log(s"Move the ${andList(ineligible)} ${pluralize(ineligible.size, "cylinder")} to the Ineligible box")
   }
-  
+
   // Resolve the action for the next eligible faction.
   // Then if two actions have occurred or if there are no more
   // eligible factions, adjust the sequence of play and draw the next card.
@@ -1823,14 +1888,14 @@ object FireInTheLake {
     promptLines += separator()
     promptLines ++= sequenceList
     promptLines += separator()
-  
+
     if (game.sequence.exhausted) {
       val opts = orList(EndTurnCmd.name::"?"::Nil)
-      
+
       promptLines += s"($opts): "
-      
+
       val prompt = promptLines.mkString("\n", "\n", "")
-      
+
       @tailrec def nextEndCommand(): Unit = {
         val (cmd, param) = askCommand(prompt.toString, EndTurnCmd::CommonCmds)
         cmd match {
@@ -1839,14 +1904,14 @@ object FireInTheLake {
             game.copy(
               prevCardWasCoup = deck(game.currentCard).isCoup,
               currentCard     = game.onDeckCard.get)
-                 
+
             saveGameState(game.description)
           case _ =>
             doCommonCommand(cmd, param)
             nextEndCommand()
         }
       }
-      
+
       nextEndCommand()
     }
     else {
@@ -1857,11 +1922,11 @@ object FireInTheLake {
         List(ActCmd) // 1st Faction cannot pass on pivotal event
       else
         List(ActCmd, PassCmd)
-    
+
       val opts = orList((actorCmds map (_.name)) :+ "?")
-      
+
       promptLines += s"[$faction] ($opts): "
-      
+
       val prompt = promptLines.mkString("\n", "\n", "")
 
       @tailrec def nextActorCommand(): Unit = {
@@ -1888,11 +1953,11 @@ object FireInTheLake {
             resolveNextActor()
           case BotCmd  =>
             val action = shuffle(game.sequence.availableActions).head
-            
+
             game = game.copy(sequence = game.sequence.addActor(faction, action))
             log()
             log(s"Move the $faction cylinder to the $action box")
-            
+
             // Bot.act()
             log(s"\nFinished with $faction turn")
             saveGameState(game.description)
@@ -1902,7 +1967,7 @@ object FireInTheLake {
             nextActorCommand()
         }
       }
-    
+
       // Ask for initial command
       nextActorCommand()
     }
@@ -1982,15 +2047,15 @@ object FireInTheLake {
       case US | ARVN if game.useArvnResources =>
         game = game.copy(arvnResources = (game.arvnResources + amount) min EdgeTrackMax)
         log(s"Increase $ARVN resources by +$amount to ${game.arvnResources}")
-        
+
       case NVA  if game.isHuman(NVA) =>
         game = game.copy(nvaResources = (game.nvaResources + amount) min EdgeTrackMax)
         log(s"Increase $NVA resources by +$amount to ${game.nvaResources}")
-        
+
       case VC if game.isHuman(VC) =>
         game = game.copy(vcResources = (game.vcResources + amount) min EdgeTrackMax)
         log(s"Increase $VC resources by +$amount to ${game.vcResources}")
-        
+
       case _ =>
     }
   }
@@ -2001,7 +2066,7 @@ object FireInTheLake {
       case US | ARVN if game.useArvnResources =>
         game = game.copy(arvnResources = (game.arvnResources - amount) max 0)
         log(s"Decrease $ARVN resources by -$amount to ${game.arvnResources}")
-        
+
       case NVA if game.isHuman(NVA) =>
         game = game.copy(nvaResources = (game.nvaResources - amount) max 0)
         log(s"Decrease $NVA resources by -$amount to ${game.nvaResources}")
@@ -2009,7 +2074,7 @@ object FireInTheLake {
       case VC if game.isHuman(VC) =>
         game = game.copy(vcResources = (game.vcResources - amount) max 0)
         log(s"Decrease $VC resources by -$amount to ${game.vcResources}")
-    
+
       case _ =>
     }
   }
@@ -2023,7 +2088,7 @@ object FireInTheLake {
     else
       log(s"Add ${amountOf(num, "terror marker")} to $name")
   }
-  
+
   def removeTerror(name: String, num: Int): Unit = if (num > 0) {
     val sp = game.getSpace(name)
     assert(sp.terror >= num, s"removeTerror($name): not enough markers in space")
@@ -2035,25 +2100,35 @@ object FireInTheLake {
   }
 
   def increasePatronage(amount: Int): Unit = if (amount > 0) {
-    val savedGame = game
-    game = game.copy(patronage = (game.patronage + amount) min EdgeTrackMax)
-    log(s"Increase Patronage by +$amount to ${game.patronage}")
-    logPointsChanges(savedGame, game)
+    loggingPointsChanges {
+      game = game.copy(patronage = (game.patronage + amount) min EdgeTrackMax)
+      log(s"Increase Patronage by +$amount to ${game.patronage}")
+    }
   }
 
   def decreasePatronage(amount: Int): Unit = if (amount > 0) {
-    val savedGame = game
-    game = game.copy(patronage = (game.patronage - amount) max 0)
-    log(s"Decrease Patronage by -$amount to ${game.patronage}")
-    logPointsChanges(savedGame, game)
+    loggingPointsChanges {
+      game = game.copy(patronage = (game.patronage - amount) max 0)
+      log(s"Decrease Patronage by -$amount to ${game.patronage}")
+    }
   }
-  
+
+  def increaseUsAid(amount: Int): Unit = if (amount > 0) {
+    game = game.copy(usAid = (game.usAid + amount) min EdgeTrackMax)
+    log(s"Increase US Aid by +$amount to ${game.usAid}")
+  }
+
+  def decreaseUsAid(amount: Int): Unit = if (amount > 0) {
+    game = game.copy(usAid = (game.usAid - amount) max 0)
+    log(s"Decrease US Aid by -$amount to ${game.usAid}")
+  }
+
   // If VC is a Bot, the we store the agitate total in vcResources
   def setAgitateTotal(amount: Int): Unit = if (amount > 0) {
     game = game.copy(vcResources = amount)
     log(s"Set Agitate Total to ${game.vcResources}")
   }
-  
+
   // If VC is a Bot, the we store the agitate total in vcResources
   def increaseAgitateTotal(amount: Int): Unit = if (amount > 0) {
     game = game.copy(vcResources = (game.vcResources + amount) min EdgeTrackMax)
@@ -2067,33 +2142,33 @@ object FireInTheLake {
   }
 
   def increaseSupport(name: String, num: Int): Unit = if (num > 0) {
-    val sp = game.getSpace(name)
-    val newSupport = try SupportType(sp.support.value + num)
-    catch {
-      case _: IllegalArgumentException =>
-        throw new IllegalStateException(s"Cannot increase support from ${sp.support} by $num levels")
+    loggingPointsChanges {
+      val sp = game.getSpace(name)
+      val newSupport = try SupportType(sp.support.value + num)
+      catch {
+        case _: IllegalArgumentException =>
+          throw new IllegalStateException(s"Cannot increase support from ${sp.support} by $num levels")
+      }
+
+      val updated = sp.copy(support = newSupport)
+      game = game.updateSpace(updated)
+      logSupportChange(sp, updated)
     }
-    
-    val savedGame = game
-    val updated = sp.copy(support = newSupport)
-    game = game.updateSpace(updated)
-    logSupportChange(sp, updated)
-    logPointsChanges(savedGame, game)
   }
-  
+
   def decreaseSupport(name: String, num: Int): Unit = if (num > 0) {
-    val sp = game.getSpace(name)
-    val newSupport = try SupportType(sp.support.value - num)
-    catch {
-      case _: IllegalArgumentException =>
-        throw new IllegalStateException(s"Cannot decrease support from ${sp.support} by $num levels")
+    loggingPointsChanges {
+      val sp = game.getSpace(name)
+      val newSupport = try SupportType(sp.support.value - num)
+      catch {
+        case _: IllegalArgumentException =>
+          throw new IllegalStateException(s"Cannot decrease support from ${sp.support} by $num levels")
+      }
+
+      val updated = sp.copy(support = newSupport)
+      game = game.updateSpace(updated)
+      logSupportChange(sp, updated)
     }
-    
-    val savedGame = game
-    val updated = sp.copy(support = newSupport)
-    game = game.updateSpace(updated)
-    logSupportChange(sp, updated)
-    logPointsChanges(savedGame, game)
   }
 
   def capabilityInPlay(cap: Capability) = game.capabilities contains cap
@@ -2121,7 +2196,7 @@ object FireInTheLake {
   // There must be enough pieces in the available box or an exception is thrown.
   def placePieces(spaceName: String, pieces: Pieces): Unit = if (pieces.total > 0) {
     assert(game.availablePieces contains pieces, "Insufficent pieces in the available box")
-    
+
     loggingControlChanges {
       val sp      = game.getSpace(spaceName)
 
@@ -2131,14 +2206,14 @@ object FireInTheLake {
       wrap("  ", pieces.descriptions) foreach (log(_))
     }
   }
-  
+
   def removeToAvailable(spaceName: String, pieces: Pieces): Unit = if (pieces.total > 0) {
     loggingControlChanges {
       val sp = game.getSpace(spaceName)
       assert(sp.pieces contains pieces, s"$spaceName does not contain all requested pieces: $pieces")
       val updated = sp.copy(pieces = sp.pieces - pieces)
       game = game.updateSpace(updated)
-      log(s"\nMove the following pieces from $spaceName to AVAILABLE:")
+      log(s"\nRemove the following pieces from $spaceName to AVAILABLE:")
       wrap("  ", pieces.descriptions) foreach (log(_))
     }
   }
@@ -2150,13 +2225,32 @@ object FireInTheLake {
       val updated = sp.copy(pieces = sp.pieces - pieces)
       // Pieces in casualties are always normalized.
       game = game.updateSpace(updated).copy(casualties = game.casualties + pieces.normalized)
-      log(s"\nMove the following pieces from $spaceName to CASUALTIES:")
+      log(s"\nRemove the following pieces from $spaceName to CASUALTIES:")
       wrap("  ", pieces.descriptions) foreach (log(_))
     }
   }
-  
 
-  // Ask the user to select a number of pieces. 
+  def addTunnelMarker(spaceName: String, base: PieceType): Unit = {
+    val sp = game.getSpace(spaceName)
+    assert(base == VCBase || base == NVABase, s"addTunnelMarker() called with invalid type: $base")
+    assert(sp.pieces.has(base), s"addTunnelMarker() $spaceName does not contain a $base")
+    val tunnel = if (base == VCBase) VCTunnel else NVATunnel
+    val updated = sp.copy(pieces = sp.pieces.remove(1, base).add(1, tunnel))
+    game = game.updateSpace(updated)
+    log(s"\nAdd a tunnel marker to a $base in $spaceName")
+  }
+
+  def removeTunnelMarker(spaceName: String, tunnel: PieceType): Unit = {
+    val sp = game.getSpace(spaceName)
+    assert(tunnel == VCTunnel || tunnel == NVATunnel, s"removeTunnelMarker() called with invalid type: $tunnel")
+    assert(sp.pieces.has(tunnel), s"removeTunnelMarker() $spaceName does not contain a $tunnel")
+    val base = if (tunnel == VCTunnel) VCBase else NVABase
+    val updated = sp.copy(pieces = sp.pieces.remove(1, tunnel).add(1, base))
+    game = game.updateSpace(updated)
+    log(s"\nRemove a tunnel marker from a $base in $spaceName")
+  }
+
+  // Ask the user to select a number of pieces.
   // The type of pieces allowed for selection may be limited by passing a list of those
   // that are allowed.  An empty list indicates that all types of pieces may be selected.
   def askPieces(pieces: Pieces, num: Int, allowed: Seq[PieceType] = AllPieceTypes,
@@ -2174,7 +2268,7 @@ object FireInTheLake {
         println(s"Select ${amountOf(numPieces, "piece")} among the following:")
         wrap("  ", available.descriptions) foreach println
         println()
-      
+
         def nextType(types: Seq[PieceType]): Unit = {
           val numRemaining = numPieces - selected.total
           if (numRemaining != 0) {
@@ -2206,7 +2300,7 @@ object FireInTheLake {
     val candidateNames = spaceNames(game.spaces filterNot (sp => prohibitedSpaces(sp.name)) filter (_.pieces.has(types)))
     def availPieces(names: List[String]) = names.foldLeft(0)((sum, n) => sum + game.getSpace(n).pieces.totalOf(types))
     assert(availPieces(candidateNames) >= num, "voluntaryRemoval: Not enough pieces on map!")
-    
+
     def nextSpace(removed: Vector[(String, Pieces)], candidates: List[String]): Vector[(String, Pieces)] = {
       val removedSoFar = removed.foldLeft(0) { case (sum, (_, n)) => sum + n.total }
       val numLeft      = num - removedSoFar
@@ -2226,13 +2320,13 @@ object FireInTheLake {
         val num = if (minFromSpace == numInSpace) numInSpace
                  else askInt(s"Remove how many ${pieceType.genericPlural}", minFromSpace, numInSpace)
         val toRemove = askPieces(pieces, num, types)
-                  
+
         nextSpace(removed :+ (name -> toRemove), candidates filterNot (_ == name))
       }
     }
-    
+
     val removed = nextSpace(Vector.empty, candidateNames)
-    
+
     loggingControlChanges {
       log()
       for ((name, removedPieces) <- removed) {
@@ -2240,13 +2334,13 @@ object FireInTheLake {
         val updated = sp.copy(pieces = sp.pieces - removedPieces)
         game = game.updateSpace(updated)
         log(s"Remove ${andList(removedPieces.descriptions)} from $name to AVAILABLE")
-      }      
+      }
     }
   }
 
-  // Ask the number of each type of pieces to place in the given space up to the 
+  // Ask the number of each type of pieces to place in the given space up to the
   // given maximum.
-  // If there are not sufficient pieces in the available box, then the user is 
+  // If there are not sufficient pieces in the available box, then the user is
   // asked to remove some from the map.
   // If there are not enough in available or in other spaces on the map, then the
   // piece type is skipped.
@@ -2266,7 +2360,7 @@ object FireInTheLake {
     }
     else {
       println(s"\nPlace up to ${amountOf(maxPieces, "piece")} in $spaceName (${andList(availTypes)})")
-      
+
       def nextType(placed: Pieces, remainingTypes: List[PieceType]): Pieces = {
         val maxRemaining = maxPieces - placed.total
         if (maxRemaining == 0 || remainingTypes.isEmpty)
@@ -2303,12 +2397,12 @@ object FireInTheLake {
           }
         }
       }
-      
+
       nextType(Pieces(), availTypes)
     }
   }
-  
-  // If there are not sufficient bases in the available box, then the user is 
+
+  // If there are not sufficient bases in the available box, then the user is
   // asked to remove one from the map.
   // IMPORTANT:
   //  -  Do not use this function for  USBase
@@ -2349,6 +2443,7 @@ object FireInTheLake {
     }
   }
 
+
   def logPointsChanges(origGame: GameState, newGame: GameState): Unit = {
     var loggedHeader = false;
     def logChange(message: String): Unit = {
@@ -2359,55 +2454,74 @@ object FireInTheLake {
       }
       log(message)
     }
-    
+
     if (origGame.usPoints != newGame.usPoints)
       logChange(s"Move the 'Support + Avail US' marker to ${newGame.usPoints}")
-    
+
     if (origGame.arvnPoints != newGame.arvnPoints)
       logChange(s"Move the 'COIN Control + Patronage' marker to ${newGame.arvnPoints}")
-      
+
     if (origGame.nvaPoints != newGame.nvaPoints)
       logChange(s"Move the 'NVA Control + NVA Bases' marker to ${newGame.nvaPoints}")
-      
+
     if (origGame.vcPoints != newGame.vcPoints)
       logChange(s"Move the 'Total Opposition + VC Bases' marker to ${newGame.vcPoints}")
   }
-  
+
+  private var loggingPointsChangesActive = false
+  def loggingPointsChanges[T](code: => T): T = {
+    if (loggingPointsChangesActive)
+      code
+    else {
+      loggingPointsChangesActive = true
+      try {
+        val savedGame = game
+        val result    = code
+
+        logPointsChanges(savedGame, game)
+        result
+      }
+      finally {
+        loggingPointsChangesActive = false
+      }
+    }
+  }
+
   // Performs the given code, then logs all spaces that have changed control
   // and logs the updates to edge track markers that are base on control changes.
   // Nested calls to this funciton will not perform any logging.  The outermost
   // call, only, will do the logging.
   private var loggingControlChangesActive = false
-  
+
   def loggingControlChanges[T](code: => T): T = {
     if (loggingControlChangesActive)
       code
     else {
       loggingControlChangesActive = true
       try {
-        val savedGame  = game
-        val result     = code
-        val changed = for {
-          space <- game.spaces.sortBy(_.name)
-          orig = savedGame.getSpace(space.name)
-          if !orig.isLOC && orig.control != space.control 
-        } yield (space.name, orig.control, space.control)
+        loggingPointsChanges {
+          val savedGame  = game
+          val result     = code
 
-        if (changed.nonEmpty) {
-          log(s"\nControl changes")
-          log(separator())
-          for ((name, origControl, newControl) <- changed) {
-            (origControl, newControl) match {
-              case (Uncontrolled, _)  => log(s"Place ${newControl} marker in ${name}")
-              case (_, Uncontrolled)  => log(s"Remove ${origControl} marker from ${name}")
-              case _                  => log(s"Flip control marker in ${name} to ${newControl}")
-            }            
+          val changed = for {
+            space <- game.spaces.sortBy(_.name)
+            orig = savedGame.getSpace(space.name)
+            if !orig.isLOC && orig.control != space.control
+          } yield (space.name, orig.control, space.control)
+
+          if (changed.nonEmpty) {
+            log(s"\nControl changes")
+            log(separator())
+            for ((name, origControl, newControl) <- changed) {
+              (origControl, newControl) match {
+                case (Uncontrolled, _)  => log(s"Place ${newControl} marker in ${name}")
+                case (_, Uncontrolled)  => log(s"Remove ${origControl} marker from ${name}")
+                case _                  => log(s"Flip control marker in ${name} to ${newControl}")
+              }
+            }
           }
+          result
         }
-
-        // Log changes to points markers that are related to space control
-        logPointsChanges(savedGame, game)
-        result
       }
       finally {
         loggingControlChangesActive = false
@@ -2415,8 +2529,8 @@ object FireInTheLake {
     }
   }
 
-  
-  
+
+
   // Returns comma separated string with last choice separated by "and"
   //    List("apples")                      => "apples"
   //    List("apples", "oranges")           => "apples and oranges"
@@ -2727,19 +2841,19 @@ object FireInTheLake {
       case num                       => num.toInt
     }
   }
-  
+
 
   // TODO: ...
   def askWhichGame(): Option[String] = None
-  
-  
+
+
   def askFaction(prompt: String, factions: Set[Faction] = Faction.ALL, allowAbort: Boolean = true): Faction = {
       assert(factions.nonEmpty, "askFaction called with empty set")
       println()
       askSimpleMenu(factions.toList.sorted, prompt, allowAbort = allowAbort).head
   }
-  
-  
+
+
   // Returns the selected command and any extra user input that was given.
   @tailrec def askCommand(prompt: String, cmds: Seq[Command]): (Command, Option[String]) = {
     readLine(prompt) match {
@@ -2779,7 +2893,7 @@ object FireInTheLake {
     }
   }
 
-  
+
   def showCommand(param: Option[String]): Unit = {
     val options =  "scenario" :: "summary" :: "pieces" :: "events" ::
                     "sequence" :: "all" :: SpaceNames
@@ -2794,7 +2908,7 @@ object FireInTheLake {
       case name        => printSummary(spaceSummary(name))
     }
   }
-  
+
   def printPiecesSummary(): Unit = {
     printSummary(availablePiecesSummary)
     printSummary(casualtiesSummary)
@@ -2811,7 +2925,7 @@ object FireInTheLake {
     for (name <- SpaceNames; line <- spaceSummary(name))
       println(line)
   }
-  
+
   // Display some or all of the game log.
   // usage:
   //   history            ##  Shows the log from the most recent game segment
@@ -2877,14 +2991,14 @@ object FireInTheLake {
     for ((segment, i) <- game.history.zipWithIndex)
       println(f"$i%3d: ${segment.description}")
   }
-    
+
   def adjustSettings(param: Option[String]): Unit = {
     val agitate = if (game.isBot(VC)) List("agitate") else Nil
     val options = (
       List("resources", "aid", "patronage", "econ", "trail", "uspolicy", "casualties", "out of play",
       "capabilities", "momentum", "rvnLeaders", "pivot cards", "bot debug") ::: agitate
     ).sorted ::: SpaceNames
-    
+
     val choice = askOneOf("[Adjust] (? for list): ", options, param, allowNone = true, allowAbort = false)
     choice foreach {
       case "resources"    => adjustResources()
@@ -2922,7 +3036,7 @@ object FireInTheLake {
 
   def spaceAdjustmentDesc(spaceName: String, attributeName: String, oldValue: Any, newValue: Any): String =
     adjustmentDesc(s"$spaceName: $attributeName", oldValue, newValue)
-    
+
   def adjustInt(name: String, current: Int, range: Range): Option[Int] = {
     val prompt = s"$name is $current.  Enter new value (${range.min} - ${range.max}) "
     @tailrec def getResponse(): Option[Int] =
@@ -2935,7 +3049,7 @@ object FireInTheLake {
       }
     getResponse()
   }
-    
+
   def adjustResources(): Unit = {
     if (game.isHuman(NVA)) {
         adjustInt("NVA resources", game.nvaResources, 0 to EdgeTrackMax) foreach { value =>
@@ -2943,7 +3057,7 @@ object FireInTheLake {
           game = game.copy(nvaResources = value)
           log(desc)
           saveGameState(desc)
-        }      
+        }
     }
     else if (game.isHuman(VC)) {
       adjustInt("VC resources", game.vcResources, 0 to EdgeTrackMax) foreach { value =>
@@ -2960,27 +3074,27 @@ object FireInTheLake {
         log(desc)
         saveGameState(desc)
       }
-    }    
+    }
   }
-  
+
   def adjustAgitate(): Unit = {
     adjustInt("VC Agitate total", game.vcResources, 0 to EdgeTrackMax) foreach { value =>
       val desc = adjustmentDesc("VC Agitate total (resources cylinder)", game.vcResources, value)
       game = game.copy(vcResources = value)
       log(desc)
       saveGameState(desc)
-    }      
+    }
   }
-  
+
   def adjustAid(): Unit = {
     adjustInt("US Aid", game.usAid, 0 to EdgeTrackMax) foreach { value =>
       val desc = adjustmentDesc("US Aid", game.usAid, value)
       game = game.copy(usAid = value)
       log(desc)
       saveGameState(desc)
-    }      
+    }
   }
-  
+
   def adjustPatronage(): Unit = {
     val origGame = game
     adjustInt("Patronage", game.patronage, 0 to EdgeTrackMax) foreach { value =>
@@ -2989,29 +3103,29 @@ object FireInTheLake {
       log(desc)
       logPointsChanges(origGame, game)
       saveGameState(desc)
-    }      
-    
-    
+    }
+
+
   }
-  
+
   def adjustEcon(): Unit = {
     adjustInt("Econ marker", game.econ, 0 to EdgeTrackMax) foreach { value =>
       val desc = adjustmentDesc("Econ marker", game.econ, value)
       game = game.copy(econ = value)
       log(desc)
       saveGameState(desc)
-    }      
+    }
   }
-  
+
   def adjustTrail(): Unit = {
     adjustInt("Trail marker", game.trail, TrailMin to TrailMax) foreach { value =>
       val desc = adjustmentDesc("Trail Marker", game.trail, value)
       game = game.copy(trail = value)
       log(desc)
       saveGameState(desc)
-    }      
+    }
   }
-  
+
   def adjustUSPolicy(): Unit = {
     val oldPolicy = game.usPolicy
     val options = List(USPolicy_JFK, USPolicy_LBJ, USPolicy_Nixon)
@@ -3023,13 +3137,13 @@ object FireInTheLake {
       game = game.copy(usPolicy = newPolicy)
       val desc = adjustmentDesc("US Policy", oldPolicy, newPolicy)
       log(desc)
-      saveGameState(desc)          
+      saveGameState(desc)
     }
   }
-  
+
   // Move US pieces between the casualties box and the available box
   def adjustCasualties(): Unit = {
-    
+
     def nextAdjustment(): Unit = {
       val casualties = game.casualties
       val available  = game.availablePieces.only(USPieces)
@@ -3041,20 +3155,20 @@ object FireInTheLake {
       }
       val choices = pieceChoices :+ (None -> "Finished adjusting casualties")
 
-    
+
       println(s"\nCasualties Pieces")
       println(separator())
       wrap("", casualties.descriptions) foreach println
-      
+
       println(s"\nAvailable Pieces")
       println(separator())
       wrap("", available.descriptions) foreach println
 
-      askMenu(choices, "\nSelect the type of casualties piece to adjust:", allowAbort = false).head foreach { 
+      askMenu(choices, "\nSelect the type of casualties piece to adjust:", allowAbort = false).head foreach {
         pieceType =>
           val origNum = casualties.numOf(pieceType)
           val maxNum  = available.numOf(pieceType) + casualties.numOf(pieceType)
-        
+
           adjustInt(pieceType.plural, origNum, 0 to maxNum) foreach { value =>
             if (value != origNum) {
               val newCasualties = game.casualties.set(value, pieceType)
@@ -3065,7 +3179,7 @@ object FireInTheLake {
           nextAdjustment()
       }
     }
-    
+
     if (game.casualties.total + game.availablePieces.only(USPieces).total == 0)
       println("\nThere are no US forces in either the available or casualties box.")
     else {
@@ -3075,10 +3189,10 @@ object FireInTheLake {
         // Number of available US pieces affects US score
         logPointsChanges(savedGame, game)
         saveGameState("Adjustments to US casualties")
-      }      
+      }
     }
   }
-  
+
   // Move US/ARVN pieces between the out of play box and the available box
   def adjustOutOfPlay(): Unit = {
     val validTypes = USPieces ::: ARVNPieces
@@ -3093,20 +3207,20 @@ object FireInTheLake {
       }
       val choices = pieceChoices :+ (None -> "Finished adjusting out of play pieces")
 
-    
+
       println(s"\nOut of Play Pieces")
       println(separator())
       wrap("", outOfPlay.descriptions) foreach println
-      
+
       println(s"\nAvailable Pieces")
       println(separator())
       wrap("", available.descriptions) foreach println
 
-      askMenu(choices, "\nSelect the type of 'Out of Play' piece to adjust:", allowAbort = false).head foreach { 
+      askMenu(choices, "\nSelect the type of 'Out of Play' piece to adjust:", allowAbort = false).head foreach {
         pieceType =>
           val origNum = outOfPlay.numOf(pieceType)
           val maxNum  = available.numOf(pieceType) + outOfPlay.numOf(pieceType)
-        
+
           adjustInt(pieceType.plural, origNum, 0 to maxNum) foreach { value =>
             if (value != origNum) {
               val newOutOfPlay = game.outOfPlay.set(value, pieceType)
@@ -3117,7 +3231,7 @@ object FireInTheLake {
           nextAdjustment()
       }
     }
-    
+
     if (game.outOfPlay.total + game.availablePieces.only(validTypes).total == 0)
       println("\nThere are no US or ARVN forces in either the available or out of play box.")
     else {
@@ -3127,10 +3241,10 @@ object FireInTheLake {
         // Number of available US pieces affects US score
         logPointsChanges(savedGame, game)
         saveGameState("Adjustments to out of play pieces")
-      }      
+      }
     }
   }
-  
+
   def adjustRvnLeaders(): Unit = {
     val LeaderCards = RVN_Leaders filterNot (_ == RVN_Leader_DuongVanMinh)
 
@@ -3147,16 +3261,16 @@ object FireInTheLake {
       wrap("", game.rvnLeaders) foreach println
 
       askMenu(choices, "\nChoose one:", allowAbort = false).head match {
-        case "add" => 
+        case "add" =>
           val leaderChoices = available :+ ("none" -> "Do not add an RVN leader")
           askMenu(leaderChoices, "Choose an RVN Leader:", allowAbort = false).head match {
-            case "none" => 
+            case "none" =>
             case leader =>
               game = game.copy(rvnLeaders = leader :: game.rvnLeaders)
               log(s"Adjusted RVN leaders: [added ${leader}]")
           }
           nextAdjustment()
-          
+
         case "remove" =>
           val leader = game.rvnLeaders.head
           game = game.copy(rvnLeaders = game.rvnLeaders.tail)
@@ -3165,9 +3279,9 @@ object FireInTheLake {
 
         case _ =>
       }
-      
+
     }
-    
+
     val savedGame = game
     nextAdjustment()
     if (savedGame.rvnLeaders != game.rvnLeaders)
@@ -3187,13 +3301,13 @@ object FireInTheLake {
 
     def nextAdjustment(): Unit = {
       val included = game.capabilities map (_.name)
-      val excluded = AllCapabilities filterNot included.contains
-      
+      val excluded = AllCapabilityNames filterNot included.contains
+
       val addChoices = List(
         choice(excluded.nonEmpty, unshadedCapability("add"), "Add unshaded capability"),
         choice(excluded.nonEmpty, shadedCapability("add"),   "Add shaded capability")
       ).flatten
-      
+
       val removeChoices = game.capabilities map (cap => cap -> s"Remove ${cap}")
       val choices = addChoices ::: removeChoices ::: List(shadedCapability("finished") -> "Finished adjusting capabilities")
 
@@ -3201,8 +3315,8 @@ object FireInTheLake {
       println(separator())
       wrap("", game.capabilities map (_.toString)) foreach println
       askMenu(choices, "\nChoose one:", allowAbort = false).head match {
-        case Capability("finished", _) => 
-        
+        case Capability("finished", _) =>
+
         case Capability("add", shaded) =>
           askCapability(shaded, excluded) foreach { cap =>
             game = game.copy(capabilities = cap :: game.capabilities)
@@ -3222,7 +3336,7 @@ object FireInTheLake {
     if (savedGame.capabilities != game.capabilities)
       saveGameState("Adjusted capabilities in play")
   }
-  
+
   def adjustMomentum(): Unit = {
 
     def askMomentum(names: List[String]): Option[String] = {
@@ -3237,7 +3351,7 @@ object FireInTheLake {
       var excluded = AllMomentum filterNot game.momentum.contains
       if (game.momentum exists (_ startsWith Medevac_prefix))
         excluded = excluded filterNot (_ startsWith Medevac_prefix)
-      
+
       val addChoice = if (excluded.nonEmpty)
         List("add" -> "Add Momentum card")
       else
@@ -3245,12 +3359,12 @@ object FireInTheLake {
       val choices = addChoice :::
                     (game.momentum map (c => c -> s"Remove $c")) :::
                     List("finished" -> "Finished adjusting Momentum cards")
-                    
+
       println("\nMomentum cards in play")
       println(separator())
       wrap("", game.momentum) foreach println
       askMenu(choices, "\nChoose one:", allowAbort = false).head match {
-        case "finished" => 
+        case "finished" =>
 
         case "add" =>
           askMomentum(excluded) foreach { mo =>
@@ -3271,9 +3385,9 @@ object FireInTheLake {
     if (savedGame.momentum != game.momentum)
       saveGameState("Adjusted momentum cards in play")
   }
-  
+
   def adjustPivotalCards(): Unit = {
-    
+
     def nextAdjustment(): Unit = {
       val pivotal = Faction.ALL.toList.sorted map {
         faction =>
@@ -3282,35 +3396,35 @@ object FireInTheLake {
         else
           s"$faction (not available)"
       }
-      
+
       val choices: List[(Option[Faction], String)] = (Faction.ALL.toList.sorted map {
         faction =>
         Some(faction) -> s"Toggle $faction pivotal event"
       }) :+ (None -> "Finished adjusting pivotal event availability")
-      
+
       println("\nPivotal Event Availablity")
       println(separator())
       wrap("Pivotal     : ", pivotal) foreach println
       askMenu(choices, "\nChoose one:").head match {
-        case None => 
+        case None =>
         case Some(faction) if game.pivotCardsAvailable(faction) =>
           game = game.copy(pivotCardsAvailable = game.pivotCardsAvailable - faction)
           log(s"Adjusted $faction pivotal card: [now unavailable]")
           nextAdjustment()
-          
+
         case Some(faction) =>
           game = game.copy(pivotCardsAvailable = game.pivotCardsAvailable + faction)
           log(s"Adjusted $faction pivotal card: [now available]")
           nextAdjustment()
       }
     }
-    
+
     val savedGame = game
     nextAdjustment()
     if (savedGame.pivotCardsAvailable != game.pivotCardsAvailable)
       saveGameState("Adjusted pivotal card availability")
   }
-  
+
   def adjustBotDebug(): Unit = {
     val newValue = !game.botDebug
     val desc = adjustmentDesc("Bot debug", game.botDebug, newValue)
@@ -3318,8 +3432,8 @@ object FireInTheLake {
     log(desc)
     saveGameState(desc)
   }
-  
-  
+
+
   // case class Space(
   // name:       String,
   // spaceType:  SpaceType,
@@ -3328,7 +3442,7 @@ object FireInTheLake {
   // support:    SupportType = Neutral,
   // pieces:     Pieces      = Pieces(),
   // terror:     Int         = 0) {   // Sabatoge on LOCs
-  
+
   def adjustSpace(name: String): Unit = {
     val origSpace = game.getSpace(name)
     def nextAction(): Unit = {
@@ -3346,14 +3460,14 @@ object FireInTheLake {
         case "support" => adjustSupport(name); nextAction()
         case "terror"  => adjustTerror(name);  nextAction()
         case "pieces"  => adjustPieces(name);  nextAction()
-        case "done"    => 
+        case "done"    =>
       }
     }
     nextAction()
     if (game.getSpace(name) != origSpace)
       saveGameState(s"Adjusted space: $name")
   }
-  
+
 
   def adjustSupport(name: String): Unit = {
     val origGame = game
@@ -3368,7 +3482,7 @@ object FireInTheLake {
     log(spaceAdjustmentDesc(name, "support", sp.support, newSupport))
     logPointsChanges(origGame, game)
   }
-  
+
   def adjustTerror(name: String): Unit = {
     val sp = game.getSpace(name)
     val maxVal = game.terrorMarkersAvailable + sp.terror
@@ -3378,10 +3492,10 @@ object FireInTheLake {
       log(spaceAdjustmentDesc(name, "terror", sp.terror, value))
     }
   }
-  
+
 
   def adjustPieces(name: String): Unit = {
-    
+
     def nextAdjustment(): Unit = {
       val sp        = game.getSpace(name)
       val pieces    = sp.pieces
@@ -3394,16 +3508,16 @@ object FireInTheLake {
       }
       val choices = pieceChoices :+ (None -> s"Finished adjusting pieces in ${name}")
 
-    
+
       println(s"\nPieces in $name")
       println(separator())
       wrap("", pieces.descriptions) foreach println
-      
+
       println(s"\nAvailable Pieces")
       println(separator())
       wrap("", game.availablePieces.descriptions) foreach println
 
-      askMenu(choices, "\nSelect type of piece to adjust:", allowAbort = false).head foreach { 
+      askMenu(choices, "\nSelect type of piece to adjust:", allowAbort = false).head foreach {
         pieceType =>
           val origNum = pieces.numOf(pieceType)
           val maxNum  = {
@@ -3414,7 +3528,7 @@ object FireInTheLake {
             }
             else n
           }
-        
+
           adjustInt(pieceType.plural, origNum, 0 to maxNum) foreach { value =>
             if (value != origNum) {
               loggingControlChanges {
@@ -3426,8 +3540,10 @@ object FireInTheLake {
           nextAdjustment()
       }
     }
-    
-    nextAdjustment()
+
+    loggingControlChanges {
+      nextAdjustment()      
+    }
   }
-  
+
 }

@@ -198,7 +198,7 @@ object FireInTheLake {
 
   // Provinces
   val CentralLaos        = "Central Laos"
-  val SouthernLaos       = "Souther Laos"
+  val SouthernLaos       = "Southern Laos"
   val NortheastCambodia  = "Northeast Cambodia"
   val TheFishhook        = "The Fishhook"
   val TheParrotsBeak     = "The Parrot's Beak"
@@ -2754,26 +2754,32 @@ object FireInTheLake {
 
   // Find a match for the given string in the list of options.
   // Any unique prefix of the given options will succeed.
-  def matchOne(s: String, options: Seq[String]): Option[String] = {
-    if (s == "?") {
+  def matchOne(input: String, options: Seq[String], allowAbort: Boolean = false): Option[String] = {
+    if (input == "?") {
       println(s"Enter one of:\n${orList(options)}")
       None
     }
     else {
-      val normalized = options map (_.toLowerCase)
-      (normalized.distinct filter (_ startsWith s.toLowerCase)) match {
+      val lowerInput   = input.toLowerCase
+      val pairdOptions = options.distinct map (o => o -> o.toLowerCase)
+      val matches      = pairdOptions filter { case (_, lower) => lower startsWith lowerInput}
+      matches match {
         case Seq() =>
-          println(s"'$s' is not valid. Must be one of:\n${orList(options)}")
+          println(s"'$input' is not valid. Must be one of:\n${orList(options)}")
           None
-        case Seq(v)  =>
-          Some(options(normalized.indexOf(v)))
+        case Seq((value, _))  =>
+          Some(value)
 
-        case many if many exists (_ == s) =>
-          Some(options(normalized.indexOf(s)))
-
-        case ambiguous =>
-          println(s"'$s' is ambiguous. (${orList(ambiguous)})")
-          None
+        case multiple =>
+          // See if the prefix happens to be an exact match for one option
+          val single = multiple find { case (value, lower) => lower == lowerInput }
+          single match {
+            case Some((value, _)) => Some(value)
+            case None =>
+              val choices = (multiple.toList map (x => Some(x._1) -> x._1)) :+ (None -> "None of the above")
+              val prompt = s"'$input' is ambiguous.  Choose one:"
+              askMenu(choices, prompt, allowAbort = allowAbort).head
+          }
       }
     }
   }
@@ -2785,6 +2791,7 @@ object FireInTheLake {
                allowAbort: Boolean = true): Option[String] = {
     val AbortActionString = "abort"
     val choices = if (allowAbort) options ++ List(AbortActionString) else options
+    
     def testResponse(response: Option[String]): Option[String] = {
       response flatMap (s => matchOne(s.trim, choices map (_.toString))) match {
         case None =>
@@ -2900,12 +2907,7 @@ object FireInTheLake {
     else
       askOneOf(prompt, candidates, allowAbort = allowAbort).get
   }
-  
-  def askCandidateMenu(prompt: String, candidates: Seq[String], allowAbort: Boolean = true): String = {
-    askMenu(candidates.toList map (c => c -> c), prompt, allowAbort = allowAbort).head
-  }
-  
-  
+    
   // Check card number input and print a message
   // if the number is not valid
   def checkCardNum(cardNum: String): Boolean = {

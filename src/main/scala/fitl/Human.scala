@@ -261,7 +261,7 @@ object Human {
 
     askMenu(choices, "\nChoose operation:").head match {
       case Train   => executeTrain(faction, params)
-      case Patrol  => executePatrol(faction, params.copy(maxSpaces = Some(1)))
+      case Patrol  => executePatrol(faction, params)
       case Sweep   => executeSweep(faction, params)
       case Assault => executeAssault(faction, params)
     }
@@ -571,7 +571,7 @@ object Human {
         if (num > 0) {
           val movers   = askPieces(eligible, num, PatrolCubes)
           val destName = if (!params.limOpOnly || limOpDest.isEmpty) {
-            val name = askCandidateMenu("\nSelect destination: ", destCandidates)
+            val name = askCandidate("\nSelect destination: ", destCandidates)
             if (params.limOpOnly)
               limOpDest = Some(name)
             name

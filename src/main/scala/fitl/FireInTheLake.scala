@@ -761,7 +761,9 @@ object FireInTheLake {
 
     override def toString() = name
 
-    def econValue  = population  // overloaded field
+    def printedEconValue = population  // overloaded field
+    def currentEconValue = if (isLOC && terror == 0) printedEconValue else 0
+    
     def isCity     = spaceType == City
     def isProvince = spaceType == HighlandProvince || spaceType == LowlandProvince || spaceType == JungleProvince
     def isLOC      = spaceType == LOC
@@ -772,17 +774,11 @@ object FireInTheLake {
 
     def isNorthVietnam = name == NorthVietnam
 
-
     def coinControlled: Boolean = pieces.totalOf(CoinPieces) > pieces.totalOf(InsurgentPieces)
     def nvaControlled: Boolean  = pieces.totalOf(NVAPieces) > pieces.totalOf(NonNVAPieces)
-    def control = if (isLOC)
-      Neutral
-    else if (coinControlled)
-      CoinControlled
-    else if (nvaControlled)
-      NvaControlled
-    else
-      Uncontrolled
+    def control = if      (!isLOC && coinControlled) CoinControlled
+                  else if (!isLOC && nvaControlled)  NvaControlled
+                  else                               Uncontrolled
 
     def supportValue: Int = support match {
       case PassiveSupport => population
@@ -794,6 +790,9 @@ object FireInTheLake {
       case ActiveOpposition  => 2 * population
       case _                 => 0
     }
+
+    def coinControlValue: Int = if (!isLOC && coinControlled) population else 0
+    def nvaControlValue: Int  = if (!isLOC && nvaControlled)  population else 0
 
     def totalBases = pieces.totalOf(BasePieces)
     def addPieces(newPieces: Pieces): Space = copy(pieces = pieces + newPieces)
@@ -1312,14 +1311,15 @@ object FireInTheLake {
     def numPiecesInUse(numberPer: Pieces => Int): Int =
       totalOnMap(space => numberPer(space.pieces)) + numberPer(casualties) + numberPer(outOfPlay)
 
-    def totalCoinControl            = totalOnMap(sp => if (sp.coinControlled) sp.population else 0)
-    def totalNvaControl             = totalOnMap(sp => if (sp.nvaControlled) sp.population else 0)
+    def totalCoinControl            = totalOnMap(_.coinControlValue)
+    def totalNvaControl             = totalOnMap(_.nvaControlValue)
     def availablelUSTroopsAndBases  = availablePieces.totalOf(USTroops::USBase::Nil)
     def totalSupport                = totalOnMap(_.supportValue)
     def totalOpposition             = totalOnMap(_.oppositionValue)
     def nvaBasesOnMap               = totalOnMap(_.pieces.totalNVABases)
     def vcBasesOnMap                = totalOnMap(_.pieces.totalVCBases)
     def terrorMarkersAvailable      = TerrorMarkerManifest - totalOnMap(_.terror)
+    def totalLOCEcon                = 15 - totalOnMap(_.currentEconValue)
 
     def usPoints   = totalSupport + availablelUSTroopsAndBases
     def nvaPoints  = totalNvaControl + nvaBasesOnMap
@@ -2271,7 +2271,7 @@ object FireInTheLake {
   def revealPieces(spaceName: String, hidden: Pieces): Unit = if (hidden.total > 0) {
     val Valid = List(Irregulars_U, Rangers_U, NVAGuerrillas_U, VCGuerrillas_U)
     val sp = game.getSpace(spaceName)
-    assert(hidden.only(Valid) != hidden, s"revealPieces() called with non-undeground pieces: $hidden")
+    assert(hidden.only(Valid) == hidden, s"revealPieces() called with non-undeground pieces: $hidden")
     assert(sp.pieces contains hidden, s"revealPieces() $spaceName does not contain all requested pieces: $hidden")
     
     val visible = Pieces(
@@ -2280,6 +2280,7 @@ object FireInTheLake {
       nvaGuerrillas_A = hidden.nvaGuerrillas_U,
       vcGuerrillas_A  = hidden.vcGuerrillas_U)
     val updated = sp.copy(pieces = sp.pieces - hidden + visible)
+    game = game.updateSpace(updated)
     
     if (visible.total == 1)
       log(s"\nIn $spaceName, flip the following piece to its active side")
@@ -2302,6 +2303,7 @@ object FireInTheLake {
       nvaGuerrillas_A = visible.nvaGuerrillas_U,
       vcGuerrillas_A  = visible.vcGuerrillas_U)
     val updated = sp.copy(pieces = sp.pieces - visible + hidden)
+    game = game.updateSpace(updated)
     
     if (visible.total == 1)
       log(s"\nIn $spaceName, flip the following piece to its underground side")
@@ -2364,32 +2366,36 @@ object FireInTheLake {
         selected = selected.set(numPieces, pieceTypes.head)
       else {
         val available = pieces.only(pieceTypes)
-        println()
-        prompt foreach println
-        println(s"Select ${amountOf(numPieces, "piece")} among the following:")
-        wrap("  ", available.descriptions) foreach println
-        println()
+        if (numPieces == available.total)
+          selected = available
+        else {
+          println()
+          prompt foreach println
+          println(s"Select ${amountOf(numPieces, "piece")} among the following:")
+          wrap("  ", available.descriptions) foreach println
+          println()
 
-        def nextType(types: Seq[PieceType]): Unit = {
-          val numRemaining = numPieces - selected.total
-          if (numRemaining != 0) {
-            // If we have to include all remainig pieces, don't bother asking
-            if (pieces.totalOf(types) == numRemaining) {
-              for (pieceType <- types)
-                selected = selected.add(pieces.numOf(pieceType), pieceType)
-            }
-            else {
-              val (pieceType :: rest) = types
-              val totalOfRest = pieces.totalOf(rest)
-              val minimum = if (totalOfRest < numRemaining) numRemaining - totalOfRest else 0
-              val maximum = numRemaining min pieces.numOf(pieceType)
-              val n = askInt(s"How many ${pieceType}", minimum, maximum, allowAbort = allowAbort)
-              selected = selected.add(n, pieceType)
-              nextType(rest)
+          def nextType(types: Seq[PieceType]): Unit = {
+            val numRemaining = numPieces - selected.total
+            if (numRemaining != 0) {
+              // If we have to include all remainig pieces, don't bother asking
+              if (pieces.totalOf(types) == numRemaining) {
+                for (pieceType <- types)
+                  selected = selected.add(pieces.numOf(pieceType), pieceType)
+              }
+              else {
+                val (pieceType :: rest) = types
+                val totalOfRest = pieces.totalOf(rest)
+                val minimum = if (totalOfRest < numRemaining) numRemaining - totalOfRest else 0
+                val maximum = numRemaining min pieces.numOf(pieceType)
+                val n = askInt(s"How many ${pieceType}", minimum, maximum, allowAbort = allowAbort)
+                selected = selected.add(n, pieceType)
+                nextType(rest)
+              }
             }
           }
+          nextType(pieceTypes)
         }
-        nextType(pieceTypes)
       }
     }
     selected
@@ -2777,7 +2783,7 @@ object FireInTheLake {
             case Some((value, _)) => Some(value)
             case None =>
               val choices = (multiple.toList map (x => Some(x._1) -> x._1)) :+ (None -> "None of the above")
-              val prompt = s"'$input' is ambiguous.  Choose one:"
+              val prompt = s"\n'$input' is ambiguous.  Choose one:"
               askMenu(choices, prompt, allowAbort = allowAbort).head
           }
       }

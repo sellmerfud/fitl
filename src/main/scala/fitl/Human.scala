@@ -50,7 +50,7 @@ object Human {
   private var trainingSpaces = Set.empty[String]
 
   case class Params(
-    includeSpecial: Boolean = false,
+    includeSpecial: Boolean         = false,
     maxSpaces: Option[Int]          = None,
     free: Boolean                   = false, // Events grant free commands
     assaultRemovesTwoExtra: Boolean = false, // M48 Patton (unshaded)
@@ -558,36 +558,6 @@ object Human {
       onNetwork && patrolCubes(sp).nonEmpty && reachesLimOpDest
     }
 
-    def moveCubesFrom(srcName: String): Unit = {
-        val src            = game.getSpace(srcName)
-        val destCandidates = getPatrolDestinations(srcName).sorted(LocLastOrdering)
-        val eligible       = patrolCubes(src)
-
-        wrap("\nThese cubes can be moved: ", eligible.descriptions) foreach (log(_))
-        if (frozen(srcName).nonEmpty)
-          wrap("These cubes cannot move: ", frozen(srcName).descriptions) foreach (log(_))
-        
-        val num = askInt(s"Move how many cubes out of $srcName", 0, eligible.total)
-        if (num > 0) {
-          val movers   = askPieces(eligible, num, PatrolCubes)
-          val destName = if (!params.limOpOnly || limOpDest.isEmpty) {
-            val name = askCandidate("\nSelect destination: ", destCandidates)
-            if (params.limOpOnly)
-              limOpDest = Some(name)
-            name
-          }
-          else
-            limOpDest.get
-          val dest   = game.getSpace(destName)
-          
-          movedCubes.remove(srcName, movers)
-          movedCubes.add(destName, movers)
-          if (dest.pieces.has(InsurgentPieces))
-            frozen.add(destName, movers)
-          movePieces(movers, srcName, destName)
-        }
-    }
-    
     def selectCubesToMove(): Unit = {
       val srcCandidates = spaceNames(game.spaces filter isPatrolSource)
 
@@ -613,7 +583,98 @@ object Human {
         case _ => // finished
       }
     }    
+
+    def moveCubesFrom(srcName: String): Unit = {
+        val src            = game.getSpace(srcName)
+        val destCandidates = getPatrolDestinations(srcName).sorted(LocLastOrdering)
+        val eligible       = patrolCubes(src)
+
+        println(s"\nMoving cubes out of $srcName")
+        println(separator())
+        wrap("These cubes can move   : ", eligible.descriptions) foreach println
+        if (frozen(srcName).nonEmpty)
+          wrap("These cubes cannot move: ", frozen(srcName).descriptions) foreach println
         
+        val num = askInt(s"\nMove how many cubes out of $srcName", 0, eligible.total)
+        if (num > 0) {
+          val movers   = askPieces(eligible, num, PatrolCubes)
+          val destName = if (!params.limOpOnly || limOpDest.isEmpty) {
+            val name = askCandidate("\nSelect destination: ", destCandidates)
+            if (params.limOpOnly)
+              limOpDest = Some(name)
+            name
+          }
+          else
+            limOpDest.get
+          val dest   = game.getSpace(destName)
+          
+          movedCubes.remove(srcName, movers)
+          movedCubes.add(destName, movers)
+          if (dest.pieces.has(InsurgentPieces))
+            frozen.add(destName, movers)
+          movePieces(movers, srcName, destName)
+        }
+    }
+    
+    def activeGuerrillasOnLOCs(): Unit = {
+      case class Activation(sp: Space, num: Int)
+      val underground = (sp: Space) => sp.pieces.totalOf(UndergroundGuerrillas)
+      val cubes       = (sp: Space) => sp.pieces.totalOf(PatrolCubes)    
+      val numbers     = game.locSpaces map (sp => (sp, cubes(sp) min underground(sp))) filterNot (_._2 == 0)
+      
+      log(s"\n$faction Patrol - Activating guerrillas on LOCs")
+      log(separator())
+      if (numbers.isEmpty)
+        log("No guerrillas are activated")
+      else {
+        //  If a space has both NVA and VC underground guerrillas
+        //  then ask user to pick the ones to activate.
+        val activations = for ((sp, num) <- numbers) yield {
+          val prompt     = s"\nChoose ${amountOf(num, "guerrilla")} to activate at: ${sp.name}"
+          val guerrillas = askPieces(sp.pieces, num, UndergroundGuerrillas, Some(prompt))
+          
+          (sp, guerrillas)
+        }
+        
+        for ((sp, guerrillas) <- activations)
+          revealPieces(sp.name, guerrillas)
+      }
+    }
+    
+    //  If this is a limited Op, then the assault may only
+    //  take place in the one selected destination.
+    def assaultOneLOC(): Unit = {
+      val canAssault = (sp: Space) => sp.pieces.has(PatrolCubes)
+      val locs = if (params.limOpOnly)
+        limOpDest.toList map game.getSpace filter canAssault
+      else
+        game.locSpaces filter canAssault
+      val candidates = spaceNames(locs)
+      if (candidates.nonEmpty || Special.allowed) {
+        val choices = List(
+          choice(candidates.nonEmpty, "assault",  "Assault on one LOC"),
+          choice(Special.allowed,     "special",  "Perform a Special Activity"),
+          choice(true,                "finished", "Do not Assault on one LOC")
+        ).flatten
+        
+        askMenu(choices, "\nChoose one:").head match {
+          case "assault" =>
+            val assaultParams = Params(
+              assaultRemovesTwoExtra = faction == US && capabilityInPlay(M48Patton_Unshaded),
+              free                   = true)
+            val name = askSimpleMenu(candidates, "\nAssault in which LOC:").head
+            performAssault(name, faction, assaultParams)
+          
+          case "special" =>
+            executeSpecialActivity(faction, params, availableActivities)
+            assaultOneLOC()
+
+          case _ => // finished
+        }
+      }
+    }
+    
+              
     log(s"\n$faction chooses Patrol operation")
     log(separator())
     if (hasTheCash) {
@@ -625,8 +686,16 @@ object Human {
       }
       
       selectCubesToMove()
-      // activeGuerrillasOnLOCs()
-      // addAssaultinOneLOC()
+      activeGuerrillasOnLOCs()
+      assaultOneLOC()
+      if (capabilityInPlay(M48Patton_Shaded)) {
+        // TODO:
+        // NVABot.removeEnemyPieces(2, ...)
+        println()
+        println(separator(char = '='))
+        println(s"$M48Patton_Shaded for NVA Bot has not been implemented!")
+        println(separator(char = '='))
+      }
     }
     else
       log(s"There are not enough ARVN resources (${game.arvnResources}) to Patrol")

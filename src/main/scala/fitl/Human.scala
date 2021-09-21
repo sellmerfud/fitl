@@ -53,6 +53,7 @@ object Human {
     includeSpecial: Boolean = false,
     maxSpaces: Option[Int]          = None,
     free: Boolean                   = false, // Events grant free commands
+    assaultRemovesTwoExtra: Boolean = false, // M48 Patton (unshaded)
     onlyIn: Option[Set[String]]     = None   // Limit command to the given spaces
   ) {
     val limOpOnly = maxSpaces == Some(1)
@@ -81,12 +82,15 @@ object Human {
     def cancelled() = specialTaken = false
   }
 
-  // Use during a turn to keep track of pieces that have already moved
+  // Used during a turn to keep track of pieces that have already moved
   // in each space.
-  object MovingGroups {
+  // For patrol,  we add pieces to a moving group if they have terminated
+  // movement in a space with Insurgent pieces.  This lets us know that
+  // those pieces cannot continue moving.
+  class MovingGroups() {
+    // Map Space Name, to Pieces in that space that cannot move.
     var groups: Map[String, Pieces] = Map.empty.withDefaultValue(Pieces())
 
-    def init(): Unit = { groups = Map.empty.withDefaultValue(Pieces()) }
     def apply(name: String): Pieces = groups(name)
     def add(name: String, pieces: Pieces): Unit = groups += name -> (groups(name) + pieces)
     def remove(name: String, pieces: Pieces): Unit = groups += name -> (groups(name) - pieces)
@@ -94,7 +98,7 @@ object Human {
     def toList = groups.toList.sortBy(_._1)
     def size = groups.size
   }
-
+  
   def noteIf(cond: Boolean, note: String): Option[String] = if (cond) Some(note) else None
 
   // A human player has opted to take an action on the current card.
@@ -227,7 +231,6 @@ object Human {
 
   def executeCmd(faction: Faction, params: Params = Params()): Unit = {
     Special.init(params)
-    MovingGroups.init()
     trainingSpaces = Set.empty
 
     faction match {
@@ -258,7 +261,7 @@ object Human {
 
     askMenu(choices, "\nChoose operation:").head match {
       case Train   => executeTrain(faction, params)
-      case Patrol  => executePatrol(faction, params)
+      case Patrol  => executePatrol(faction, params.copy(maxSpaces = Some(1)))
       case Sweep   => executeSweep(faction, params)
       case Assault => executeAssault(faction, params)
     }
@@ -515,16 +518,8 @@ object Human {
     }
 
 
-    val multiSpaces = params.maxSpaces map (_ > 1) getOrElse true
-    val notes = List(
-      noteIf(canPlaceExtraPolice, s"Capability [$CombActionPlatoons_Unshaded]: Place 1 extra ARVN Police in one space with US Troops"),
-      noteIf(multiSpaces && maxPacifySpaces == 2, s"Capability [$CORDS_Unshaded]: May pacify in up to two spaces"),
-      noteIf(maxPacifyLevel == PassiveSupport, s"Capability [$CORDS_Shaded]: May only pacify up to Passive Support")
-    ).flatten
-
     log(s"\n$faction chooses Train operation")
     log(separator())
-    notes foreach println
 
     selectTrainSpaces()
     if (selectedSpaces.nonEmpty)
@@ -538,17 +533,234 @@ object Human {
   // Cap_M48Patton (shaded)
   //    After US/ARVN patrol NVA removes up to 2 cubes that moved
   //    (US to casualties)
+  // Mo_BodyCount         = "#72 Body Count"               // Unshaded (affects asasult and patrol)
+  //    Cost=0 AND +3 Aid per guerrilla removed
+  
   def executePatrol(faction: Faction, params: Params): Unit = {
+    // val remove1BaseFirst   = capabilityInPlay(M48Patton_Shaded)
+    val availableActivities = if (faction == US)
+      Advise::AirLift::AirStrike::Nil
+    else
+      Govern::Transport::Raid::Nil
+    val movedCubes  = new MovingGroups()  // Used to support M48 Patton (unshaded)
+    val frozen      = new MovingGroups()  // Cubes that have moved into a space with Insurgent pieces
+    var limOpDest: Option[String] = None
+    val hasTheCash  = faction == US || params.free || momentumInPlay(Mo_BodyCount) || game.arvnResources >= 3
+    val PatrolCubes = if (faction == US) List(USTroops) else ARVNCubes
+        
+    // Faction cubes in the space that are not frozen in place
+    val patrolCubes = (sp: Space) => sp.pieces.only(PatrolCubes) - frozen(sp.name)
+    //  Spaces with movable cubes on or adjacent to LOCs/Cities
+    //  If a limited Op, then the cubes must be able to reach the one selected destination.
+    val isPatrolSource = (sp: Space) => {
+      lazy val reachesLimOpDest = limOpDest map getPatrolDestinations(sp.name).contains getOrElse true
+      val onNetwork = sp.isLOC || sp.isCity || getAdjacentLOCs(sp.name).nonEmpty || getAdjacentCities(sp.name).nonEmpty
+      onNetwork && patrolCubes(sp).nonEmpty && reachesLimOpDest
+    }
 
+    def moveCubesFrom(srcName: String): Unit = {
+        val src            = game.getSpace(srcName)
+        val destCandidates = getPatrolDestinations(srcName).sorted(LocLastOrdering)
+        val eligible       = patrolCubes(src)
+
+        wrap("\nThese cubes can be moved: ", eligible.descriptions) foreach (log(_))
+        if (frozen(srcName).nonEmpty)
+          wrap("These cubes cannot move: ", frozen(srcName).descriptions) foreach (log(_))
+        
+        val num = askInt(s"Move how many cubes out of $srcName", 0, eligible.total)
+        if (num > 0) {
+          val movers   = askPieces(eligible, num, PatrolCubes)
+          val destName = if (!params.limOpOnly || limOpDest.isEmpty) {
+            val name = askCandidateMenu("\nSelect destination: ", destCandidates)
+            if (params.limOpOnly)
+              limOpDest = Some(name)
+            name
+          }
+          else
+            limOpDest.get
+          val dest   = game.getSpace(destName)
+          
+          movedCubes.remove(srcName, movers)
+          movedCubes.add(destName, movers)
+          if (dest.pieces.has(InsurgentPieces))
+            frozen.add(destName, movers)
+          movePieces(movers, srcName, destName)
+        }
+    }
+    
+    def selectCubesToMove(): Unit = {
+      val srcCandidates = spaceNames(game.spaces filter isPatrolSource)
+
+      srcCandidates.nonEmpty
+      val choices = List(
+        choice(srcCandidates.nonEmpty,  "move",     "Move cubes"),
+        choice(Special.allowed,         "special",  "Perform a Special Activity"),
+        choice(true,                    "finished", "Finished moving cubes")
+      ).flatten
+
+      if (srcCandidates.isEmpty)
+        println(s"\nThere are no spaces with cube eligible to move on patrol")
+
+      askMenu(choices, "\nChoose one:").head match {
+        case "move" =>
+          val src = askCandidate("\nMove cubes out of which space: ", srcCandidates)
+          moveCubesFrom(src)
+          selectCubesToMove()
+        case "special" =>
+          executeSpecialActivity(faction, params, availableActivities)
+          selectCubesToMove()
+
+        case _ => // finished
+      }
+    }    
+        
+    log(s"\n$faction chooses Patrol operation")
+    log(separator())
+    if (hasTheCash) {
+      if (faction == ARVN && !params.free) {
+        if (momentumInPlay(Mo_BodyCount))
+          log(s"ARVN Assault costs zero resources [Momentum: $Mo_BodyCount]")
+        else
+          decreaseResources(ARVN, 3)
+      }
+      
+      selectCubesToMove()
+      // activeGuerrillasOnLOCs()
+      // addAssaultinOneLOC()
+    }
+    else
+      log(s"There are not enough ARVN resources (${game.arvnResources}) to Patrol")
+
+    //  Last chance to perform special activity
+    if (Special.allowed && askYorN("\nDo you wish to perform a special activity? (y/n) "))
+      executeSpecialActivity(faction, params, availableActivities)
   }
 
   def executeSweep(faction: Faction, params: Params): Unit = {
+  }
+
+
+  //  Perform an assault in the given space.
+  //  
+  //  If US add an ARVN assault.
+  def performAssault(name: String, faction: Faction, params: Params): Unit = {
+    val remove1BaseFirst   = faction == US && capabilityInPlay(Abrams_Unshaded)
+    val remove1Underground = faction == US && capabilityInPlay(SearchAndDestroy_Unshaded)
+    val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
+    
+    val sp          = game.getSpace(name)
+    def pieces      = game.getSpace(name).pieces  // Always get fresh instance
+    val baseFirst   = remove1BaseFirst && pieces.has(InsurgentNonTunnels)
+    val underground = remove1Underground && pieces.has(UndergroundGuerrillas)
+    val totalLosses = sp.assaultLosses(faction) + (if (params.assaultRemovesTwoExtra) 2 else 0)
+    var remaining   = totalLosses
+
+    // Log all control changes at the end of the assault
+    loggingControlChanges {
+      log(s"\n$faction assaults in $name")
+      log(separator())
+      
+      if (faction == ARVN && !params.free) {
+        if (momentumInPlay(Mo_BodyCount))
+          log(s"\nARVN Assault costs zero resources [Momentum: $Mo_BodyCount]")
+        else
+          decreaseResources(ARVN, 3)
+      }
+      
+      log(s"The assault inflicts ${amountOf(totalLosses, "hit")}")
+
+      if (remaining > 0 && baseFirst) {
+        val prompt = s"\nRemove a base first [$Abrams_Unshaded]"
+        val removed = askPieces(pieces, 1, InsurgentNonTunnels, Some(prompt))
+        removeToAvailable(name, removed)
+        remaining -= removed.total
+      }
+
+      if (remaining > 0 && underground) {
+        val prompt = s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]"
+        val removed = askPieces(pieces, 1, UndergroundGuerrillas, Some(prompt))
+        removeToAvailable(name, removed)
+        if (momentumInPlay(Mo_BodyCount)) {
+          log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]")
+          increaseUsAid(3)
+        }
+        remaining -= removed.total
+      }
+
+      (remaining min pieces.numOf(NVATroops)) match {
+        case 0 =>
+        case num =>
+          removeToAvailable(name, Pieces(nvaTroops = num))
+          remaining -= num
+      }
+
+      (remaining min pieces.totalOf(ActiveGuerrillas)) match {
+        case 0 =>
+        case num =>
+          val prompt = s"\nRemove active guerrillas"
+          val removed = askPieces(pieces, num, ActiveGuerrillas, Some(prompt))
+          removeToAvailable(name, removed)
+          if (momentumInPlay(Mo_BodyCount)) {
+            log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]")
+            increaseUsAid(3 * removed.total)
+          }
+          remaining -= removed.total
+      }
+
+      if (!pieces.has(UndergroundGuerrillas)) {
+        (remaining min pieces.totalOf(InsurgentNonTunnels)) match {
+          case 0 =>
+          case num =>
+            val prompt = s"\nRemove untunneled bases"
+            val removed = askPieces(pieces, num, InsurgentNonTunnels, Some(prompt))
+            removeToAvailable(name, removed)
+            increaseUsAid(removed.total * 6)
+            remaining -= removed.total
+        }
+
+        if (remaining > 0 && pieces.has(InsurgentTunnels)) {
+          val die = d6
+          val success = die > 3
+          log("\nNext piece to remove would be a tunneled base")
+          log(s"Die roll is: ${die} [${if (success) "Tunnel destroyed!" else "No effect"}]")
+          if (success) {
+            val prompt = "\nRemove tunnel marker"
+            val tunnel = askPieces(pieces, 1, InsurgentTunnels, Some(prompt))
+            removeTunnelMarker(name, tunnel.explode().head)
+          }
+        }
+      }
+      
+      if (remaining == totalLosses)
+        log("\nNo insurgemnt pieces were removed in the assault")
+
+      // Cobras_Shaded
+      //    Eash US assault space, 1 US Troop to Casualties on die roll of 1-3
+      if (faction == US && capabilityInPlay(Cobras_Shaded)) {
+        val die = d6
+        val success = die < 4
+        log(s"\nCheck for loss of US Troop [$Cobras_Shaded]")
+        log(s"Die roll is: ${die} [${if (success) "Troop eliminated" else "No effect"}]")
+        if (success) {
+          removeToCasualties(name, Pieces(usTroops = 1))
+        }
+      }
+
+      // SearchAndDestroy_Shaded
+      //    Each US and ARVN assault Province shifts support one level toward Active Opposition
+      if (searchDestroy && sp.isProvince && sp.population > 0 && sp.support != ActiveOpposition) {
+        log(s"\nEach assault shifts support toward Active Opposition [$SearchAndDestroy_Shaded]")
+        decreaseSupport(name, 1)
+      }
+    }
   }
 
   // Abrams_Unshaded
   //    1 US asault space may remove 1 non-Tunnel base first (not last)
   // Abrams_Shaded
   //    US may select max 2 spaces per Assault
+  // M48Patton_Unshaded
+  //  In two non-Lowland US assault spaces, remove 2 extra enemy pieces
   // Cobras_Shaded
   //    Eash US assault space, 1 US Troop to Casualties on die roll of 1-3
   //    (Does NOT apply to added ARVN assault)
@@ -567,13 +779,10 @@ object Human {
       AirLift::AirStrike::Nil
     else
       Transport::Raid::Nil
-    val remove1BaseFirst   = faction == US && capabilityInPlay(Abrams_Unshaded)
     val maxTwoSpaces       = faction == US && capabilityInPlay(Abrams_Shaded)
-    val shadedCobras       = faction == US && capabilityInPlay(Cobras_Shaded)
-    val remove1Underground = faction == US && capabilityInPlay(SearchAndDestroy_Unshaded)
-    val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
     val bodyCount          = momentumInPlay(Mo_BodyCount)
     var assaultSpaces      = List.empty[String]
+    var m48PattonSpaces    = List.empty[String]
     var addedARVNAssault   = false
     val isCandidate = (sp: Space) => {
       val cubes = if (faction == ARVN) ARVNCubes else List(USTroops)
@@ -584,121 +793,12 @@ object Human {
       sp.pieces.has(cubes)
     }
 
-    //  assaultFaction may be different from faction performing the operation
-    //  If US add an ARVN assault.
-    def performAssault(name: String, assaultFaction: Faction): Unit = {
-      val sp          = game.getSpace(name)
-      def pieces      = game.getSpace(name).pieces  // Always get fresh instance
-      val baseFirst   = remove1BaseFirst && pieces.has(InsurgentNonTunnels)
-      val underground = remove1Underground && pieces.has(UndergroundGuerrillas)
-      val totalLosses = sp.assaultLosses(assaultFaction)
-      var remaining   = totalLosses
-
-      // Log all control changes at the end of the assault
-      loggingControlChanges {
-        log(s"\n$faction assaults in $name")
-        log(separator())
-        
-        if (assaultFaction == ARVN && !params.free) {
-          if (bodyCount)
-            log(s"\nARVN Assault costs zero resources [Momentum: $bodyCount]")
-          else
-            decreaseResources(ARVN, 3)
-        }
-        
-        log(s"The assault inflicts ${amountOf(totalLosses, "hit")}")
-
-        if (remaining > 0 && baseFirst) {
-          val prompt = s"\nRemove a base first [$Abrams_Unshaded]"
-          val removed = askPieces(pieces, 1, InsurgentNonTunnels, Some(prompt))
-          removeToAvailable(name, removed)
-          remaining -= removed.total
-        }
-
-        if (remaining > 0 && underground) {
-          val prompt = s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]"
-          val removed = askPieces(pieces, 1, UndergroundGuerrillas, Some(prompt))
-          removeToAvailable(name, removed)
-          if (bodyCount) {
-            log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $bodyCount]")
-            increaseUsAid(3)
-          }
-          remaining -= removed.total
-        }
-
-        (remaining min pieces.numOf(NVATroops)) match {
-          case 0 =>
-          case num =>
-            removeToAvailable(name, Pieces(nvaTroops = num))
-            remaining -= num
-        }
-
-        (remaining min pieces.totalOf(ActiveGuerrillas)) match {
-          case 0 =>
-          case num =>
-            val prompt = s"\nRemove active guerrillas"
-            val removed = askPieces(pieces, num, ActiveGuerrillas, Some(prompt))
-            removeToAvailable(name, removed)
-            if (bodyCount) {
-              log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $bodyCount]")
-              increaseUsAid(3 * removed.total)
-            }
-            remaining -= removed.total
-        }
-
-        if (!pieces.has(UndergroundGuerrillas)) {
-          (remaining min pieces.totalOf(InsurgentNonTunnels)) match {
-            case 0 =>
-            case num =>
-              val prompt = s"\nRemove untunneled bases"
-              val removed = askPieces(pieces, num, InsurgentNonTunnels, Some(prompt))
-              removeToAvailable(name, removed)
-              increaseUsAid(removed.total * 6)
-              remaining -= removed.total
-          }
-
-          if (remaining > 0 && pieces.has(InsurgentTunnels)) {
-            val die = d6
-            val success = die > 3
-            log("\nNext piece to remove would be a tunneled base")
-            log(s"Die roll is: ${die} [${if (success) "Tunnel destroyed!" else "No effect"}]")
-            if (success) {
-              val prompt = "\nRemove tunnel marker"
-              val tunnel = askPieces(pieces, 1, InsurgentTunnels, Some(prompt))
-              removeTunnelMarker(name, tunnel.explode().head)
-            }
-          }
-        }
-        
-        if (remaining == totalLosses)
-          log("\nNo insurgemnt pieces were removed in the assault")
-
-        // Cobras_Shaded
-        //    Eash US assault space, 1 US Troop to Casualties on die roll of 1-3
-        if (assaultFaction == US && capabilityInPlay(Cobras_Shaded)) {
-          val die = d6
-          val success = die < 4
-          log(s"\nCheck for loss of US Troop [$Cobras_Shaded]")
-          log(s"Die roll is: ${die} [${if (success) "Troop eliminated" else "No effect"}]")
-          if (success) {
-            removeToCasualties(name, Pieces(usTroops = 1))
-          }
-        }
-
-        // SearchAndDestroy_Shaded
-        //    Each US and ARVN assault Province shifts support one level toward Active Opposition
-        if (searchDestroy && sp.isProvince && sp.population > 0 && sp.support != ActiveOpposition) {
-          log(s"\nEach assault shifts support toward Active Opposition [$SearchAndDestroy_Shaded]")
-          decreaseSupport(name, 1)
-        }
-      }
-    }
 
     def selectAssaultSpaces(): Unit = {
 
       val limitOK    = params.maxSpaces map (n => assaultSpaces.size < n) getOrElse true
       val abramsOK   = maxTwoSpaces == false || assaultSpaces.size < 2
-      val hasTheCash = faction == US || bodyCount || game.arvnResources >= 3
+      val hasTheCash = faction == US || params.free || bodyCount || game.arvnResources >= 3
       val candidates = if (limitOK && abramsOK && hasTheCash)
         spaceNames(game.spaces filter isCandidate)
       else
@@ -717,21 +817,36 @@ object Human {
 
       if (candidates.isEmpty) {
         val more = if (assaultSpaces.nonEmpty) " more" else ""
-        println(s"\nThere are no${more} spaces eligible for Assault")
+        if (faction == ARVN && !hasTheCash)
+          println(s"\nThere are not enough ARVN resources (${game.arvnResources}) to conduct an Assault")
+        else
+          println(s"\nThere are no${more} spaces eligible for Assault")
       }
 
       askMenu(choices, "\nChoose one:").head match {
         case "select" =>
           val name = askCandidate("\nAssault in which space: ", candidates)
-          performAssault(name, faction)
+          val assaultParams = if (faction == US &&
+              !game.getSpace(name).isLowland &&
+              capabilityInPlay(M48Patton_Unshaded) &&
+              m48PattonSpaces.size < 2 &&
+              askYorN(s"Remove 2 extra pieces in this Assault [$M48Patton_Unshaded]? (y/n) ")) {
+            m48PattonSpaces = name :: m48PattonSpaces
+            params.copy(assaultRemovesTwoExtra = true)
+          }
+          else
+            params
+          performAssault(name, faction, assaultParams)
+          
           val canFollowup = faction == US &&
                             addedARVNAssault == false &&
                             game.getSpace(name).pieces.hasExposedInsurgents &&
                             game.getSpace(name).pieces.has(ARVNCubes) &&
                             (bodyCount || game.arvnResources >= 3)
+                            
           if (canFollowup && askYorN(s"Follow up with ARVN assault in $name? (y/n) ")) {
             log(s"\nUS adds a follow up ARVN asault in $name")
-            performAssault(name, ARVN)
+            performAssault(name, ARVN, params)
           }
           assaultSpaces = assaultSpaces :+ name
           selectAssaultSpaces()
@@ -744,22 +859,10 @@ object Human {
       }
     }
 
-    val moreThanTwo = params.maxSpaces map (_ > 2) getOrElse true
-    val notes = List(
-      noteIf(remove1BaseFirst,    s"Capability [$Abrams_Unshaded]: May remove 1 untunneled base first in each space"),
-      noteIf(moreThanTwo && shadedCobras , s"Capability [$Cobras_Shaded]: May assault in up to only 2 spaces"),
-      noteIf(remove1Underground, s"Capability [$SearchAndDestroy_Unshaded]: May remove 1 underground guerrilla"),
-      noteIf(searchDestroy, s"Capability [$SearchAndDestroy_Shaded]: Each assault shifts toward Active Opposition"),
-      noteIf(bodyCount, s"Momentum [$Mo_BodyCount]: +3 Aid per guerrilla removed, ARVN assault is free")
-    ).flatten
-
     log(s"\n$faction chooses Assault operation")
     log(separator())
-    notes foreach println
 
     selectAssaultSpaces()
-
-
 
     //  Last chance to perform special activity
     if (Special.allowed && askYorN("\nDo you wish to perform a special activity? (y/n) "))

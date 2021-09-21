@@ -221,121 +221,156 @@ object FireInTheLake {
   val KienGiang_AnXuyen  = "Kien Giang-An Xuyen"
 
   // LOCs
-  val LOC_Hue_KheSanh             = "LOC: Hue -- Khe Sanh"
-  val LOC_Hue_DaNang              = "LOC: Hue -- Da Nang"
-  val LOC_DaNang_DakTo            = "LOC: DaNang -- DakTo"
-  val LOC_DaNang_QuiNhon          = "LOC: DaNang -- Qui Nhon"
-  val LOC_Kontum_DakTo            = "LOC: Kontum -- Dak To"
-  val LOC_Kontum_QuiNhon          = "LOC: Kontum -- Qui Nhon"
-  val LOC_Kontum_BanMeThuot       = "LOC: Kontum -- Ban Me Thuot"
-  val LOC_QuiNhon_CamRanh         = "LOC: Qui Nhon -- Cam Ranh"
-  val LOC_CamRanh_DaLat           = "LOC: Cam Ranh -- Da Lat"
-  val LOC_BanMeThuot_DaLat        = "LOC: Ban Me Thuot -- Da Lat"
-  val LOC_Saigon_CamRanh          = "LOC: Saigon -- Cam Ranh"
-  val LOC_Saigon_DaLat            = "LOC: Saigon -- Da Lat"
-  val LOC_Saigon_AnLoc_BanMeThuot = "LOC: Saigon -- An Loc -- Ban Me Thuot"
-  val LOC_Saigon_CanTho           = "LOC: Saigon -- Can Tho"
-  val LOC_CanTho_ChauDoc          = "LOC: Can Tho -- Chau Doc"
-  val LOC_CanTho_BacLieu          = "LOC: Can Tho -- Bac Lieu"
-  val LOC_CanTho_LongPhu          = "LOC: Can Tho -- Long Phu"
+  val LOC_Hue_KheSanh             = "LOC Hue -- Khe Sanh"
+  val LOC_Hue_DaNang              = "LOC Hue -- Da Nang"
+  val LOC_DaNang_DakTo            = "LOC DaNang -- Dak To"
+  val LOC_DaNang_QuiNhon          = "LOC DaNang -- Qui Nhon"
+  val LOC_Kontum_DakTo            = "LOC Kontum -- Dak To"
+  val LOC_Kontum_QuiNhon          = "LOC Kontum -- Qui Nhon"
+  val LOC_Kontum_BanMeThuot       = "LOC Kontum -- Ban Me Thuot"
+  val LOC_QuiNhon_CamRanh         = "LOC Qui Nhon -- Cam Ranh"
+  val LOC_CamRanh_DaLat           = "LOC Cam Ranh -- Da Lat"
+  val LOC_BanMeThuot_DaLat        = "LOC Ban Me Thuot -- Da Lat"
+  val LOC_Saigon_CamRanh          = "LOC Saigon -- Cam Ranh"
+  val LOC_Saigon_DaLat            = "LOC Saigon -- Da Lat"
+  val LOC_Saigon_AnLoc_BanMeThuot = "LOC Saigon -- An Loc -- Ban Me Thuot"
+  val LOC_Saigon_CanTho           = "LOC Saigon -- Can Tho"
+  val LOC_CanTho_ChauDoc          = "LOC Can Tho -- Chau Doc"
+  val LOC_CanTho_BacLieu          = "LOC Can Tho -- Bac Lieu"
+  val LOC_CanTho_LongPhu          = "LOC Can Tho -- Long Phu"
+
+  val LocLastOrdering = new Ordering[String] {
+    def compare(x: String, y: String) = {
+      (x startsWith "LOC", y startsWith "LOC") match {
+        case (false, true) => -1
+        case (true, false) => 1
+        case _             => x compare y
+      }
+    }
+  }
 
   // A space name and a list of adjacent space names
-  val adjacencyMap: Map[String, Seq[String]] = Map(
+  val adjacencyMap: Map[String, Set[String]] = Map(
     // Cities
-    Hue                         -> Seq(QuangTri_ThuaThien, LOC_Hue_KheSanh, LOC_Hue_DaNang),
-    DaNang                      -> Seq(QuangNam, QuangTin_QuangNgai, LOC_Hue_DaNang, LOC_DaNang_QuiNhon,
+    Hue                         -> Set(QuangTri_ThuaThien, LOC_Hue_KheSanh, LOC_Hue_DaNang),
+    DaNang                      -> Set(QuangNam, QuangTin_QuangNgai, LOC_Hue_DaNang, LOC_DaNang_QuiNhon,
                                        LOC_DaNang_DakTo),
-    Kontum                      -> Seq(BinhDinh, Pleiku_Darlac, PhuBon_PhuYen, LOC_Kontum_DakTo,
+    Kontum                      -> Set(BinhDinh, Pleiku_Darlac, PhuBon_PhuYen, LOC_Kontum_DakTo,
                                        LOC_Kontum_BanMeThuot, LOC_Kontum_QuiNhon),
-    QuiNhon                     -> Seq(BinhDinh, PhuBon_PhuYen, LOC_DaNang_QuiNhon, LOC_Kontum_QuiNhon,
+    QuiNhon                     -> Set(BinhDinh, PhuBon_PhuYen, LOC_DaNang_QuiNhon, LOC_Kontum_QuiNhon,
                                        LOC_QuiNhon_CamRanh),
-    CamRahn                     -> Seq(KhanhHoa, BinhTuy_BinhThuan, LOC_QuiNhon_CamRanh, LOC_Saigon_CamRanh,
+    CamRahn                     -> Set(KhanhHoa, BinhTuy_BinhThuan, LOC_QuiNhon_CamRanh, LOC_Saigon_CamRanh,
                                        LOC_CamRanh_DaLat),
-    AnLoc                       -> Seq(PhuocLong, TayNinh, TheFishhook, LOC_Saigon_AnLoc_BanMeThuot),
-    Saigon                      -> Seq(BinhTuy_BinhThuan, QuangDuc_LongKhanh, TayNinh, KienPhong,
+    AnLoc                       -> Set(PhuocLong, TayNinh, TheFishhook, LOC_Saigon_AnLoc_BanMeThuot),
+    Saigon                      -> Set(BinhTuy_BinhThuan, QuangDuc_LongKhanh, TayNinh, KienPhong,
                                        KienHoa_VinhBinh, LOC_Saigon_CamRanh, LOC_Saigon_DaLat,
                                        LOC_Saigon_AnLoc_BanMeThuot,
                                        LOC_Saigon_CanTho),
-    CanTho                      -> Seq(KienPhong, KienHoa_VinhBinh, BaXuyen, KienGiang_AnXuyen,
+    CanTho                      -> Set(KienPhong, KienHoa_VinhBinh, BaXuyen, KienGiang_AnXuyen,
                                        LOC_Saigon_CanTho, LOC_CanTho_ChauDoc, LOC_CanTho_BacLieu,
                                        LOC_CanTho_LongPhu),
 
     // Provinces
-    CentralLaos                 -> Seq(NorthVietnam, QuangTri_ThuaThien, QuangNam, SouthernLaos,
+    CentralLaos                 -> Set(NorthVietnam, QuangTri_ThuaThien, QuangNam, SouthernLaos,
                                        LOC_Hue_KheSanh),
-    SouthernLaos                -> Seq(CentralLaos, QuangNam, QuangTin_QuangNgai, BinhDinh, Pleiku_Darlac,
+    SouthernLaos                -> Set(CentralLaos, QuangNam, QuangTin_QuangNgai, BinhDinh, Pleiku_Darlac,
                                        LOC_DaNang_DakTo, LOC_Kontum_DakTo),
-    NortheastCambodia           -> Seq(SouthernLaos, TheFishhook, Pleiku_Darlac),
-    TheFishhook                 -> Seq(NortheastCambodia, TheParrotsBeak, AnLoc, Pleiku_Darlac,
+    NortheastCambodia           -> Set(SouthernLaos, TheFishhook, Pleiku_Darlac),
+    TheFishhook                 -> Set(NortheastCambodia, TheParrotsBeak, AnLoc, Pleiku_Darlac,
                                        QuangDuc_LongKhanh, PhuocLong, TayNinh, LOC_Saigon_AnLoc_BanMeThuot),
-    TheParrotsBeak              -> Seq(TheFishhook, Sihanoukville, TayNinh, KienPhong, KienGiang_AnXuyen,
+    TheParrotsBeak              -> Set(TheFishhook, Sihanoukville, TayNinh, KienPhong, KienGiang_AnXuyen,
                                        LOC_CanTho_ChauDoc),
-    Sihanoukville               -> Seq(TheParrotsBeak, KienGiang_AnXuyen),
-    NorthVietnam                -> Seq(CentralLaos, QuangTri_ThuaThien, LOC_Hue_KheSanh),
-    QuangTri_ThuaThien          -> Seq(NorthVietnam, Hue, CentralLaos, QuangNam, LOC_Hue_KheSanh,
+    Sihanoukville               -> Set(TheParrotsBeak, KienGiang_AnXuyen),
+    NorthVietnam                -> Set(CentralLaos, QuangTri_ThuaThien, LOC_Hue_KheSanh),
+    QuangTri_ThuaThien          -> Set(NorthVietnam, Hue, CentralLaos, QuangNam, LOC_Hue_KheSanh,
                                        LOC_Hue_DaNang),
-    QuangNam                    -> Seq(CentralLaos, SouthernLaos, QuangTri_ThuaThien, DaNang,
+    QuangNam                    -> Set(CentralLaos, SouthernLaos, QuangTri_ThuaThien, DaNang,
                                        QuangTin_QuangNgai, LOC_Hue_DaNang, LOC_DaNang_DakTo),
-    QuangTin_QuangNgai          -> Seq(SouthernLaos, DaNang, QuangNam, BinhDinh, LOC_DaNang_DakTo,
+    QuangTin_QuangNgai          -> Set(SouthernLaos, DaNang, QuangNam, BinhDinh, LOC_DaNang_DakTo,
                                        LOC_DaNang_QuiNhon),
-    BinhDinh                    -> Seq(SouthernLaos, QuangTin_QuangNgai, QuiNhon, PhuBon_PhuYen, Kontum,
+    BinhDinh                    -> Set(SouthernLaos, QuangTin_QuangNgai, QuiNhon, PhuBon_PhuYen, Kontum,
                                        Pleiku_Darlac, LOC_DaNang_DakTo, LOC_DaNang_QuiNhon, LOC_Kontum_DakTo,
                                        LOC_Kontum_QuiNhon),
-    Pleiku_Darlac               -> Seq(SouthernLaos, NortheastCambodia, TheFishhook, BinhDinh, Kontum,
+    Pleiku_Darlac               -> Set(SouthernLaos, NortheastCambodia, TheFishhook, BinhDinh, Kontum,
                                        PhuBon_PhuYen, KhanhHoa, QuangDuc_LongKhanh, LOC_Kontum_DakTo,
                                        LOC_Kontum_BanMeThuot, LOC_DaNang_DakTo, LOC_BanMeThuot_DaLat,
                                        LOC_Saigon_AnLoc_BanMeThuot),
-    PhuBon_PhuYen               -> Seq(Kontum, BinhDinh, QuiNhon, KhanhHoa, Pleiku_Darlac,
+    PhuBon_PhuYen               -> Set(Kontum, BinhDinh, QuiNhon, KhanhHoa, Pleiku_Darlac,
                                        LOC_Kontum_QuiNhon, LOC_QuiNhon_CamRanh, LOC_Kontum_BanMeThuot),
-    KhanhHoa                    -> Seq(PhuBon_PhuYen, CamRahn, BinhTuy_BinhThuan, QuangDuc_LongKhanh,
+    KhanhHoa                    -> Set(PhuBon_PhuYen, CamRahn, BinhTuy_BinhThuan, QuangDuc_LongKhanh,
                                        Pleiku_Darlac, LOC_QuiNhon_CamRanh, LOC_CamRanh_DaLat,
                                        LOC_BanMeThuot_DaLat, LOC_Kontum_BanMeThuot, LOC_Saigon_DaLat),
-    PhuocLong                   -> Seq(TheFishhook, AnLoc, QuangDuc_LongKhanh, TayNinh,
+    PhuocLong                   -> Set(TheFishhook, AnLoc, QuangDuc_LongKhanh, TayNinh,
                                        LOC_Saigon_AnLoc_BanMeThuot),
-    QuangDuc_LongKhanh          -> Seq(TheFishhook, Pleiku_Darlac, KhanhHoa, BinhTuy_BinhThuan, Saigon,
+    QuangDuc_LongKhanh          -> Set(TheFishhook, Pleiku_Darlac, KhanhHoa, BinhTuy_BinhThuan, Saigon,
                                        TayNinh, PhuocLong, LOC_Kontum_BanMeThuot,
                                        LOC_Saigon_AnLoc_BanMeThuot, LOC_BanMeThuot_DaLat, LOC_Saigon_DaLat),
-    BinhTuy_BinhThuan           -> Seq(Saigon, QuangDuc_LongKhanh, KhanhHoa, CamRahn, LOC_BanMeThuot_DaLat,
+    BinhTuy_BinhThuan           -> Set(Saigon, QuangDuc_LongKhanh, KhanhHoa, CamRahn, LOC_BanMeThuot_DaLat,
                                        LOC_CamRanh_DaLat, LOC_Saigon_DaLat, LOC_Saigon_CamRanh),
-    TayNinh                     -> Seq(TheParrotsBeak, TheFishhook, AnLoc, PhuocLong, QuangDuc_LongKhanh,
+    TayNinh                     -> Set(TheParrotsBeak, TheFishhook, AnLoc, PhuocLong, QuangDuc_LongKhanh,
                                        Saigon, KienPhong, LOC_Saigon_AnLoc_BanMeThuot),
-    KienPhong                   -> Seq(TheParrotsBeak, TayNinh, Saigon, KienHoa_VinhBinh, CanTho,
+    KienPhong                   -> Set(TheParrotsBeak, TayNinh, Saigon, KienHoa_VinhBinh, CanTho,
                                        KienGiang_AnXuyen, LOC_CanTho_ChauDoc, LOC_Saigon_CanTho),
-    KienHoa_VinhBinh            -> Seq(Saigon, KienPhong, CanTho, BaXuyen, LOC_Saigon_CanTho,
+    KienHoa_VinhBinh            -> Set(Saigon, KienPhong, CanTho, BaXuyen, LOC_Saigon_CanTho,
                                        LOC_CanTho_LongPhu),
-    BaXuyen                     -> Seq(KienGiang_AnXuyen, CanTho, KienHoa_VinhBinh, LOC_CanTho_BacLieu,
+    BaXuyen                     -> Set(KienGiang_AnXuyen, CanTho, KienHoa_VinhBinh, LOC_CanTho_BacLieu,
                                        LOC_CanTho_LongPhu),
-    KienGiang_AnXuyen           -> Seq(Sihanoukville, TheParrotsBeak, KienPhong, CanTho, BaXuyen,
+    KienGiang_AnXuyen           -> Set(Sihanoukville, TheParrotsBeak, KienPhong, CanTho, BaXuyen,
                                        LOC_CanTho_ChauDoc, LOC_CanTho_BacLieu),
     // LOCs
-    LOC_Hue_KheSanh             -> Seq(CentralLaos, NorthVietnam, Hue, QuangTri_ThuaThien),
-    LOC_Hue_DaNang              -> Seq(Hue, QuangTri_ThuaThien, QuangNam, DaNang),
-    LOC_DaNang_DakTo            -> Seq(DaNang, QuangNam, QuangTin_QuangNgai, SouthernLaos, BinhDinh,
+    LOC_Hue_KheSanh             -> Set(CentralLaos, NorthVietnam, Hue, QuangTri_ThuaThien),
+    LOC_Hue_DaNang              -> Set(Hue, QuangTri_ThuaThien, QuangNam, DaNang),
+    LOC_DaNang_DakTo            -> Set(DaNang, QuangNam, QuangTin_QuangNgai, SouthernLaos, BinhDinh,
                                        Pleiku_Darlac, LOC_Kontum_DakTo),
-    LOC_DaNang_QuiNhon          -> Seq(DaNang, QuangTin_QuangNgai, BinhDinh, QuiNhon),
-    LOC_Kontum_DakTo            -> Seq(Kontum, Pleiku_Darlac, SouthernLaos, BinhDinh),
-    LOC_Kontum_QuiNhon          -> Seq(Kontum, BinhDinh, QuiNhon, PhuBon_PhuYen),
-    LOC_Kontum_BanMeThuot       -> Seq(Kontum, Pleiku_Darlac, PhuBon_PhuYen, KhanhHoa, QuangDuc_LongKhanh,
+    LOC_DaNang_QuiNhon          -> Set(DaNang, QuangTin_QuangNgai, BinhDinh, QuiNhon),
+    LOC_Kontum_DakTo            -> Set(Kontum, Pleiku_Darlac, SouthernLaos, BinhDinh),
+    LOC_Kontum_QuiNhon          -> Set(Kontum, BinhDinh, QuiNhon, PhuBon_PhuYen),
+    LOC_Kontum_BanMeThuot       -> Set(Kontum, Pleiku_Darlac, PhuBon_PhuYen, KhanhHoa, QuangDuc_LongKhanh,
                                        LOC_Saigon_AnLoc_BanMeThuot, LOC_BanMeThuot_DaLat),
-    LOC_QuiNhon_CamRanh         -> Seq(QuiNhon, PhuBon_PhuYen, KhanhHoa, CamRahn),
-    LOC_CamRanh_DaLat           -> Seq(CamRahn, KhanhHoa, BinhTuy_BinhThuan, QuangDuc_LongKhanh,
+    LOC_QuiNhon_CamRanh         -> Set(QuiNhon, PhuBon_PhuYen, KhanhHoa, CamRahn),
+    LOC_CamRanh_DaLat           -> Set(CamRahn, KhanhHoa, BinhTuy_BinhThuan, QuangDuc_LongKhanh,
                                        LOC_Saigon_DaLat, LOC_BanMeThuot_DaLat),
-    LOC_BanMeThuot_DaLat        -> Seq(Pleiku_Darlac, KhanhHoa, BinhTuy_BinhThuan, QuangDuc_LongKhanh,
+    LOC_BanMeThuot_DaLat        -> Set(Pleiku_Darlac, KhanhHoa, BinhTuy_BinhThuan, QuangDuc_LongKhanh,
                                        LOC_Kontum_BanMeThuot, LOC_Saigon_AnLoc_BanMeThuot, LOC_Saigon_DaLat,
                                        LOC_CamRanh_DaLat),
-    LOC_Saigon_CamRanh          -> Seq(Saigon, CamRahn, BinhTuy_BinhThuan),
-    LOC_Saigon_DaLat            -> Seq(Saigon, BinhTuy_BinhThuan, QuangDuc_LongKhanh, KhanhHoa,
+    LOC_Saigon_CamRanh          -> Set(Saigon, CamRahn, BinhTuy_BinhThuan),
+    LOC_Saigon_DaLat            -> Set(Saigon, BinhTuy_BinhThuan, QuangDuc_LongKhanh, KhanhHoa,
                                        LOC_BanMeThuot_DaLat, LOC_CamRanh_DaLat),
-    LOC_Saigon_AnLoc_BanMeThuot -> Seq(Saigon, TayNinh, QuangDuc_LongKhanh, PhuocLong, AnLoc, TheFishhook,
+    LOC_Saigon_AnLoc_BanMeThuot -> Set(Saigon, TayNinh, QuangDuc_LongKhanh, PhuocLong, AnLoc, TheFishhook,
                                        Pleiku_Darlac, KhanhHoa, LOC_Kontum_BanMeThuot, LOC_BanMeThuot_DaLat),
-    LOC_Saigon_CanTho           -> Seq(Saigon, CanTho, KienPhong, KienHoa_VinhBinh),
-    LOC_CanTho_ChauDoc          -> Seq(CanTho, KienPhong, KienGiang_AnXuyen, TheParrotsBeak),
-    LOC_CanTho_BacLieu          -> Seq(CanTho, KienGiang_AnXuyen, BaXuyen),
-    LOC_CanTho_LongPhu          -> Seq(CanTho, BaXuyen, KienHoa_VinhBinh)
+    LOC_Saigon_CanTho           -> Set(Saigon, CanTho, KienPhong, KienHoa_VinhBinh),
+    LOC_CanTho_ChauDoc          -> Set(CanTho, KienPhong, KienGiang_AnXuyen, TheParrotsBeak),
+    LOC_CanTho_BacLieu          -> Set(CanTho, KienGiang_AnXuyen, BaXuyen),
+    LOC_CanTho_LongPhu          -> Set(CanTho, BaXuyen, KienHoa_VinhBinh)
   )
 
-  def getAdjacent(name: String): Seq[String] = adjacencyMap(name)
+  def getAdjacent(name: String): Set[String] = adjacencyMap(name)
   def areAdjacent(name1: String, name2: String) = getAdjacent(name1) contains name2
+  def getAdjacentLOCs(name: String): Set[String] = getAdjacent(name) filter { x => game.getSpace(x).isLOC }
+  def getAdjacentCities(name: String): Set[String] = getAdjacent(name) filter { x => game.getSpace(x).isCity }
+  def getAdjacentLOCsAndCities(name: String) = getAdjacentLOCs(name) ++ getAdjacentCities(name)
+  
+  //  Return a sequence of all spaces that can be reached from the given space by patrolling cubes.
+  //  A cube can move on to adjacent LOCs/Cities and keep moving via adjacent LOCs/Cities until
+  //  it reaches a space with an insurgent piece.
+  def getPatrolDestinations(srcName: String): Seq[String] = {
+    @tailrec def getDests(candidates: Set[String], destinations: Set[String]): Set[String] = {
+      if (candidates.isEmpty)
+        destinations
+      else {
+        val name      = candidates.head
+        val sp        = game.getSpace(name)
+        val isDest    = name != srcName && (sp.isLOC || sp.isCity)
+        val endOfPath = name != srcName && sp.pieces.has(InsurgentPieces)
+        val adjacent  = if (endOfPath) Set.empty else (getAdjacentLOCsAndCities(name) - srcName)
+        val newDests  = if (isDest) destinations + name else destinations
+        val newCandidates = candidates.tail ++ adjacent -- destinations
+        getDests(newCandidates, newDests)
+      }          
+    }
+    
+    getDests(Set(srcName), Set.empty).toList.sorted
+  }
 
 
   sealed trait PieceType {
@@ -388,7 +423,7 @@ object FireInTheLake {
   val Rangers         = List(Rangers_A, Rangers_U)
   val NVAGuerrillas   = List(NVAGuerrillas_A, NVAGuerrillas_U)
   val VCGuerrillas    = List(VCGuerrillas_A, VCGuerrillas_U)
-  val ARVNCubes       = List(ARVNTroops, ARVNPolice)
+  val ARVNCubes       = List(ARVNPolice, ARVNTroops)
   val FlippablePieces = List(Irregulars_U, Irregulars_A, Rangers_U, Rangers_A,
                              NVAGuerrillas_U, NVAGuerrillas_A, VCGuerrillas_U, VCGuerrillas_A)
   val Guerrillas      = List(NVAGuerrillas_A, VCGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_U)
@@ -650,7 +685,6 @@ object FireInTheLake {
     def explode(order: List[PieceType] = AllPieceTypes): List[PieceType] = {
       order flatMap { pieceType => List.fill(numOf(pieceType))(pieceType) }
     }
-
   }
 
   object Pieces {
@@ -741,7 +775,9 @@ object FireInTheLake {
 
     def coinControlled: Boolean = pieces.totalOf(CoinPieces) > pieces.totalOf(InsurgentPieces)
     def nvaControlled: Boolean  = pieces.totalOf(NVAPieces) > pieces.totalOf(NonNVAPieces)
-    def control = if (coinControlled)
+    def control = if (isLOC)
+      Neutral
+    else if (coinControlled)
       CoinControlled
     else if (nvaControlled)
       NvaControlled
@@ -2230,6 +2266,71 @@ object FireInTheLake {
     }
   }
 
+
+  //  Reveal guerrillas/rangers/irregulars in a space
+  def revealPieces(spaceName: String, hidden: Pieces): Unit = if (hidden.total > 0) {
+    val Valid = List(Irregulars_U, Rangers_U, NVAGuerrillas_U, VCGuerrillas_U)
+    val sp = game.getSpace(spaceName)
+    assert(hidden.only(Valid) != hidden, s"revealPieces() called with non-undeground pieces: $hidden")
+    assert(sp.pieces contains hidden, s"revealPieces() $spaceName does not contain all requested pieces: $hidden")
+    
+    val visible = Pieces(
+      irregulars_A    = hidden.irregulars_U,
+      rangers_A       = hidden.rangers_U,
+      nvaGuerrillas_A = hidden.nvaGuerrillas_U,
+      vcGuerrillas_A  = hidden.vcGuerrillas_U)
+    val updated = sp.copy(pieces = sp.pieces - hidden + visible)
+    
+    if (visible.total == 1)
+      log(s"\nIn $spaceName, flip the following piece to its active side")
+    else
+      log(s"\nIn $spaceName, flip the following pieces to their active sides")
+    log(separator())
+    wrap("", hidden.descriptions) foreach (log(_))
+  }
+  
+  //  Hide guerrillas/rangers/irregulars in a space
+  def hidePieces(spaceName: String, visible: Pieces): Unit = if (visible.total > 0) {
+    val Valid = List(Irregulars_A, Rangers_A, NVAGuerrillas_A, VCGuerrillas_A)
+    val sp = game.getSpace(spaceName)
+    assert(visible.only(Valid) != visible, s"hidePieces() called with non-active pieces: $visible")
+    assert(sp.pieces contains visible, s"hidePieces() $spaceName does not contain all requested pieces: $visible")
+    
+    val hidden = Pieces(
+      irregulars_A    = visible.irregulars_U,
+      rangers_A       = visible.rangers_U,
+      nvaGuerrillas_A = visible.nvaGuerrillas_U,
+      vcGuerrillas_A  = visible.vcGuerrillas_U)
+    val updated = sp.copy(pieces = sp.pieces - visible + hidden)
+    
+    if (visible.total == 1)
+      log(s"\nIn $spaceName, flip the following piece to its underground side")
+    else
+      log(s"\nIn $spaceName, flip the following pieces to their underground sides")
+    log(separator())
+    wrap("", visible.descriptions) foreach (log(_))
+  }
+  
+  
+  
+  // Move the given pieces from the source space to the destination space
+  // and log the activity.
+  def movePieces(pieces: Pieces, source: String, dest: String): Unit = {
+    val srcSpace = game.getSpace(source)
+    val dstSpace = game.getSpace(dest)
+    assert(srcSpace.pieces contains pieces, s"$source does not contain all requested pieces: $pieces")
+    
+    val updatedSrc = srcSpace.copy(pieces = srcSpace.pieces - pieces)
+    val updatedDst = dstSpace.copy(pieces = dstSpace.pieces + pieces)
+    loggingControlChanges {
+      game = game.updateSpace(updatedSrc).updateSpace(updatedDst)
+      log(s"\nMove the following pieces from $source to $dest:")
+      log(separator())
+      wrap("", pieces.descriptions) foreach (log(_))
+    }
+  }
+
+
   def addTunnelMarker(spaceName: String, base: PieceType): Unit = {
     val sp = game.getSpace(spaceName)
     assert(base == VCBase || base == NVABase, s"addTunnelMarker() called with invalid type: $base")
@@ -2740,26 +2841,6 @@ object FireInTheLake {
     }
   }
 
-  def askOddInt(prompt: String, low: Int, high: Int, default: Option[Int] = None, allowAbort: Boolean = true): Int = {
-    def nextTry(): Int = askInt(prompt, low, high, default, allowAbort) match {
-      case n if n % 2 == 1 => n
-      case _ =>
-        println("Please enter an odd number")
-        nextTry()
-    }
-    nextTry()
-  }
-
-  def askEvenInt(prompt: String, low: Int, high: Int, default: Option[Int] = None, allowAbort: Boolean = true): Int = {
-    def nextTry(): Int = askInt(prompt, low, high, default, allowAbort) match {
-      case n if n % 2 == 0 => n
-      case _ =>
-        println("Please enter an even number")
-        nextTry()
-    }
-    nextTry()
-  }
-
   // Convenience method for createing choices for the askMenu() function.
   def choice[T](condition: Boolean, value: T, desc: String): Option[(T, String)] =
     if (condition) Some(value -> desc) else None
@@ -2819,7 +2900,12 @@ object FireInTheLake {
     else
       askOneOf(prompt, candidates, allowAbort = allowAbort).get
   }
-
+  
+  def askCandidateMenu(prompt: String, candidates: Seq[String], allowAbort: Boolean = true): String = {
+    askMenu(candidates.toList map (c => c -> c), prompt, allowAbort = allowAbort).head
+  }
+  
+  
   // Check card number input and print a message
   // if the number is not valid
   def checkCardNum(cardNum: String): Boolean = {

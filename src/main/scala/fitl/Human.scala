@@ -101,6 +101,21 @@ object Human {
   
   def noteIf(cond: Boolean, note: String): Option[String] = if (cond) Some(note) else None
 
+  // TODO:  Perhaps this can be shared with the Bot code
+  //        Would have to also put MovingGroups class in shared trait
+  def sweepSources(destName:String, faction: Faction, alreadyMoved: MovingGroups): List[String] = {
+    val troopType = if (faction == US) USTroops else ARVNTroops
+    val srcSpaces = (game.spaces 
+                     filter { sp =>
+                       !sp.isNorthVietnam &&
+                       sp.name != destName &&
+                       (sp.pieces - alreadyMoved(sp.name)).has(troopType) &&
+                       adjacentForSweep(sp.name, destName)
+                     })
+    spaceNames(srcSpaces)
+  }
+  
+  
   // A human player has opted to take an action on the current card.
   def act(): Unit = {
     object Pass extends Exception
@@ -243,13 +258,14 @@ object Human {
 
     val landsdale = faction == US && momentumInPlay(Mo_GeneralLansdale)
     val notes = List(
-      noteIf(landsdale, s"US Assault is prohibited [Momentum: ${Mo_GeneralLansdale}]")
+      noteIf(game.inMonsoon, s"Sweep is prohibited [Not allowed in Monsoon]"),
+      noteIf(landsdale,      s"US Assault is prohibited [Momentum: ${Mo_GeneralLansdale}]")
     ).flatten
 
     val availOps = CoinOp.ALL filter {
-      case Train => true
+      case Train      => true
       case Patrol     => true
-      case Sweep      => true
+      case Sweep      => !game.inMonsoon
       case Assault    => !landsdale
     }
     val choices = availOps map (op => op -> op.toString)
@@ -537,7 +553,6 @@ object Human {
   //    Cost=0 AND +3 Aid per guerrilla removed
   
   def executePatrol(faction: Faction, params: Params): Unit = {
-    // val remove1BaseFirst   = capabilityInPlay(M48Patton_Shaded)
     val availableActivities = if (faction == US)
       Advise::AirLift::AirStrike::Nil
     else
@@ -616,7 +631,7 @@ object Human {
         }
     }
     
-    def activeGuerrillasOnLOCs(): Unit = {
+    def activateGuerrillasOnLOCs(): Unit = {
       case class Activation(sp: Space, num: Int)
       val underground = (sp: Space) => sp.pieces.totalOf(UndergroundGuerrillas)
       val cubes       = (sp: Space) => sp.pieces.totalOf(PatrolCubes)    
@@ -652,9 +667,9 @@ object Human {
       val candidates = spaceNames(locs)
       if (candidates.nonEmpty || Special.allowed) {
         val choices = List(
-          choice(candidates.nonEmpty, "assault",  "Assault on one LOC"),
+          choice(candidates.nonEmpty, "assault",  "Assault at one LOC"),
           choice(Special.allowed,     "special",  "Perform a Special Activity"),
-          choice(true,                "finished", "Do not Assault on one LOC")
+          choice(true,                "finished", "Do not Assault at one LOC")
         ).flatten
         
         askMenu(choices, "\nChoose one:").head match {
@@ -686,7 +701,7 @@ object Human {
       }
       
       selectCubesToMove()
-      activeGuerrillasOnLOCs()
+      activateGuerrillasOnLOCs()
       assaultOneLOC()
       if (capabilityInPlay(M48Patton_Shaded)) {
         // TODO:
@@ -705,7 +720,204 @@ object Human {
       executeSpecialActivity(faction, params, availableActivities)
   }
 
+
+  //  Cobras_Unshaded            - 2 US/ARVN sweep spaces each remove 1 Active untunneled enemy
+  //                              (troops then  guerrillas then bases)
+  //  CombActionPlatoons_Shaded - US may select max 2 spaces per sweep
+  //  BoobyTraps_Shaded         = Each sweep space, VC afterward removes 1 sweeping troop on
+  //                              a roll 1-3 (US to casualties)
   def executeSweep(faction: Faction, params: Params): Unit = {
+    val availableActivities = if (faction == US)
+      AirLift::AirStrike::Nil
+    else
+      Transport::Raid::Nil
+    var sweepSpaces     = Set.empty[String]
+    var activatedSpaces = Set.empty[String]
+    var cobrasSpaces    = Set.empty[String]
+    val alreadyMoved    = new MovingGroups()
+    val defaultMax      = if (faction == US && capabilityInPlay(CombActionPlatoons_Shaded)) 2 else 1000
+    val maxSpaces       = params.maxSpaces getOrElse defaultMax
+    
+    
+
+    // Ask the user if they wish to use the Cobras capability
+    // in the space.
+    def doCobras(name: String): Unit = {
+      val Targets   = NVATroops::ActiveGuerrillas:::InsurgentNonTunnels
+      val sp        = game.getSpace(name)
+      val isPossible = sp.pieces.has(NVATroops::ActiveGuerrillas) ||
+                       (!sp.pieces.has(UndergroundGuerrillas) && sp.pieces.has(InsurgentNonTunnels))
+      
+      if (isPossible && askYorN(s"Do you wish to use the Cobras capability in $name? (y/n) ")) {
+        cobrasSpaces = cobrasSpaces + name
+        log(s"\nUsing $Cobras_Unshaded")
+        
+        val deadPiece = if (sp.pieces.has(NVATroops))
+          Pieces(nvaTroops = 1)
+        else if (sp.pieces.has(ActiveGuerrillas))
+          askPieces(sp.pieces, 1, ActiveGuerrillas)
+        else
+          askPieces(sp.pieces, 1, InsurgentNonTunnels)
+        
+        removeToAvailable(name, deadPiece)
+      }
+    }
+    
+    
+    def moveCubesTo(destName: String): Unit = {
+      val candidates = sweepSources(destName, faction, alreadyMoved)
+      val choices = List(
+        choice(candidates.nonEmpty, "move",      "Select a space from which to move troops"),
+        choice(Special.allowed,     "special",   "Perform a Special Activity"),
+        choice(true,                "finished", s"Finished moving troops to $destName")
+      ).flatten
+
+      log(s"\nMoving cubes into $destName")
+      log(separator())
+      askMenu(choices, "Choose one:").head match {
+        case "move" =>
+          val TroopType = if (faction == US) USTroops else ARVNTroops
+          val srcName   = askCandidate(s"\nMove $TroopType from which space: ", candidates)
+          val troops    = game.getSpace(srcName).pieces.only(TroopType) - alreadyMoved(srcName)
+          val num       = askInt(s"Move how many $TroopType", 0, troops.total)
+          
+          if (num > 0) {
+            val movers = Pieces().set(num, TroopType)
+            alreadyMoved.add(destName, movers)
+            movePieces(movers, srcName, destName)
+          }
+          moveCubesTo(destName)
+          
+        case "special" =>
+          executeSpecialActivity(faction, params, availableActivities)
+          moveCubesTo(destName)
+
+        case _ => // finished
+      }
+      
+    }
+    
+    // Select provinces/cities (not N. Vietnam)
+    def selectSweepSpaces(): Unit = {
+      val candidates = if (sweepSpaces.size < maxSpaces)
+        spaceNames(game.nonLocSpaces filterNot (sp => sp.isNorthVietnam || sweepSpaces(sp.name)))
+      else
+        Nil
+
+      val choices = List(
+        choice(candidates.nonEmpty, "sweep",     "Select a Sweep space"),
+        choice(Special.allowed,     "special",   "Perform a Special Activity"),
+        choice(true,                "finished", s"Finished selecting Sweep spaces")
+      ).flatten
+      
+      println(s"\nSweep spaces selected")
+      println(separator())
+      wrap("", sweepSpaces.toList) foreach println
+      
+      askMenu(choices, "\nChoose one:").head match {
+        case "sweep" =>
+          val name = askCandidate("\nSweep in which space: ", candidates)
+          sweepSpaces = sweepSpaces + name
+          moveCubesTo(name)
+          if (capabilityInPlay(Cobras_Unshaded) && cobrasSpaces.size < 2)
+            doCobras(name)
+          selectSweepSpaces()
+          
+        case "special" =>
+          executeSpecialActivity(faction, params, availableActivities)
+          selectSweepSpaces()
+
+        case _ => // finished
+      }
+    }
+    
+    def activateGuerrillasIn(name: String): Unit = {
+      val sp = game.getSpace(name)
+      val num = sp.sweepActivations(faction) min sp.pieces.totalOf(UndergroundGuerrillas)
+      if (num > 0) {
+        log(s"\nActivating guerrillas in $name")
+        log(separator())
+        val guerrillas = askPieces(sp.pieces, num, UndergroundGuerrillas)
+        revealPieces(name, guerrillas)
+      }
+    }
+    
+    def activateGuerrillas(): Unit = {
+      val canActivate = (name: String) => {
+        val sp = game.getSpace(name)
+        sp.sweepActivations(faction) > 0 && sp.pieces.has(UndergroundGuerrillas)
+      }
+      val candidates = ((sweepSpaces -- activatedSpaces) filter canActivate).toList.sorted
+      if (candidates.nonEmpty) {
+        val topChoices = List(
+          choice(activatedSpaces.isEmpty,  "all",      "Activate guerrillas in all sweep spaces"),
+          choice(activatedSpaces.nonEmpty, "rest",     "Activate guerrillas in the rest of the sweep spaces"),
+          choice(Special.allowed,          "special",  "Perform a Special Activity")
+        ).flatten
+        val spaceChoices = candidates map (n => n -> s"Activate guerrillas in $n")
+        val choices = topChoices ::: spaceChoices
+        
+        askMenu(choices, "\nChoose one:").head match {
+          case "all" | "rest" =>
+            for (name <- candidates) {
+              activateGuerrillasIn(name)
+              activatedSpaces = activatedSpaces + name
+            }
+              
+          case "special" =>
+            executeSpecialActivity(faction, params, availableActivities)
+            activateGuerrillas()
+
+          case name =>
+            activateGuerrillasIn(name)
+            activatedSpaces = activatedSpaces + name
+            activateGuerrillas()
+        }
+      }
+      else if (activatedSpaces.isEmpty)
+        log(s"\nNo guerrillas can be activated in the ${amountOf(sweepSpaces.size, "sweep space")}")
+    }
+    
+    //  In each sweep space roll a d6.
+    //  On a 1-3, remove one of the sweeping factions troops.
+    //  ARVN to available, US to casualties
+    def resolveBoobyTraps(): Unit = {
+      val troopType = if (faction == US) USTroops else ARVNTroops
+      for (name <- sweepSpaces.toList.sorted) {
+        val sp = game.getSpace(name)
+        log(s"\nResolving $BoobyTraps_Shaded in $name")
+        log(separator())
+        if (sp.pieces.has(troopType)) {
+          val die = d6
+          val success = die < 4
+          val status = if (success) "Success" else "Failure"
+          log(s"Die roll: $die  [$status]")
+          (die < 4) match {
+            case true if faction == US => removeToCasualties(name, Pieces(usTroops = 1))
+            case true                  => removeToAvailable(name, Pieces(nvaTroops = 1))
+            case false                 => log("No troop is removed")
+          }
+        }
+        else
+          log(s"There is no $faction troop present")
+      }
+    }
+    
+    log(s"\n$faction chooses Sweep operation")
+    log(separator())
+    if (params.maxSpaces.isEmpty && faction == US  && capabilityInPlay(CombActionPlatoons_Shaded))
+      log(s"US can select a maximum of 2 spaces [$CombActionPlatoons_Shaded]")
+      
+    selectSweepSpaces()
+    if (sweepSpaces.nonEmpty) {
+      activateGuerrillas()
+      if (capabilityInPlay(BoobyTraps_Shaded))
+        resolveBoobyTraps()
+    }
+    
+    //  Last chance to perform special activity
+    if (Special.allowed && askYorN("\nDo you wish to perform a special activity? (y/n) "))
+      executeSpecialActivity(faction, params, availableActivities)
   }
 
 
@@ -936,7 +1148,6 @@ object Human {
     //  Last chance to perform special activity
     if (Special.allowed && askYorN("\nDo you wish to perform a special activity? (y/n) "))
       executeSpecialActivity(faction, params, availableActivities)
-
   }
 
   // ====================================================================

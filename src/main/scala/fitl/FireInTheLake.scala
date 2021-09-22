@@ -372,6 +372,17 @@ object FireInTheLake {
     getDests(Set(srcName), Set.empty).toList.sorted
   }
 
+  // A space is adjacent for sweep movement if it is truly adjacent to the destination
+  // or if it is adjacent to a LOC that is adjacent to the destination AND the LOC
+  // free of Insurgent pieces
+  def adjacentForSweep(srcName: String, destName: String): Boolean = {
+    val locAccess = (name: String) => {
+      val sp = game.getSpace(name)
+      !sp.pieces.has(InsurgentPieces) && areAdjacent(name, destName)
+    }
+    
+    areAdjacent(srcName, destName) || (getAdjacentLOCs(srcName) exists locAccess)
+  }
 
   sealed trait PieceType {
     val name: String
@@ -799,11 +810,16 @@ object FireInTheLake {
     def removePieces(removedPieces: Pieces): Space = copy(pieces = pieces - removedPieces)
     def setPieces(newPieces: Pieces): Space = copy(pieces = newPieces)
 
-    def assaultCubes(faction: Faction) = faction match {
+    def assaultCubes(faction: Faction): Int = faction match {
       case US                   => pieces.numOf(USTroops)
       case _ if isCity || isLOC => pieces.totalOf(ARVNCubes)
       case _                    => pieces.numOf(ARVNTroops)
     }
+    
+    def sweepForces(faction: Faction): Int = if (faction == US)
+      pieces.totalOf(USTroops::Irregulars_U::Irregulars_A::Nil)
+    else
+      pieces.totalOf(ARVNTroops::ARVNPolice::Rangers_U::Rangers_A::Nil)
 
     def assaultMultiplier(faction: Faction): Double = faction match {
       case US if pieces.has(USBase) => 2.0
@@ -814,6 +830,13 @@ object FireInTheLake {
     }
 
     def assaultLosses(faction: Faction): Int = (assaultCubes(faction) * assaultMultiplier(faction)).toInt
+    
+    def sweepActivations(faction: Faction): Int = {
+      if (isJungle)
+        sweepForces(faction) / 2
+      else
+        sweepForces(faction)
+    }
 
   }
 
@@ -1031,7 +1054,7 @@ object FireInTheLake {
   val Mo_RollingThunder    = "#10 Rolling Thunder"          // Shaded   (prohibits air strike)
   val Mo_Medevac_Unshaded  = s"$Medevac_prefix (unshaded)"  // (affects commitment phase during coup round)
   val Mo_Medevac_Shaded    = s"$Medevac_prefix (shaded)"    // (prohibits air lift)
-  val Mo_BlowtorchKomer    = "#16 Blowtorch Komer"          // Unshaded (Pacity costs 1 resource per step/teror, during Support phase)
+  val Mo_BlowtorchKomer    = "#16 Blowtorch Komer"          // Unshaded (Pacity costs 1 resource per step/terror, during Support phase)
   val Mo_Claymores         = "#17 Claymores"                // Unshaded (prohibits ambush, affect guerrilla march)
   val Mo_DaNang            = "#22 Da Nang"                  // Shaded (prohibits air strike)
   val Mo_McNamaraLine      = "#38 McNamara Line"            // Single event (prohibits infiltrate, prohibits trail improvement by rally)
@@ -1301,7 +1324,7 @@ object FireInTheLake {
     def isFinalCampaign = coupCardsPlayed == (totalCoupCards - 1)
     def isCoupRound = cardsDrawn > 0 && deck(currentCard).isCoup
     def onDeckIsCoup = onDeckCard map (deck(_).isCoup) getOrElse false
-    def isMonsoon = !isCoupRound && onDeckIsCoup
+    def inMonsoon = !isCoupRound && onDeckIsCoup
 
     // Count the total number of something in each space on the map
     def totalOnMap(numberPerSpace: Space => Int): Int =

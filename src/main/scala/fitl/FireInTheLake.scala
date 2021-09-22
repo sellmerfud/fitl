@@ -1633,16 +1633,15 @@ object FireInTheLake {
           println()
           val scenarioName = {
             // prompt for scenario
-            println("Choose a scenario:")
             val choices = scenarioChoices :+ ("quit" -> "Quit")
-            askMenu(choices, allowAbort = false).head match {
+            askMenu(choices, "Choose a scenario:", allowAbort = false).head match {
               case "quit"   => throw ExitGame
               case scenario => scenario
             }
           }
           val scenario = scenarios(scenarioName)
           val usePeriodEvents = askYorN("\nAre you using period events? (y/n) ")
-          val humanFaction = askFaction("Which faction do you wish to play", allowAbort = false)
+          val humanFaction = askFaction("Which faction do you wish to play:", allowAbort = false)
 
           // println()
           // gameName = Some(askGameName("Enter a name for your new game: "))
@@ -1655,10 +1654,12 @@ object FireInTheLake {
 
           //  If VC is a Bot then we use the vcResources as the Agitate Total
           //  This is initialized by rolling a d3
-          val agitateTotal = d3
-          log(s"\nRolling d3 to set the Agitate Total (VC resources cylinder)")
-          if (game.isBot(VC))
+          if (game.isBot(VC)) {
+            val agitateTotal = d3
+            log(s"\nRolling d3 to set the Agitate Total (VC resources cylinder)")
+            log(separator())
             setAgitateTotal(d3)
+          }
 
 
       }
@@ -1918,6 +1919,11 @@ object FireInTheLake {
     //       If it is the final Coup card determine victory
     // All factions are eligible after a Coup round
     game = game.copy(sequence = SequenceOfPlay())
+    
+    // ....
+    
+    saveGameState(game.description)
+    
   }
 
   def adjustFactionEligibility(): Unit = {

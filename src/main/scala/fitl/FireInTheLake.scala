@@ -2057,8 +2057,7 @@ object FireInTheLake {
   def checkForPivotalEvent(): Unit = {
     // if (game.sequence.numActors == 0 && !deck.isPivotalCard(game.currentCard)) {
     //   val trumpPriority = List(Scotti, Saxon, Dux, Civitates)
-    //   // TODO: Need to implement logic to determine if Bots will play
-    //   // their pivotal event.
+    //   // TODO: Need to implement logic to determine if Bots will play their pivotal event.
     //   val botPivoter: Option[Faction] = None
     //   // val botPivoter = trumpPriority find (f => game.isBot(f) && canPlayPivotCard(f))
     //
@@ -2966,7 +2965,7 @@ object FireInTheLake {
   }
 
 
-  // TODO: ...
+  // TODO: Implement askWhichGame()
   def askWhichGame(): Option[String] = None
 
 

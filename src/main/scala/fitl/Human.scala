@@ -271,7 +271,8 @@ object Human {
     val choices = availOps map (op => op -> op.toString)
 
     if (notes.nonEmpty) {
-      println()
+      println("Notes:")
+      println(separator())
       notes foreach println
     }
 
@@ -317,7 +318,7 @@ object Human {
       Transport::Govern::Nil
     val canPlaceExtraPolice = faction == US && capabilityInPlay(CombActionPlatoons_Unshaded)
     var placedExtraPolice   = false // only if CombActionPlatoons_Unshaded in play
-    val maxPacifySpaces     = if (faction == US && capabilityInPlay(CORDS_Unshaded)) 2 else 1
+    val maxPacifySpaces     = if (faction == US && !params.limOpOnly && capabilityInPlay(CORDS_Unshaded)) 2 else 1
     val maxPacifyLevel      = if (faction == US && capabilityInPlay(CORDS_Shaded)) PassiveSupport else ActiveSupport
     var selectedSpaces      = List.empty[String]
     var arvnPlacedIn        = List.empty[String]
@@ -332,6 +333,12 @@ object Human {
       !selectedSpaces.contains(sp.name) &&       // Not already selected
       !Special.selectedSpaces.contains(sp.name)  // Not selected for Advise/Govern Special Activity
     }
+
+    val notes = List(
+      noteIf(canPlaceExtraPolice,              s"May place 1 ARVN Police in 1 training space with US Troops [$CombActionPlatoons_Unshaded]"),
+      noteIf(maxPacifySpaces == 2,             s"May pactify in 2 spaces [$CORDS_Unshaded]"),
+      noteIf(maxPacifyLevel == PassiveSupport, s"May not Pacify to Active Support [$CORDS_Shaded]")
+    ).flatten
 
 
     def selectTrainSpaces(): Unit = {
@@ -536,6 +543,8 @@ object Human {
 
     log(s"\n$faction chooses Train operation")
     log(separator())
+    if (notes.nonEmpty)
+      notes foreach println
 
     selectTrainSpaces()
     if (selectedSpaces.nonEmpty)
@@ -557,10 +566,13 @@ object Human {
       Advise::AirLift::AirStrike::Nil
     else
       Govern::Transport::Raid::Nil
+    val pattonUshaded = faction == US && capabilityInPlay(M48Patton_Unshaded)
+    val pattonShaded  = capabilityInPlay(M48Patton_Shaded)
+    val bodyCount     = momentumInPlay(Mo_BodyCount)
     val movedCubes  = new MovingGroups()  // Used to support M48 Patton (unshaded)
     val frozen      = new MovingGroups()  // Cubes that have moved into a space with Insurgent pieces
     var limOpDest: Option[String] = None
-    val hasTheCash  = faction == US || params.free || momentumInPlay(Mo_BodyCount) || game.arvnResources >= 3
+    val hasTheCash  = faction == US || params.free || bodyCount || game.arvnResources >= 3
     val PatrolCubes = if (faction == US) List(USTroops) else ARVNCubes
         
     // Faction cubes in the space that are not frozen in place
@@ -572,6 +584,12 @@ object Human {
       val onNetwork = sp.isLOC || sp.isCity || getAdjacentLOCs(sp.name).nonEmpty || getAdjacentCities(sp.name).nonEmpty
       onNetwork && patrolCubes(sp).nonEmpty && reachesLimOpDest
     }
+
+    val notes = List(
+      noteIf(bodyCount,     s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]"),
+      noteIf(pattonUshaded, s"In follow up assault, remove 2 extra enemy pieces [$M48Patton_Unshaded]"),
+      noteIf(pattonShaded,  s"After Patrol NVA removes up to 2 cubes that moved [$M48Patton_Shaded]")
+    ).flatten
 
     def selectCubesToMove(): Unit = {
       val srcCandidates = spaceNames(game.spaces filter isPatrolSource)
@@ -675,7 +693,7 @@ object Human {
         askMenu(choices, "\nChoose one:").head match {
           case "assault" =>
             val assaultParams = Params(
-              assaultRemovesTwoExtra = faction == US && capabilityInPlay(M48Patton_Unshaded),
+              assaultRemovesTwoExtra = pattonUshaded,
               free                   = true)
             val name = askSimpleMenu(candidates, "\nAssault in which LOC:").head
             performAssault(name, faction, assaultParams)
@@ -699,11 +717,15 @@ object Human {
         else
           decreaseResources(ARVN, 3)
       }
+      if (notes.nonEmpty) {
+        println(separator())
+        notes foreach println
+      }
       
       selectCubesToMove()
       activateGuerrillasOnLOCs()
       assaultOneLOC()
-      if (capabilityInPlay(M48Patton_Shaded)) {
+      if (pattonShaded) {
         // TODO:
         // NVABot.removeEnemyPieces(2, ...)
         println()
@@ -735,10 +757,21 @@ object Human {
     var activatedSpaces = Set.empty[String]
     var cobrasSpaces    = Set.empty[String]
     val alreadyMoved    = new MovingGroups()
-    val defaultMax      = if (faction == US && capabilityInPlay(CombActionPlatoons_Shaded)) 2 else 1000
+    val platoonsShaded  = faction == US && !params.limOpOnly && capabilityInPlay(CombActionPlatoons_Shaded)
+    val cobrasUnshaded  = capabilityInPlay(Cobras_Unshaded)
+    val boobyTraps      = capabilityInPlay(BoobyTraps_Shaded)
+    val defaultMax      = if (platoonsShaded) 2 else 1000
     val maxSpaces       = params.maxSpaces getOrElse defaultMax
     
+    if (params.maxSpaces.isEmpty && faction == US  && capabilityInPlay(CombActionPlatoons_Shaded))
+      log(s"US can select a maximum of 2 spaces [$CombActionPlatoons_Shaded]")
+      
     
+    val notes = List(
+      noteIf(cobrasUnshaded, s"In 2 spaces, you may remove 1 active (untunneled) enemy [$Cobras_Unshaded]"),
+      noteIf(platoonsShaded, s"US can select a maximum of 2 spaces [$CombActionPlatoons_Shaded]"),
+      noteIf(boobyTraps,     s"Each space, VC afterward remove 1 troop on die roll 1-3 [$BoobyTraps_Shaded]")
+    ).flatten
 
     // Ask the user if they wish to use the Cobras capability
     // in the space.
@@ -819,7 +852,7 @@ object Human {
           val name = askCandidate("\nSweep in which space: ", candidates)
           sweepSpaces = sweepSpaces + name
           moveCubesTo(name)
-          if (capabilityInPlay(Cobras_Unshaded) && cobrasSpaces.size < 2)
+          if (cobrasUnshaded && cobrasSpaces.size < 2)
             doCobras(name)
           selectSweepSpaces()
           
@@ -905,13 +938,13 @@ object Human {
     
     log(s"\n$faction chooses Sweep operation")
     log(separator())
-    if (params.maxSpaces.isEmpty && faction == US  && capabilityInPlay(CombActionPlatoons_Shaded))
-      log(s"US can select a maximum of 2 spaces [$CombActionPlatoons_Shaded]")
-      
+    if (notes.nonEmpty)
+      notes foreach println
+    
     selectSweepSpaces()
     if (sweepSpaces.nonEmpty) {
       activateGuerrillas()
-      if (capabilityInPlay(BoobyTraps_Shaded))
+      if (boobyTraps)
         resolveBoobyTraps()
     }
     
@@ -1060,8 +1093,13 @@ object Human {
       AirLift::AirStrike::Nil
     else
       Transport::Raid::Nil
-    val maxTwoSpaces       = faction == US && capabilityInPlay(Abrams_Shaded)
     val bodyCount          = momentumInPlay(Mo_BodyCount)
+    val abramsUnshaded     = faction == US && capabilityInPlay(Abrams_Unshaded)
+    val abramsShaded       = faction == US && capabilityInPlay(Abrams_Shaded) && !params.limOpOnly
+    val m48Patton          = faction == US && capabilityInPlay(M48Patton_Unshaded)
+    val cobras             = faction == US && capabilityInPlay(Cobras_Shaded)
+    val sdUnshaded         = faction == US && capabilityInPlay(SearchAndDestroy_Unshaded)
+    val sdShaded           = faction == US && capabilityInPlay(SearchAndDestroy_Shaded)
     var assaultSpaces      = List.empty[String]
     var m48PattonSpaces    = List.empty[String]
     var addedARVNAssault   = false
@@ -1074,11 +1112,20 @@ object Human {
       sp.pieces.has(cubes)
     }
 
+    val notes = List(
+      noteIf(abramsUnshaded, s"In 1 space you may remove 1 (untunneled) base first [$Abrams_Unshaded]"),
+      noteIf(abramsShaded,   s"Select a maximum of 2 spaces [$Abrams_Shaded]"),
+      noteIf(m48Patton,      s"In 2 non-Lowland spaces remove 2 extra enemy pieces [$M48Patton_Unshaded]"),
+      noteIf(cobras,         s"Each space, remove 1 troop on die roll 1-3 [$Cobras_Shaded]"),
+      noteIf(sdUnshaded,     s"Each space, may remove 1 underground guerrilla [$SearchAndDestroy_Unshaded]"),
+      noteIf(sdShaded,       s"Each province, shift support toward Active Opposition [$SearchAndDestroy_Shaded]"),
+      noteIf(bodyCount,      s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]")
+    ).flatten
 
     def selectAssaultSpaces(): Unit = {
 
       val limitOK    = params.maxSpaces map (n => assaultSpaces.size < n) getOrElse true
-      val abramsOK   = maxTwoSpaces == false || assaultSpaces.size < 2
+      val abramsOK   = abramsShaded == false || assaultSpaces.size < 2
       val hasTheCash = faction == US || params.free || bodyCount || game.arvnResources >= 3
       val candidates = if (limitOK && abramsOK && hasTheCash)
         spaceNames(game.spaces filter isCandidate)
@@ -1107,11 +1154,10 @@ object Human {
       askMenu(choices, "\nChoose one:").head match {
         case "select" =>
           val name = askCandidate("\nAssault in which space: ", candidates)
-          val assaultParams = if (faction == US &&
-              !game.getSpace(name).isLowland &&
-              capabilityInPlay(M48Patton_Unshaded) &&
-              m48PattonSpaces.size < 2 &&
-              askYorN(s"Remove 2 extra pieces in this Assault [$M48Patton_Unshaded]? (y/n) ")) {
+          val assaultParams = if (m48Patton &&
+                                  m48PattonSpaces.size < 2 &&
+                                  !game.getSpace(name).isLowland &&
+                                  askYorN(s"Remove 2 extra pieces in this Assault [$M48Patton_Unshaded]? (y/n) ")) {
             m48PattonSpaces = name :: m48PattonSpaces
             params.copy(assaultRemovesTwoExtra = true)
           }
@@ -1142,6 +1188,8 @@ object Human {
 
     log(s"\n$faction chooses Assault operation")
     log(separator())
+    if (notes.nonEmpty)
+      notes foreach println
 
     selectAssaultSpaces()
 
@@ -1154,7 +1202,33 @@ object Human {
   // == Insurgent Operations ===========================================
   // ====================================================================
 
+  val Cap_Cadres             = "#116 Cadres"                 // affects VC terror and agitate / VC rally agitate
+
+  // AAA_Unshaded    - Rally that Improves Trail may select 1 space only
+  // SA2s_Shaded     - NVA Rally improves Trail 2 boxes instead of 1
+  // Cadres_Shaded   - VC Rally in 1 space that already had a base may Agitage (even if COIN control)
+  // Mo_McNamaraLine - prohibits trail improvement by rally
+  
   def executeRally(faction: Faction, params: Params): Unit = {
+    val mcnamara = faction == NVA && momentumInPlay(Mo_McNamaraLine)
+    val sa2s     = faction == NVA && !mcnamara && capabilityInPlay(SA2s_Shaded)
+    val aaa      = faction == NVA && !mcnamara && !params.limOpOnly && capabilityInPlay(AAA_Unshaded)
+    val cadres   = faction == VC && capabilityInPlay(Cadres_Shaded)
+    
+    val notes = List(
+      noteIf(mcnamara, s"Trail improvemnet is prohibited [Momentum: $Mo_McNamaraLine]"),
+      noteIf(sa2s,     s"Trail improvement is 2 boxes instead of 1 [$SA2s_Shaded]"),
+      noteIf(aaa,      s"Rally that improves the Trail may select 1 space only [$AAA_Unshaded]"),
+      noteIf(cadres,   s"Rally in one space with existing base by Agitate [$Cadres_Shaded]")
+    ).flatten
+
+
+
+    if (notes.nonEmpty) {
+      println()
+      notes foreach println
+    }
+    
   }
 
   def executeMarch(faction: Faction, params: Params): Unit = {

@@ -353,10 +353,10 @@ object Human {
     ).flatten
 
     val availOps = CoinOp.ALL filter {
-      case Train      => true
-      case Patrol     => true
-      case Sweep      => !game.inMonsoon
-      case Assault    => !landsdale
+      case Train   => true
+      case Patrol  => true
+      case Sweep   => !game.inMonsoon
+      case Assault => !landsdale
     }
     val choices = availOps map (op => op -> op.toString)
 
@@ -375,12 +375,19 @@ object Human {
   }
 
   def executeInsurgentCmd(faction: Faction, params: Params): Unit = {
-    val choices: List[(Option[InsurgentOp], String)] =
-      (InsurgentOp.ALL map (op => Some(op) -> op.toString)) :+ (None -> "Abort current action")
+    val notes = List(
+      noteIf(game.inMonsoon, s"March is prohibited [Not allowed in Monsoon]")
+    ).flatten
 
-    val op = askMenu(choices, "\nChoose one:").head getOrElse { throw AbortAction }
-
-    op match {
+    val availOps = InsurgentOp.ALL filter {
+      case Rally  => true
+      case March  => !game.inMonsoon
+      case Attack => true
+      case Terror => true
+    }
+    val choices = availOps map (op => op -> op.toString)
+    
+    askMenu(choices, "\nChoose operation:").head match {
       case Rally  => executeRally(faction, params)
       case March  => executeMarch(faction, params)
       case Attack => executeAttack(faction, params)
@@ -488,7 +495,7 @@ object Human {
       }
     }
     
-    def selectTrainSpaces(): Unit = {
+    def selectTrainSpace(): Unit = {
       val candidates = spaceNames(game.spaces filter isCandidate)
       val canSelect = candidates.nonEmpty && (params.maxSpaces map (x => selectedSpaces.size < x) getOrElse true)
       val choices = List(
@@ -512,11 +519,11 @@ object Human {
           log(s"\n$faction selects $name for Training")
           promptToAddForces(name)
           selectedSpaces = selectedSpaces :+ name
-          selectTrainSpaces()
+          selectTrainSpace()
 
         case "special" =>
           executeSpecialActivity(faction, params, availableActivities)
-          selectTrainSpaces()
+          selectTrainSpace()
 
         case _ => // finished
       }
@@ -609,7 +616,7 @@ object Human {
     if (notes.nonEmpty)
       notes foreach println
 
-    selectTrainSpaces()
+    selectTrainSpace()
     if (selectedSpaces.nonEmpty)
       promptFinalAction() // Pacify, Place base, Xfer Patronage to ARVN resources
 
@@ -894,7 +901,7 @@ object Human {
     }
     
     // Select provinces/cities (not N. Vietnam)
-    def selectSweepSpaces(): Unit = {
+    def selectSweepSpace(): Unit = {
       val candidates = if (sweepSpaces.size < maxSpaces)
         spaceNames(game.nonLocSpaces filterNot (sp => sp.isNorthVietnam || sweepSpaces(sp.name)))
       else
@@ -917,11 +924,11 @@ object Human {
           moveCubesTo(name)
           if (cobrasUnshaded && cobrasSpaces.size < 2)
             doCobras(name)
-          selectSweepSpaces()
+          selectSweepSpace()
           
         case "special" =>
           executeSpecialActivity(faction, params, availableActivities)
-          selectSweepSpaces()
+          selectSweepSpace()
 
         case _ => // finished
       }
@@ -1004,7 +1011,7 @@ object Human {
     if (notes.nonEmpty)
       notes foreach println
     
-    selectSweepSpaces()
+    selectSweepSpace()
     if (sweepSpaces.nonEmpty) {
       activateGuerrillas()
       if (boobyTraps)
@@ -1185,7 +1192,7 @@ object Human {
       noteIf(bodyCount,      s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]")
     ).flatten
 
-    def selectAssaultSpaces(): Unit = {
+    def selectAssaultSpace(): Unit = {
 
       val limitOK    = params.maxSpaces map (n => assaultSpaces.size < n) getOrElse true
       val abramsOK   = abramsShaded == false || assaultSpaces.size < 2
@@ -1239,11 +1246,11 @@ object Human {
             performAssault(name, ARVN, params)
           }
           assaultSpaces = assaultSpaces :+ name
-          selectAssaultSpaces()
+          selectAssaultSpace()
 
         case "special" =>
           executeSpecialActivity(faction, params, availableActivities)
-          selectAssaultSpaces()
+          selectAssaultSpace()
 
         case _ => // finished
       }
@@ -1254,7 +1261,7 @@ object Human {
     if (notes.nonEmpty)
       notes foreach println
 
-    selectAssaultSpaces()
+    selectAssaultSpace()
 
     //  Last chance to perform special activity
     if (Special.allowed && askYorN("\nDo you wish to perform a special activity? (y/n) "))
@@ -1343,7 +1350,7 @@ object Human {
       }
     }
     
-    def selectRallySpaces(): Unit = {
+    def selectRallySpace(): Unit = {
       val candidates = spaceNames(game.nonLocSpaces filter (sp => sp.support <= Neutral && !rallySpaces.contains(sp.name)))
       val hasTheCash = params.free || game.resources(faction) > 0
       val atMax      = params.maxSpaces map (_ >= rallySpaces.size) getOrElse false
@@ -1376,11 +1383,11 @@ object Human {
           
           if (canAgitate && askYorN(s"Do you wish to Agitate in $name? (y/n) ") && agitateSpace(name))
             didCadres = true
-          selectRallySpaces()
+          selectRallySpace()
         
         case "special" =>
           executeSpecialActivity(faction, params, availableActivities)
-          selectRallySpaces()
+          selectRallySpace()
         
         case _ =>
       }
@@ -1391,7 +1398,7 @@ object Human {
     if (notes.nonEmpty)
       notes foreach println
     
-    selectRallySpaces()
+    selectRallySpace()
     
     if (faction == NVA && game.resources(NVA) >= 2 && game.trail < TrailMax &&
          !mcnamara && (!aaa || rallySpaces.size == 1)) {
@@ -1411,6 +1418,108 @@ object Human {
   }
 
   def executeMarch(faction: Faction, params: Params): Unit = {
+    val availableActivities = if (faction == NVA)
+      Infiltrate::Bombard::Ambush::Nil
+    else
+      Tax::Subvert::Ambush::Nil
+    
+    val moveableTypes   = if (faction == NVA) NVATroops::NVAGuerrillas else VCGuerrillas
+    val maxDestinations = params.maxSpaces getOrElse 1000
+    var destinations    = Map.empty[String, Boolean]  // True if space has been paid for
+    val alreadyMoved    = new MovingGroups()
+    
+    def moveablePieces(name: String) = game.getSpace(name).pieces.only(moveableTypes) - alreadyMoved(name)
+
+    def moveToDestination(destName: String): Unit = {
+      val srcCandidates = getAdjacent(destName).toList.sorted filter (moveablePieces(_).total > 0)
+      if (srcCandidates.isEmpty)
+        println(s"\nThere are no pieces that can reach $destName")
+      else {
+        val choices = (srcCandidates map (name => name -> name)) :+ ("none" -> "Do not move any pieces")
+
+        val srcName = askMenu(choices, "Move pieces from:").head
+        if (srcName != "none") {
+          val src         = game.getSpace(srcName)
+          val dest        = game.getSpace(destName)
+          val canContinue = !params.limOpOnly && faction == NVA && game.trail > TrailMin && isInLaosCambodia(destName)
+          val trailMove   = faction == NVA && game.trail == TrailMax && (isInLaosCambodia(srcName) || isInLaosCambodia(destName))
+          val free        = params.free || dest.isLOC || trailMove || destinations(destName)
+          val moveable    = src.pieces.only(moveableTypes)
+          val coinForces  = dest.pieces.totalOf(CoinForces)
+          
+          if (free || game.resources(faction) > 0) {
+            if (!free) {
+              log(s"\n$faction pays to move pieces into $destName")
+              log(separator())
+              decreaseResources(faction, 1)
+            }
+            
+            val num      = askInt(s"Move how many pieces from $srcName", 1, moveable.total)
+            val movers   = askPieces(moveable, num)
+            val revealed = if ((dest.isLOC || dest.support > Neutral) && (coinForces + movers.total) > 3)
+              movers.only(UndergroundGuerrillas)
+            else
+              Pieces()
+            
+            movePieces(movers, srcName, destName)
+            revealPieces(destName, revealed)
+            if (canContinue) {
+              if (movers.total == 1)
+                println("This piece can continue moving [Trail > 0]")
+              else
+                println("These pieces can continue moving [Trail > 0]")
+            }
+            else
+              alreadyMoved.add(destName, movers)
+          }
+          else
+            println(s"\n$faction does not have a resource to pay for the move into $destName")
+        }
+      }
+    }
+
+    def nextMarchAction(): Unit = {
+      val candidates = spaceNames(game.spaces filter (sp => !destinations.contains(sp.name)))
+      val canSelect  = candidates.nonEmpty && destinations.size < maxDestinations
+      val moveCandidates = destinations.keys.toList.sorted filter { destName =>
+        (getAdjacent(destName) exists (moveablePieces(_).total > 0))
+      }
+      
+      val topChoices = List(
+        choice(canSelect,       "select",  s"Add a march destination space"),
+        choice(Special.allowed, "special",  "Perform a Special Activity")
+      ).flatten
+      val moveChoices = moveCandidates map (name => name -> s"Move pieces into $name")
+      val lastChoice = List("finished" -> "Finished with March operation")
+              
+      askMenu(topChoices:::moveChoices:::lastChoice, "\nChoose one:").head match {
+        case "select" =>
+          val name = askCandidate("\nAdd which space as a march destination: ", candidates)
+          destinations = destinations + (name -> false)
+                
+          log(s"\n$faction selects $name as a March destination")
+          nextMarchAction()
+        
+        case "special" =>
+          executeSpecialActivity(faction, params, availableActivities)
+          nextMarchAction()
+        
+        case "finished" =>
+        
+        case destName =>
+          moveToDestination(destName)
+          nextMarchAction()
+      }
+    }
+
+    log(s"\n$faction chooses March operation")
+    log(separator())
+    
+    nextMarchAction()
+          
+    //  Last chance to perform special activity
+    if (Special.allowed && askYorN("\nDo you wish to perform a special activity? (y/n) "))
+      executeSpecialActivity(faction, params, availableActivities)
   }
 
   def executeAttack(faction: Faction, params: Params): Unit = {

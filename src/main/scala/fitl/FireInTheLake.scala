@@ -350,6 +350,11 @@ object FireInTheLake {
   def getAdjacentCities(name: String): Set[String] = getAdjacent(name) filter { x => game.getSpace(x).isCity }
   def getAdjacentLOCsAndCities(name: String) = getAdjacentLOCs(name) ++ getAdjacentCities(name)
   
+  //  All spaces in Laos and Cambodia
+  val LaosCambodia = List(CentralLaos, SouthernLaos, NortheastCambodia, TheFishhook, TheParrotsBeak, Sihanoukville)
+  
+  def isInLaosCambodia(name: String) = LaosCambodia contains name
+  
   //  Return a sequence of all spaces that can be reached from the given space by patrolling cubes.
   //  A cube can move on to adjacent LOCs/Cities and keep moving via adjacent LOCs/Cities until
   //  it reaches a space with an insurgent piece.
@@ -440,6 +445,7 @@ object FireInTheLake {
   val Guerrillas      = List(NVAGuerrillas_A, VCGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_U)
   val ActiveGuerrillas      = List(NVAGuerrillas_A, VCGuerrillas_A)
   val UndergroundGuerrillas = List(NVAGuerrillas_U, VCGuerrillas_U)
+  val CoinForces      = List(USTroops, Irregulars_A, Irregulars_U, ARVNTroops, ARVNPolice, Rangers_A, Rangers_U)
 
   val factionPieces: Map[Faction, List[PieceType]] = Map(
     US   -> USPieces,
@@ -757,9 +763,9 @@ object FireInTheLake {
 
     override def toString() = name
   }
-  case object Uncontrolled   extends Control { val name = "Uncontrolled"    }
-  case object CoinControlled extends Control { val name = "COIN Controlled" }
-  case object NvaControlled  extends Control { val name = "NVA Controlled"  }
+  case object Uncontrolled extends Control { val name = "Uncontrolled"    }
+  case object CoinControl  extends Control { val name = "COIN Control" }
+  case object NvaControl   extends Control { val name = "NVA Control"  }
 
   //  Definition of a map space: City, Province, LOC
 
@@ -789,8 +795,8 @@ object FireInTheLake {
 
     def coinControlled: Boolean = pieces.totalOf(CoinPieces) > pieces.totalOf(InsurgentPieces)
     def nvaControlled: Boolean  = pieces.totalOf(NVAPieces) > pieces.totalOf(NonNVAPieces)
-    def control = if      (!isLOC && coinControlled) CoinControlled
-                  else if (!isLOC && nvaControlled)  NvaControlled
+    def control = if      (!isLOC && coinControlled) CoinControl
+                  else if (!isLOC && nvaControlled)  NvaControl
                   else                               Uncontrolled
 
     def supportValue: Int = support match {
@@ -1060,7 +1066,7 @@ object FireInTheLake {
   val Mo_Claymores         = "#17 Claymores"                // Unshaded (prohibits ambush, affect guerrilla march)
   val Mo_DaNang            = "#22 Da Nang"                  // Shaded (prohibits air strike)
   val Mo_McNamaraLine      = "#38 McNamara Line"            // Single event (prohibits infiltrate, prohibits trail improvement by rally)
-  val Mo_Oriskany          = "#39 Oriskany"                 // Shaded (prohibits degrade of trail)
+  val Mo_Oriskany          = "#39 Oriskany"                 // Shaded (prohibits degrade of trail) (includes air strike, coup round, NOT evnts!)
   val Mo_BombingPause      = "#41 Bombing Pause"            // Single event (prohibits air strike)
   val Mo_559TransportGrp   = "#46 559th Transport Grp"      // Unshaded (Infiltrate is max 1 space)
   val Mo_BodyCount         = "#72 Body Count"               // Unshaded (affects asasult and patrol)

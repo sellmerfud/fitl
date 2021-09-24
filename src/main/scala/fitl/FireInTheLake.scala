@@ -473,6 +473,8 @@ object FireInTheLake {
     case Rangers_A | Rangers_U             => Seq(Rangers_A, Rangers_U)
     case VCGuerrillas_A | VCGuerrillas_U   => Seq(VCGuerrillas_A, VCGuerrillas_U)
     case NVAGuerrillas_A | NVAGuerrillas_U => Seq(NVAGuerrillas_A, NVAGuerrillas_U)
+    case NVABase | NVATunnel               => Seq(NVABase, NVATunnel)
+    case VCBase | VCTunnel                 => Seq(VCBase, VCTunnel)
     case _                                 => Seq(pieceType)
   }
 
@@ -516,7 +518,7 @@ object FireInTheLake {
                                has(ActiveGuerrillas) ||
                                (!has(Guerrillas) && has(InsurgentBases))
 
-    def total = Faction.ALL.foldLeft(0) { (sum, faction) => sum + totalFaction(faction) }
+    def total = totalOf(AllPieceTypes)
 
     // For some force calculations we want to know simply the total pieces
     // regardless of active/underground and regarless of tunneled bases
@@ -1054,7 +1056,7 @@ object FireInTheLake {
   val Mo_RollingThunder    = "#10 Rolling Thunder"          // Shaded   (prohibits air strike)
   val Mo_Medevac_Unshaded  = s"$Medevac_prefix (unshaded)"  // (affects commitment phase during coup round)
   val Mo_Medevac_Shaded    = s"$Medevac_prefix (shaded)"    // (prohibits air lift)
-  val Mo_BlowtorchKomer    = "#16 Blowtorch Komer"          // Unshaded (Pacity costs 1 resource per step/terror, during Support phase)
+  val Mo_BlowtorchKomer    = "#16 Blowtorch Komer"          // Unshaded (Pacify costs 1 resource per step/terror, during Support phase)
   val Mo_Claymores         = "#17 Claymores"                // Unshaded (prohibits ambush, affect guerrilla march)
   val Mo_DaNang            = "#22 Da Nang"                  // Shaded (prohibits air strike)
   val Mo_McNamaraLine      = "#38 McNamara Line"            // Single event (prohibits infiltrate, prohibits trail improvement by rally)
@@ -1325,7 +1327,13 @@ object FireInTheLake {
     def isCoupRound = cardsDrawn > 0 && deck(currentCard).isCoup
     def onDeckIsCoup = onDeckCard map (deck(_).isCoup) getOrElse false
     def inMonsoon = !isCoupRound && onDeckIsCoup
-
+    def resources(faction: Faction) = faction match {
+      case US   => throw new IllegalArgumentException("resources called for US faction!")
+      case ARVN => arvnResources
+      case NVA  => nvaResources
+      case VC   => vcResources
+    }
+    
     // Count the total number of something in each space on the map
     def totalOnMap(numberPerSpace: Space => Int): Int =
       spaces.foldLeft(0) { (total, space) => total + numberPerSpace(space) }
@@ -2101,6 +2109,7 @@ object FireInTheLake {
     val amount = if (faction == US || faction == ARVN) 3 else 1
     log()
     log(s"$faction faction passes")
+    log(separator())
     log(s"Move the $faction cylinder to the pass box")
     increaseResources(faction, amount)
   }
@@ -2140,6 +2149,22 @@ object FireInTheLake {
         log(s"Decrease $VC resources by -$amount to ${game.vcResources}")
 
       case _ =>
+    }
+  }
+  
+  def improveTrail(num: Int): Unit = if (num > 0) {
+    val newTrail = (game.trail + num) min TrailMax
+    if (newTrail != game.trail) {
+      game = game.copy(trail = newTrail)
+      log(s"Improve the trail by ${amountOf(num, "box", Some("boxes"))} to $newTrail")
+    }
+  }
+  
+  def degradeTrail(num: Int): Unit = if (num > 0) {
+    val newTrail = (game.trail - num) max TrailMin
+    if (newTrail != game.trail) {
+      game = game.copy(trail = newTrail)
+      log(s"Degrade the trail by ${amountOf(num, "box", Some("boxes"))} to $newTrail")
     }
   }
 
@@ -2360,7 +2385,6 @@ object FireInTheLake {
     }
   }
 
-
   def addTunnelMarker(spaceName: String, base: PieceType): Unit = {
     val sp = game.getSpace(spaceName)
     assert(base == VCBase || base == NVABase, s"addTunnelMarker() called with invalid type: $base")
@@ -2494,7 +2518,10 @@ object FireInTheLake {
       Pieces()
     }
     else {
-      println(s"\nPlace up to ${amountOf(maxPieces, "piece")} in $spaceName (${andList(availTypes)})")
+      availTypes match {
+        case pieceType::Nil => println(s"\nPlace up to ${amountOf(maxPieces, pieceType.singular)} in $spaceName")
+        case _              => println(s"\nPlace up to ${amountOf(maxPieces, "piece")} in $spaceName (${andList(availTypes)})")
+      }
 
       def nextType(placed: Pieces, remainingTypes: List[PieceType]): Pieces = {
         val maxRemaining = maxPieces - placed.total

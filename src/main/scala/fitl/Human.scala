@@ -115,6 +115,96 @@ object Human {
     spaceNames(srcSpaces)
   }
   
+  // Returns false if user decides not to pacify in space
+  def pacifySpace(name: String, faction: Faction): Boolean = {
+    val cost        = if (momentumInPlay(Mo_BlowtorchKomer)) 1 else 3
+    val maxLevel    = if (faction == US && capabilityInPlay(CORDS_Shaded)) PassiveSupport else ActiveSupport
+    val sp          = game.getSpace(name)
+    val maxShift    = ((maxLevel.value - sp.support.value) max 0) min 2
+    val maxInSpace  = maxShift + sp.terror
+    val maxPossible = maxInSpace min (game.arvnResources / cost)
+
+    log(s"\nPacifying in $name")
+    log(separator())
+    if (momentumInPlay(Mo_BlowtorchKomer))
+      log(s"Each terror/shift cost only 1 resource [Momentum: $Mo_BlowtorchKomer]")
+    if (maxLevel == PassiveSupport)
+      log(s"Cannot shift to Active Suport [$CORDS_Shaded]")
+    
+    if (maxPossible == 0) {
+      println(s"\nIt is not possible to pacify in $name")
+      false
+    }
+    else {
+      val choices = List.range(maxPossible, -1, -1) map {
+        case 0                    => (0 -> s"Do not pacify in $name")
+        case n if sp.terror == 0  => (n -> s"Shift ${amountOf(n, "level")} to ${SupportType(sp.support.value + n)}")
+        case n if n <= sp.terror  => (n -> s"Remove ${amountOf(n, "terror marker")}")
+        case n                    => (n -> s"Remove ${amountOf(sp.terror, "terror marker")} and shift ${amountOf(n - sp.terror, "level")} to ${SupportType(sp.support.value + (n - sp.terror))}")
+      }
+      
+      val num = askMenu(choices, "\nChoose one:", allowAbort = false).head
+      if (num == 0)
+        false
+      else {
+        val shift = (num - sp.terror) max 0
+        log()
+        decreaseResources(ARVN, num * cost)
+        removeTerror(name, num min sp.terror)
+        increaseSupport(name, shift)
+        true
+      }
+    }
+  }
+
+  // Returns false if user decides not to agitate in space
+  def agitateSpace(name: String): Boolean = {
+    val sp          = game.getSpace(name)
+    val maxShift    = ((sp.support.value - ActiveOpposition.value) max 0) min 2
+    val maxInSpace  = maxShift + sp.terror
+    val cadres      = capabilityInPlay(Cadres_Unshaded)
+    val maxPossible = maxInSpace min game.arvnResources
+
+    log(s"\nAgitating in $name")
+    log(separator())
+    if (cadres)
+      log(s"VC must remove 2 guerrillas per agitate space [$Cadres_Unshaded]")
+    
+    if (cadres && sp.pieces.totalOf(VCGuerrillas) < 2) {
+      log(s"\nThere are not two VC guerrillas in $name")
+      false
+    }
+    else if (maxPossible == 0) {
+      log(s"\nIt is not possible to agitate in $name")
+      false
+    }
+    else {
+      val choices = List.range(maxPossible, -1, -1) map {
+        case 0                    => (0 -> s"Do not agitate in $name")
+        case n if sp.terror == 0  => (n -> s"Shift ${amountOf(n, "level")} to ${SupportType(sp.support.value - n)}")
+        case n if n <= sp.terror  => (n -> s"Remove ${amountOf(n, "terror marker")}")
+        case n                    => (n -> s"Remove ${amountOf(sp.terror, "terror marker")} and shift ${amountOf(n - sp.terror, "level")} to ${SupportType(sp.support.value - (n - sp.terror))}")
+      }
+      
+      val num = askMenu(choices, "\nChoose one:", allowAbort = false).head
+      if (num == 0)
+        false
+      else {
+        val shift = (num - sp.terror) max 0
+        log()
+        if (cadres) {
+          val toRemove = askPieces(sp.pieces, 2, VCGuerrillas, Some(s"Remove guerrillas for [$Cadres_Unshaded]"))
+          removeToAvailable(name, toRemove)
+        }
+        decreaseResources(VC, num)
+        removeTerror(name, num min sp.terror)
+        decreaseSupport(name, shift)
+        true
+      }
+    }
+  }
+
+  
   
   // A human player has opted to take an action on the current card.
   def act(): Unit = {
@@ -341,65 +431,64 @@ object Human {
     ).flatten
 
 
-    def selectTrainSpaces(): Unit = {
+    def promptToAddForces(name: String): Unit = {
+      val sp = game.getSpace(name)
+      val hasTheCash = params.free || (faction match {
+        case ARVN => game.arvnResources >= 3
+        case _    => (game.arvnResources - game.econ) >= 3  // US for Rangers
 
-      def promptToAddForces(name: String): Unit = {
-        val sp = game.getSpace(name)
-        val hasTheCash = params.free || (faction match {
-          case ARVN => game.arvnResources >= 3
-          case _    => (game.arvnResources - game.econ) >= 3  // US for Rangers
+      })
+      val canPlaceArvn = hasTheCash && (if (faction == US)
+        sp.pieces.has(USBase)
+      else
+        sp.isCity || sp.pieces.has(CoinBases))
+      val irregularsOK  = faction == US && game.piecesToPlace.has(Irregulars)
+      val extraPoliceOK = canPlaceExtraPolice && !placedExtraPolice && sp.pieces.has(USTroops)
+      val rangersOK     = canPlaceArvn && game.piecesToPlace.has(Rangers)
+      val cubesOK       = canPlaceArvn && game.piecesToPlace.has(ARVNCubes)
 
-        })
-        val canPlaceArvn = hasTheCash && (if (faction == US)
-          sp.pieces.has(USBase)
-        else
-          sp.isCity || sp.pieces.has(CoinBases))
-        val irregularsOK  = faction == US && game.piecesToPlace.has(Irregulars)
-        val extraPoliceOK = canPlaceExtraPolice && !placedExtraPolice && sp.pieces.has(USTroops)
-        val rangersOK     = canPlaceArvn && game.piecesToPlace.has(Rangers)
-        val cubesOK       = canPlaceArvn && game.piecesToPlace.has(ARVNCubes)
+      val choices = List(
+        choice(extraPoliceOK, "extra",      s"Place extra Police [$CombActionPlatoons_Unshaded]"),
+        choice(irregularsOK,  "irregulars", "Place Irregulars"),
+        choice(rangersOK,     "rangers",    "Place Rangers"),
+        choice(cubesOK,       "cubes",      "Place ARVN Troops/Police"),
+        choice(true,          "finished",   "Do not place forces")
+        ).flatten
 
-        val choices = List(
-          choice(extraPoliceOK, "extra",      s"Place extra Police [$CombActionPlatoons_Unshaded]"),
-          choice(irregularsOK,  "irregulars", "Place Irregulars"),
-          choice(rangersOK,     "rangers",    "Place Rangers"),
-          choice(cubesOK,       "cubes",      "Place ARVN Troops/Police"),
-          choice(true,          "finished",   "Do not place forces")
-          ).flatten
+      askMenu(choices, s"\nTraining in $name:").head match {
+        case "extra" =>
+          val toPlace = askPiecesToPlace(name, ARVNPolice::Nil, maxToPlace = 1)
+          placePieces(name, toPlace)
 
-        askMenu(choices, s"\nTraining in $name:").head match {
-          case "extra" =>
-            val toPlace = askPiecesToPlace(name, ARVNPolice::Nil, maxToPlace = 1)
+        case "irregulars" =>
+          val toPlace = askPiecesToPlace(name, Irregulars_U::Nil, maxToPlace = 2)
+          placePieces(name, toPlace)
+
+        case "rangers" =>
+          val toPlace = askPiecesToPlace(name, Rangers_U::Nil, maxToPlace = 2)
+          if (toPlace.total > 0) {
+            log()
+            if (!params.free)
+              decreaseResources(ARVN, 3)
+            arvnPlacedIn = name :: arvnPlacedIn
             placePieces(name, toPlace)
+          }
 
-          case "irregulars" =>
-            val toPlace = askPiecesToPlace(name, Irregulars_U::Nil, maxToPlace = 2)
+        case "cubes" =>
+          val toPlace = askPiecesToPlace(name, ARVNTroops::ARVNPolice::Nil, maxToPlace = 6)
+          if (toPlace.total > 0) {
+            log()
+            if (!params.free)
+              decreaseResources(ARVN, 3)
+            arvnPlacedIn = name :: arvnPlacedIn
             placePieces(name, toPlace)
+          }
 
-          case "rangers" =>
-            val toPlace = askPiecesToPlace(name, Rangers_U::Nil, maxToPlace = 2)
-            if (toPlace.total > 0) {
-              log()
-              if (!params.free)
-                decreaseResources(ARVN, 3)
-              arvnPlacedIn = name :: arvnPlacedIn
-              placePieces(name, toPlace)
-            }
-
-          case "cubes" =>
-            val toPlace = askPiecesToPlace(name, ARVNTroops::ARVNPolice::Nil, maxToPlace = 6)
-            if (toPlace.total > 0) {
-              log()
-              if (!params.free)
-                decreaseResources(ARVN, 3)
-              arvnPlacedIn = name :: arvnPlacedIn
-              placePieces(name, toPlace)
-            }
-
-          case _ =>
-        }
+        case _ =>
       }
-
+    }
+    
+    def selectTrainSpaces(): Unit = {
       val candidates = spaceNames(game.spaces filter isCandidate)
       val canSelect = candidates.nonEmpty && (params.maxSpaces map (x => selectedSpaces.size < x) getOrElse true)
       val choices = List(
@@ -420,8 +509,8 @@ object Human {
       askMenu(choices, "\nChoose one:").head match {
         case "select" =>
           val name = askCandidate("\nTrain in which space: ", candidates)
+          log(s"\n$faction selects $name for Training")
           promptToAddForces(name)
-
           selectedSpaces = selectedSpaces :+ name
           selectTrainSpaces()
 
@@ -461,35 +550,6 @@ object Human {
 
       val canXferPatronage = pacifySpaces.isEmpty && faction == US && selectedSpaces.contains(Saigon) && game.patronage > 0
 
-      def pacifySpace(): Unit = {
-        val name        = askCandidate("\nPacify in which space: ", pacifyCandidates)
-        val sp          = game.getSpace(name)
-        val maxShift    = ((maxPacifyLevel.value - sp.support.value) max 0) min 2
-        val maxInSpace  = maxShift + sp.terror
-        val maxPossible = maxInSpace min (game.arvnResources / 3)
-
-        val choices = List.range(maxPossible, -1, -1) map {
-          case 0                    => (0 -> s"Do not pacify in $name")
-          case n if sp.terror == 0  => (n -> s"Shift ${amountOf(n, "level")} to ${SupportType(sp.support.value + n)}")
-          case n if n <= sp.terror  => (n -> s"Remove ${amountOf(n, "terror marker")}")
-          case n                    => (n -> s"Remove ${amountOf(sp.terror, "terror marker")} and shift ${amountOf(n - sp.terror, "level")} to ${SupportType(sp.support.value + n - sp.terror)}")
-        }
-        val p = if (maxPacifyLevel == PassiveSupport)
-          s"\nYou cannot shift to Active Suport [$CORDS_Shaded]\nChoose one:"
-        else
-          "\nChoose one:"
-        printSummary(spaceSummary(name))
-        val num = askMenu(choices, p, allowAbort = false).head
-        if (num > 0) {
-          val shift = (num - sp.terror) max 0
-          log()
-          decreaseResources(ARVN, num * 3)
-          removeTerror(name, num min sp.terror)
-          increaseSupport(name, shift)
-          pacifySpaces = name :: pacifySpaces
-        }
-      }
-
       if (pacifyCandidates.nonEmpty ||
           baseCandidates.nonEmpty   ||
           canXferPatronage) {
@@ -504,9 +564,12 @@ object Human {
 
         askMenu(choices, "\nChoose final Train action:").head match {
           case "pacify" =>
-            pacifySpace()
+            val name = askCandidate("\nPacify in which space: ", pacifyCandidates)
+            if (pacifySpace(name, faction))
+              pacifySpaces = name :: pacifySpaces
+              
             if (pacifySpaces.size < maxPacifySpaces)
-            promptFinalAction()
+              promptFinalAction()
 
           case "base" =>
             loggingControlChanges {
@@ -1202,33 +1265,149 @@ object Human {
   // == Insurgent Operations ===========================================
   // ====================================================================
 
-  val Cap_Cadres             = "#116 Cadres"                 // affects VC terror and agitate / VC rally agitate
-
   // AAA_Unshaded    - Rally that Improves Trail may select 1 space only
   // SA2s_Shaded     - NVA Rally improves Trail 2 boxes instead of 1
   // Cadres_Shaded   - VC Rally in 1 space that already had a base may Agitage (even if COIN control)
   // Mo_McNamaraLine - prohibits trail improvement by rally
-  
   def executeRally(faction: Faction, params: Params): Unit = {
-    val mcnamara = faction == NVA && momentumInPlay(Mo_McNamaraLine)
-    val sa2s     = faction == NVA && !mcnamara && capabilityInPlay(SA2s_Shaded)
-    val aaa      = faction == NVA && !mcnamara && !params.limOpOnly && capabilityInPlay(AAA_Unshaded)
-    val cadres   = faction == VC && capabilityInPlay(Cadres_Shaded)
+    val availableActivities = if (faction == NVA)
+      Infiltrate::Bombard::Nil
+    else
+      Tax::Subvert::Nil
+    val mcnamara    = faction == NVA && momentumInPlay(Mo_McNamaraLine)
+    val sa2s        = faction == NVA && !mcnamara && capabilityInPlay(SA2s_Shaded)
+    val aaa         = faction == NVA && !mcnamara && !params.limOpOnly && capabilityInPlay(AAA_Unshaded)
+    val cadres      = faction == VC  && capabilityInPlay(Cadres_Shaded)
+    var rallySpaces = List.empty[String]
+    var didCadres   = false
     
     val notes = List(
       noteIf(mcnamara, s"Trail improvemnet is prohibited [Momentum: $Mo_McNamaraLine]"),
       noteIf(sa2s,     s"Trail improvement is 2 boxes instead of 1 [$SA2s_Shaded]"),
       noteIf(aaa,      s"Rally that improves the Trail may select 1 space only [$AAA_Unshaded]"),
-      noteIf(cadres,   s"Rally in one space with existing base by Agitate [$Cadres_Shaded]")
+      noteIf(cadres,   s"May Agitate in one space with an existing base [$Cadres_Shaded]")
     ).flatten
 
 
+    def promptToAddPieces(name: String): Unit = {
+      val sp            = game.getSpace(name)
+      val guerrillas    = if (faction == NVA) NVAGuerrillas else VCGuerrillas
+      val underground   = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
+      val active        = if (faction == NVA) NVAGuerrillas_A else VCGuerrillas_A
+      val base          = if (faction == NVA) NVABase else VCBase
+      val canPlaceBase  = sp.totalBases < 2 && sp.pieces.totalOf(guerrillas) >= 2
+      val canHide       = faction == VC && sp.pieces.hasBase(VC) && sp.pieces.has(VCGuerrillas_A)
+      val maxGuerrillas = if (sp.pieces.hasBase(faction))
+        faction match {
+          case NVA => sp.pieces.totalNVABases + game.trail 
+          case _   => sp.pieces.totalVCBases + sp.population
+        }
+        
+      else
+        1
 
-    if (notes.nonEmpty) {
-      println()
-      notes foreach println
+      val noneMsg = if (canHide)
+        "Do not place or flip any pieces"
+      else
+        "Do not place any pieces"
+      val choices = List(
+        choice(true,              "place-one",   "Place a single guerrilla"),
+        choice(maxGuerrillas > 1, "place-many", s"Place up to $maxGuerrillas guerrillas at base"),
+        choice(canPlaceBase,      "place-base", s"Replace two guerrillas with a base"),
+        choice(canHide,           "hide",        "Flip all active guerrillas underground"),
+        choice(true,              "finished",    noneMsg)
+        ).flatten
+
+      askMenu(choices, s"\nRallying in $name:").head match {
+        case "place-one" =>
+          val toPlace = askPiecesToPlace(name, underground::Nil, maxToPlace = 1)
+          placePieces(name, toPlace)
+
+        case "place-many" =>
+          val toPlace = askPiecesToPlace(name, underground::Nil, maxToPlace = maxGuerrillas)
+          placePieces(name, toPlace)
+
+        case "place-base" =>
+          val toRemove = askPieces(sp.pieces, 2, guerrillas,  Some("Removing two guerrillas"))
+          val toPlace = askToPlaceBase(name, base)
+          loggingControlChanges {
+            removeToAvailable(name, toRemove)
+            placePieces(name, toPlace)
+          }
+
+        case "hide" =>
+          val toHide = sp.pieces.only(active)
+          hidePieces(name, toHide)
+
+        case _ =>
+      }
     }
     
+    def selectRallySpaces(): Unit = {
+      val candidates = spaceNames(game.nonLocSpaces filter (sp => sp.support <= Neutral && !rallySpaces.contains(sp.name)))
+      val hasTheCash = params.free || game.resources(faction) > 0
+      val atMax      = params.maxSpaces map (_ >= rallySpaces.size) getOrElse false
+      val canSelect  = !atMax && candidates.nonEmpty && hasTheCash
+      
+      val choices = List(
+        choice(canSelect,       "select",  s"Select a rally space"),
+        choice(Special.allowed, "special",  "Perform a Special Activity"),
+        choice(true,            "finished", "Finished selecting spaces")
+      ).flatten
+      
+      println(s"\nSpaces selected for Rally")
+      println(separator())
+      wrap("", rallySpaces) foreach println
+        
+      askMenu(choices, "\nChoose one:").head match {
+        case "select" =>
+          val name = askCandidate("\nRally in which space: ", candidates)
+          //  Note: COIN control does not prevent agitation here
+          val canAgitate = cadres && game.resources(VC) > 0 && ({
+            val sp = game.getSpace(name)
+            sp.pieces.hasBase(VC) && (sp.support != ActiveOpposition || sp.terror > 0)
+          })
+                
+          log(s"\n$faction selects $name for Rally")
+          if (!params.free)
+            decreaseResources(faction, 1)
+          promptToAddPieces(name)
+          rallySpaces = rallySpaces :+ name
+          
+          if (canAgitate && askYorN(s"Do you wish to Agitate in $name? (y/n) ") && agitateSpace(name))
+            didCadres = true
+          selectRallySpaces()
+        
+        case "special" =>
+          executeSpecialActivity(faction, params, availableActivities)
+          selectRallySpaces()
+        
+        case _ =>
+      }
+    }
+
+    log(s"\n$faction chooses Rally operation")
+    log(separator())
+    if (notes.nonEmpty)
+      notes foreach println
+    
+    selectRallySpaces()
+    
+    if (faction == NVA && game.resources(NVA) >= 2 && game.trail < TrailMax &&
+         !mcnamara && (!aaa || rallySpaces.size == 1)) {
+      val num = if (sa2s) 2 else 1
+
+      if (askYorN(s"Do you wish to spend 2 resources to improve the trail by ${amountOf(num, "box", Some("boxes"))}? (y/n) ")) {
+        log("\nNVA improves the trail")
+        log(separator())
+        decreaseResources(NVA, 2)
+        improveTrail(num)
+      }
+    }
+      
+    //  Last chance to perform special activity
+    if (Special.allowed && askYorN("\nDo you wish to perform a special activity? (y/n) "))
+      executeSpecialActivity(faction, params, availableActivities)
   }
 
   def executeMarch(faction: Faction, params: Params): Unit = {

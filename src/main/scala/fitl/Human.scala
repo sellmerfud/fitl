@@ -437,7 +437,7 @@ object Human {
 
     val typhoonKate = Special.allowed && prohibitedActivity.nonEmpty
     val notes = List(
-      noteIf(typhoonKate,                      s"${prohibitedActivity.get} speical activity prohibited [Momentum: $Mo_TyphoonKate]"),
+      noteIf(typhoonKate,                      s"${prohibitedActivity.getOrElse("")} speical activity prohibited [Momentum: $Mo_TyphoonKate]"),
       noteIf(canPlaceExtraPolice,              s"May place 1 ARVN Police in 1 training space with US Troops [$CombActionPlatoons_Unshaded]"),
       noteIf(maxPacifySpaces == 2,             s"May pactify in 2 spaces [$CORDS_Unshaded]"),
       noteIf(maxPacifyLevel == PassiveSupport, s"May not Pacify to Active Support [$CORDS_Shaded]")
@@ -521,8 +521,7 @@ object Human {
 
       askMenu(choices, "\nChoose one:").head match {
         case "select" =>
-          val name = askCandidateOrBlank("\nTrain in which space: ", candidates)
-          if (name != "") {
+          askCandidateOrBlank("\nTrain in which space: ", candidates) foreach { name =>
             log(s"\n$faction selects $name for Training")
             promptToAddForces(name)
             selectedSpaces = selectedSpaces :+ name
@@ -579,31 +578,31 @@ object Human {
 
         askMenu(choices, "\nChoose final Train action:").head match {
           case "pacify" =>
-            val name = askCandidateOrBlank("\nPacify in which space: ", pacifyCandidates)
-            if (name != "" && pacifySpace(name, faction))
+            askCandidateOrBlank("\nPacify in which space: ", pacifyCandidates) foreach { name =>
+            if (pacifySpace(name, faction))
               pacifySpaces = name :: pacifySpaces
+            }
             
             if (pacifySpaces.size < maxPacifySpaces)
               promptFinalAction()
 
           case "base" =>
             loggingControlChanges {
-              val name = askCandidateOrBlank("\nPlace an ARVN base in which space: ", baseCandidates)
-              if (name == "")
-                promptFinalAction()
-              else {
-                // askToPlace will ask the user to vountarily remove a base from the map
-                // if necessary.  If the user chooses not to, then it will return an
-                // empty Pieces instance.
-                val toPlace = askToPlaceBase(name, ARVNBase);
-                if (toPlace.isEmpty)
-                  promptFinalAction()
-                else {
-                  val sp    = game.getSpace(name)
-                  val cubes = askPieces(sp.pieces, 3, ARVNCubes,  Some("Removing ARVN cubes to replace with base"))
-                  removeToAvailable(name, cubes)
-                  placePieces(name, toPlace)
-                }
+              askCandidateOrBlank("\nPlace an ARVN base in which space: ", baseCandidates) match {
+                case None       => promptFinalAction()
+                case Some(name) =>
+                  // askToPlace will ask the user to vountarily remove a base from the map
+                  // if necessary.  If the user chooses not to, then it will return an
+                  // empty Pieces instance.
+                  val toPlace = askToPlaceBase(name, ARVNBase);
+                  if (toPlace.isEmpty)
+                    promptFinalAction()
+                  else {
+                    val sp    = game.getSpace(name)
+                    val cubes = askPieces(sp.pieces, 3, ARVNCubes,  Some("Removing ARVN cubes to replace with base"))
+                    removeToAvailable(name, cubes)
+                    placePieces(name, toPlace)
+                  }
               }
             }
 
@@ -673,7 +672,7 @@ object Human {
 
     val typhoonKate = Special.allowed && prohibitedActivity.nonEmpty
     val notes = List(
-      noteIf(typhoonKate,   s"${prohibitedActivity.get} speical activity prohibited [Momentum: $Mo_TyphoonKate]"),
+      noteIf(typhoonKate,   s"${prohibitedActivity.getOrElse("")} speical activity prohibited [Momentum: $Mo_TyphoonKate]"),
       noteIf(bodyCount,     s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]"),
       noteIf(pattonUshaded, s"In follow up assault, remove 2 extra enemy pieces [$M48Patton_Unshaded]"),
       noteIf(pattonShaded,  s"After Patrol NVA removes up to 2 cubes that moved [$M48Patton_Shaded]")
@@ -694,9 +693,9 @@ object Human {
 
       askMenu(choices, "\nChoose one:").head match {
         case "move" =>
-          val src = askCandidateOrBlank("\nMove cubes out of which space: ", srcCandidates)
-          if (src != "")
+          askCandidateOrBlank("\nMove cubes out of which space: ", srcCandidates) foreach { src =>
             moveCubesFrom(src)
+          }
           selectCubesToMove()
         case "special" =>
           executeSpecialActivity(faction, params, availableActivities)
@@ -721,14 +720,13 @@ object Human {
         if (num > 0) {
           val movers   = askPieces(eligible, num, PatrolCubes)
           val destinationName = limOpDest orElse {
-            val name = askCandidateOrBlank("\nSelect destination: ", destCandidates)
-            if (name == "")
-              None
-            else {
+            askCandidateOrBlank("\nSelect destination: ", destCandidates) map { name =>
+              // remember dest if lim op
               if (params.limOpOnly)
                 limOpDest = Some(name)
-              Some(name)
+              name
             }
+            
           }
           
           destinationName foreach { destName =>
@@ -864,7 +862,7 @@ object Human {
     
     val typhoonKate = Special.allowed && prohibitedActivity.nonEmpty
     val notes = List(
-      noteIf(typhoonKate,    s"${prohibitedActivity.get} speical activity prohibited [Momentum: $Mo_TyphoonKate]"),
+      noteIf(typhoonKate,    s"${prohibitedActivity.getOrElse("")} speical activity prohibited [Momentum: $Mo_TyphoonKate]"),
       noteIf(cobrasUnshaded, s"In 2 spaces, you may remove 1 active (untunneled) enemy [$Cobras_Unshaded]"),
       noteIf(platoonsShaded, s"US can select a maximum of 2 spaces [$CombActionPlatoons_Shaded]"),
       noteIf(boobyTraps,     s"Each space, VC afterward remove 1 troop on die roll 1-3 [$BoobyTraps_Shaded]")
@@ -907,8 +905,7 @@ object Human {
       askMenu(choices, "Choose one:").head match {
         case "move" =>
           val TroopType = if (faction == US) USTroops else ARVNTroops
-          val srcName   = askCandidateOrBlank(s"\nMove $TroopType from which space: ", candidates)
-          if (srcName != "") {
+          askCandidateOrBlank(s"\nMove $TroopType from which space: ", candidates) foreach { srcName =>
             val troops = game.getSpace(srcName).pieces.only(TroopType) - alreadyMoved(srcName)
             val num    = askInt(s"Move how many $TroopType", 0, troops.total)
           
@@ -948,8 +945,7 @@ object Human {
       
       askMenu(choices, "\nChoose one:").head match {
         case "sweep" =>
-          val name = askCandidateOrBlank("\nSweep in which space: ", candidates)
-          if (name != "") {
+          askCandidateOrBlank("\nSweep in which space: ", candidates) foreach { name =>
             sweepSpaces = sweepSpaces + name
             moveCubesTo(name)
             if (cobrasUnshaded && cobrasSpaces.size < 2)
@@ -1217,7 +1213,7 @@ object Human {
 
     val typhoonKate = Special.allowed && prohibitedActivity.nonEmpty
     val notes = List(
-      noteIf(typhoonKate,    s"${prohibitedActivity.get} speical activity prohibited [Momentum: $Mo_TyphoonKate]"),
+      noteIf(typhoonKate,    s"${prohibitedActivity.getOrElse("")} speical activity prohibited [Momentum: $Mo_TyphoonKate]"),
       noteIf(abramsUnshaded, s"In 1 space you may remove 1 (untunneled) base first [$Abrams_Unshaded]"),
       noteIf(abramsShaded,   s"Select a maximum of 2 spaces [$Abrams_Shaded]"),
       noteIf(m48Patton,      s"In 2 non-Lowland spaces remove 2 extra enemy pieces [$M48Patton_Unshaded]"),
@@ -1258,8 +1254,7 @@ object Human {
 
       askMenu(choices, "\nChoose one:").head match {
         case "select" =>
-          val name = askCandidateOrBlank("\nAssault in which space: ", candidates)
-          if (name != "") {
+          askCandidateOrBlank("\nAssault in which space: ", candidates) foreach { name =>
             val assaultParams = if (m48Patton &&
                                     m48PattonSpaces.size < 2 &&
                                     !game.getSpace(name).isLowland &&
@@ -1329,7 +1324,7 @@ object Human {
     
     val typhoonKate = Special.allowed && prohibitedActivity.nonEmpty
     val notes = List(
-      noteIf(typhoonKate, s"${prohibitedActivity.get} speical activity prohibited [Momentum: $Mo_TyphoonKate]"),
+      noteIf(typhoonKate, s"${prohibitedActivity.getOrElse("")} speical activity prohibited [Momentum: $Mo_TyphoonKate]"),
       noteIf(mcnamara,    s"Trail improvemnet is prohibited [Momentum: $Mo_McNamaraLine]"),
       noteIf(sa2s,        s"Trail improvement is 2 boxes instead of 1 [$SA2s_Shaded]"),
       noteIf(aaa,         s"Rally that improves the Trail may select 1 space only [$AAA_Unshaded]"),
@@ -1409,8 +1404,7 @@ object Human {
         
       askMenu(choices, "\nChoose one:").head match {
         case "select" =>
-          val name = askCandidateOrBlank("\nRally in which space: ", candidates)
-          if (name != "") {
+          askCandidateOrBlank("\nRally in which space: ", candidates) foreach { name =>
             //  Note: COIN control does not prevent agitation here
             val canAgitate = cadres && game.resources(VC) > 0 && ({
               val sp = game.getSpace(name)
@@ -1475,7 +1469,7 @@ object Human {
     
     val typhoonKate = Special.allowed && prohibitedActivity.nonEmpty
     val notes = List(
-      noteIf(typhoonKate, s"${prohibitedActivity.get} speical activity prohibited [Momentum: $Mo_TyphoonKate]")
+      noteIf(typhoonKate, s"${prohibitedActivity.getOrElse("")} speical activity prohibited [Momentum: $Mo_TyphoonKate]")
     ).flatten
     
     def moveablePieces(name: String) = game.getSpace(name).pieces.only(moveableTypes) - alreadyMoved(name)
@@ -1544,8 +1538,7 @@ object Human {
               
       askMenu(topChoices:::moveChoices:::lastChoice, "\nChoose one:").head match {
         case "select" =>
-          val name = askCandidateOrBlank("\nAdd which space as a march destination: ", candidates)
-          if (name != "") {
+          askCandidateOrBlank("\nAdd which space as a march destination: ", candidates) foreach { name =>
             destinations = destinations + (name -> false)
             log(s"\n$faction selects $name as a March destination")
           }
@@ -1634,8 +1627,7 @@ object Human {
 
       askMenu(choices, "\nChoose one:").head match {
         case "select" =>
-          val name = askCandidateOrBlank("\nTerrorize which space: ", candidates)
-          if (name != "") {
+          askCandidateOrBlank("\nTerrorize which space: ", candidates) foreach { name =>
             def sp = game.getSpace(name)
             // NVA may terror with only troops, in which case no guerrilla is revealed
             val toReveal = if (sp.pieces.has(underground)) Pieces().set(1, underground) else Pieces()

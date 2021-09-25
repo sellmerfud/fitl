@@ -2984,15 +2984,16 @@ object FireInTheLake {
       askOneOf(prompt, candidates, allowAbort = allowAbort).get
   }
   
-  def askCandidateOrBlank(prompt: String, candidates: Seq[String], allowAbort: Boolean = true): String = {
+  //  Returns None if the user enters an empty response
+  def askCandidateOrBlank(prompt: String, candidates: Seq[String], allowAbort: Boolean = true): Option[String] = {
     assert(candidates.nonEmpty, s"askCandidateOrBlank(): list of candidates cannot be empty")
     // If only one candidate then don't bother to ask
     if (candidates.size == 1) {
       println(s"$prompt ${candidates.head}")
-      candidates.head
+      candidates.headOption
     }
     else
-      askOneOf(prompt, candidates, allowAbort = allowAbort, allowNone = true).getOrElse("")
+      askOneOf(prompt, candidates, allowAbort = allowAbort, allowNone = true)
   }
     
   // Check card number input and print a message

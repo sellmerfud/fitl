@@ -1166,6 +1166,14 @@ object FireInTheLake {
   case object Tax        extends SpecialActivity { val name = "Tax" }
   case object Subvert    extends SpecialActivity { val name = "Subvert" }
 
+  def typhoonKateFilter(activities: List[SpecialActivity]): List[SpecialActivity] = {
+    val Prohibited: Set[SpecialActivity] = Set(AirLift, Transport, Bombard)
+    if (momentumInPlay(Mo_TyphoonKate))
+      activities filterNot Prohibited.contains
+    else
+      activities
+  }
+
   case class SequenceOfPlay(
     eligibleThisTurn:   Set[Faction] = Faction.ALL,
     actors:             List[Actor]  = Nil,
@@ -2236,6 +2244,7 @@ object FireInTheLake {
     log(s"Decrease Agitate Total by -$amount to ${game.vcResources}")
   }
 
+
   def increaseSupport(name: String, num: Int): Unit = if (num > 0) {
     loggingPointsChanges {
       val sp = game.getSpace(name)
@@ -2974,6 +2983,17 @@ object FireInTheLake {
     else
       askOneOf(prompt, candidates, allowAbort = allowAbort).get
   }
+  
+  def askCandidateOrBlank(prompt: String, candidates: Seq[String], allowAbort: Boolean = true): String = {
+    assert(candidates.nonEmpty, s"askCandidateOrBlank(): list of candidates cannot be empty")
+    // If only one candidate then don't bother to ask
+    if (candidates.size == 1) {
+      println(s"$prompt ${candidates.head}")
+      candidates.head
+    }
+    else
+      askOneOf(prompt, candidates, allowAbort = allowAbort, allowNone = true).getOrElse("")
+  }
     
   // Check card number input and print a message
   // if the number is not valid
@@ -3603,9 +3623,10 @@ object FireInTheLake {
     def nextAction(): Unit = {
       val sp        = game.getSpace(name)
       val adjPieces = game.availablePieces.nonEmpty || sp.pieces.nonEmpty
+      val marker    = if (sp.isLOC) "Sabotage" else "Terror"
       val choices   = List(
         choice(true,      "support", "Support level"),
-        choice(true,      "terror",  "Number of terror markers"),
+        choice(true,      "terror",  s"Number of $marker markers"),
         choice(adjPieces, "pieces",  "Faction pieces"),
         choice(true,      "done",   s"Finished adjusting $name")
       ).flatten
@@ -3639,12 +3660,13 @@ object FireInTheLake {
   }
 
   def adjustTerror(name: String): Unit = {
-    val sp = game.getSpace(name)
+    val sp     = game.getSpace(name)
+    val marker = if (sp.isLOC) "Sabotage" else "Terror"
     val maxVal = game.terrorMarkersAvailable + sp.terror
     println()
-    adjustInt("Number of terror markers", sp.terror, 0 to maxVal) foreach { value =>
+    adjustInt(s"Number of $marker markers", sp.terror, 0 to maxVal) foreach { value =>
       game = game.updateSpace(sp.copy(terror = value))
-      log(spaceAdjustmentDesc(name, "terror", sp.terror, value))
+      log(spaceAdjustmentDesc(name, marker, sp.terror, value))
     }
   }
 

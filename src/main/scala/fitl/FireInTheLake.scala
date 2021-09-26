@@ -2354,8 +2354,7 @@ object FireInTheLake {
       log(s"\nIn $spaceName, flip the following piece to its active side")
     else
       log(s"\nIn $spaceName, flip the following pieces to their active sides")
-    log(separator())
-    wrap("", hidden.descriptions) foreach (log(_))
+    wrap("  ", hidden.descriptions) foreach (log(_))
   }
   
   //  Hide guerrillas/rangers/irregulars in a space
@@ -2377,8 +2376,7 @@ object FireInTheLake {
       log(s"\nIn $spaceName, flip the following piece to its underground side")
     else
       log(s"\nIn $spaceName, flip the following pieces to their underground sides")
-    log(separator())
-    wrap("", visible.descriptions) foreach (log(_))
+    wrap("  ", visible.descriptions) foreach (log(_))
   }
   
   
@@ -2418,6 +2416,22 @@ object FireInTheLake {
     val updated = sp.copy(pieces = sp.pieces.remove(1, tunnel).add(1, base))
     game = game.updateSpace(updated)
     log(s"\nRemove a tunnel marker from a $base in $spaceName")
+  }
+
+
+  // Return list of spaces that have COIN pieces that can be reached
+  // from the given ambush space.
+  // Returns empty if none found
+  def ambushTargets(name: String): List[String] = {
+    val ambushSpace = game.getSpace(name)
+    
+    val inPlace = if (ambushSpace.pieces.has(CoinPieces)) Some(name) else None
+    val adjacent = if (ambushSpace.isLOC)
+      getAdjacent(name).toList filter (adj => game.getSpace(adj).pieces.has(CoinPieces))
+    else
+      Nil
+    
+    (inPlace.toList ::: adjacent).sorted
   }
 
   // Ask the user to select a number of pieces.

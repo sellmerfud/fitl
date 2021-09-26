@@ -66,17 +66,21 @@ object Human {
   object Special {
     private var allowSpecial = false
     private var specialTaken = false
+    
+    var ambushing = false
 
     var selectedSpaces = Set.empty[String]
 
     def init(params: Params): Unit = {
       allowSpecial   = params.includeSpecial
       specialTaken   = false
+      ambushing      = false
       selectedSpaces = Set.empty  // For Advise/Govern activities
     }
 
-    def allowed = allowSpecial && !specialTaken
-    def taken   = specialTaken
+    def allowed   = allowSpecial && !specialTaken
+    def taken     = specialTaken
+    def canAmbush = ambushing && selectedSpaces.size < 2
 
     def completed() = specialTaken = true
     def cancelled() = specialTaken = false
@@ -279,9 +283,55 @@ object Human {
     log("\nNVA Bombard special activity not yet implemented.")
   }
 
+
+  // Carry out an ambush in the given space
+  def performAmbush(name: String, faction: Faction): Boolean = {
+    val sp = game.getSpace(name)
+    val ambusher = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
+    val candidates = ambushTargets(name)
+    assert(sp.pieces.has(ambusher), s"performAmbush(): $faction has no underground guerrilla in $name")
+    
+    if (candidates.nonEmpty) {
+      askCandidateOrBlank("Kill target piece in which space: ", candidates) match {
+        case Some(targetName) =>
+          val target = game.getSpace(targetName)
+          val eligible = if (target.pieces.only(CoinForces).nonEmpty)
+            target.pieces.only(CoinForces)
+          else
+            target.pieces.only(CoinBases)
+          val deadPiece = askPieces(eligible, 1, prompt = Some("Removing a COIN piece"))
+        
+          log(s"\n$faction ambushes in $name")
+          log(separator())
+          revealPieces(name, Pieces().set(1, ambusher))
+          if (deadPiece.totalFaction(US) > 0)
+            removeToCasualties(targetName, deadPiece)
+          else
+            removeToAvailable(targetName, deadPiece)
+          Special.selectedSpaces = Special.selectedSpaces + name
+          true
+          
+        case None =>
+          false
+      }
+    }
+    else {
+      println(s"\nThere are no COIN pieces that can be killed by ambushing in $name")
+      false
+    }
+  }
+  
+  
   // NVA/VC special activity
+  // The ambush activity is noted in the Special object.
+  // See the performAmbush() function for carrying out an ambush
+  // in a given space
   def doAmbush(faction: Faction, params: Params): Unit = {
-    log(s"\n${faction} Ambush special activity not yet implemented.")
+    log(s"\n$faction chooses the Ambush special activity")
+    println(separator())
+    println("You will be prompted to use ambush at the appropirate time(s) during your operation.")
+    Special.ambushing = true
+    Special.completed()
   }
 
   // VC special activity
@@ -1464,15 +1514,24 @@ object Human {
     
     val moveableTypes   = if (faction == NVA) NVATroops::NVAGuerrillas else VCGuerrillas
     val maxDestinations = params.maxSpaces getOrElse 1000
-    var destinations    = Map.empty[String, Boolean]  // True if space has been paid for
-    val alreadyMoved    = new MovingGroups()
+    var destinations    = Set.empty[String]
+    // Normally movedInto(name) == frozen(name), however for NVA pieces moving along the trail
+    // they can be in the movedInto bucket but not the frozen bucket
+    val movedInto       = new MovingGroups()  // All pieces that have moved into each dest space
     
     val typhoonKate = Special.allowed && prohibitedActivity.nonEmpty
     val notes = List(
       noteIf(typhoonKate, s"${prohibitedActivity.getOrElse("")} speical activity prohibited [Momentum: $Mo_TyphoonKate]")
     ).flatten
     
-    def moveablePieces(name: String) = game.getSpace(name).pieces.only(moveableTypes) - alreadyMoved(name)
+    def moveablePieces(name: String) = {
+      val moveable = game.getSpace(name).pieces.only(moveableTypes)
+      // NVA pieces that moved in Laos/Cambodia can keep moving if the trail > 0
+      if (faction == NVA && game.trail > TrailMin && isInLaosCambodia(name))
+        moveable
+      else
+        moveable - movedInto(name)
+    }
 
     def moveToDestination(destName: String): Unit = {
       val srcCandidates = getAdjacent(destName).toList.sorted filter (moveablePieces(_).total > 0)
@@ -1487,8 +1546,9 @@ object Human {
           val dest        = game.getSpace(destName)
           val canContinue = !params.limOpOnly && faction == NVA && game.trail > TrailMin && isInLaosCambodia(destName)
           val trailMove   = faction == NVA && game.trail == TrailMax && (isInLaosCambodia(srcName) || isInLaosCambodia(destName))
-          val free        = params.free || dest.isLOC || trailMove || destinations(destName)
+          val free        = params.free || dest.isLOC || trailMove || movedInto(destName).nonEmpty
           val moveable    = src.pieces.only(moveableTypes)
+          val notYetMoved = moveable - movedInto(srcName)
           val coinForces  = dest.pieces.totalOf(CoinForces)
           
           if (free || game.resources(faction) > 0) {
@@ -1504,17 +1564,21 @@ object Human {
               movers.only(UndergroundGuerrillas)
             else
               Pieces()
+            // If moving out of a trail space we must update the movedInto group
+            // to reflect pieces that are making a subsequent move
+            val trailMove = faction == NVA && game.trail > TrailMin && isInLaosCambodia(srcName)
             
+            if (trailMove && !notYetMoved.contains(movers)) {
+              val movedAgain = movers - notYetMoved
+              movedInto.remove(srcName, movedAgain)
+            }
+              
             movePieces(movers, srcName, destName)
             revealPieces(destName, revealed)
-            if (canContinue) {
-              if (movers.total == 1)
-                println("This piece can continue moving [Trail > 0]")
-              else
-                println("These pieces can continue moving [Trail > 0]")
-            }
-            else
-              alreadyMoved.add(destName, movers)
+            movedInto.add(destName, movers)
+            
+            inspect(s"movedInto($srcName)", movedInto(srcName))
+            inspect(s"movedInto($destName)", movedInto(destName))
           }
           else
             println(s"\n$faction does not have a resource to pay for the move into $destName")
@@ -1522,24 +1586,37 @@ object Human {
       }
     }
 
+    def ambushCandidates = if (Special.canAmbush) {
+      val underground = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
+      destinations.toList.sorted filter { name =>
+        !(Special.selectedSpaces contains name) &&   // Can't ambush same space twice
+        movedInto(name).has(underground) &&          // Must have underground guerrillas that move into the space
+        ambushTargets(name).nonEmpty                 // Must have a COIN target to kill
+      }
+    }
+    else
+      Nil
+
     def nextMarchAction(): Unit = {
+      val AmbushOpt  = "ambush:(.*)".r
+      val MoveOpt    = "move:(.*)".r
       val candidates = spaceNames(game.spaces filter (sp => !destinations.contains(sp.name)))
       val canSelect  = candidates.nonEmpty && destinations.size < maxDestinations
-      val moveCandidates = destinations.keys.toList.sorted filter { destName =>
+      val moveCandidates = destinations.toList.sorted filter { destName =>
         (getAdjacent(destName) exists (moveablePieces(_).total > 0))
       }
-      
       val topChoices = List(
-        choice(canSelect,       "select",  s"Add a march destination space"),
-        choice(Special.allowed, "special",  "Perform a Special Activity")
+        choice(canSelect,         "select",  s"Add a march destination space"),
+        choice(Special.allowed,   "special",  "Perform a Special Activity")
       ).flatten
-      val moveChoices = moveCandidates map (name => name -> s"Move pieces into $name")
-      val lastChoice = List("finished" -> "Finished with March operation")
+      val ambushChoices = ambushCandidates map (name => s"ambush:$name" -> s"Ambush in $name")
+      val moveChoices   = moveCandidates map (name => s"move:$name" -> s"Move pieces into $name")
+      val lastChoice    = List("finished" -> "Finished with March operation")
               
-      askMenu(topChoices:::moveChoices:::lastChoice, "\nChoose one:").head match {
+      askMenu(topChoices:::ambushChoices:::moveChoices:::lastChoice, "\nChoose one:").head match {
         case "select" =>
           askCandidateOrBlank("\nAdd which space as a march destination: ", candidates) foreach { name =>
-            destinations = destinations + (name -> false)
+            destinations = destinations + name
             log(s"\n$faction selects $name as a March destination")
           }
           nextMarchAction()
@@ -1547,12 +1624,28 @@ object Human {
         case "special" =>
           executeSpecialActivity(faction, params, availableActivities)
           nextMarchAction()
+          
         
-        case "finished" =>
         
-        case destName =>
-          moveToDestination(destName)
+        case AmbushOpt(name) =>
+          if (performAmbush(name, faction)) {
+            // An uderground member of the the movedInto group was just flipped
+            // to active.  We must update the movedInto group to reflect that.
+            val (underground, active) = if (faction == NVA)
+              (Pieces(nvaGuerrillas_U = 1), Pieces(nvaGuerrillas_A = 1))
+            else
+              (Pieces(vcGuerrillas_U = 1), Pieces(vcGuerrillas_A = 1))
+            
+            movedInto.remove(name, underground)
+            movedInto.add(name, active)
+          }
           nextMarchAction()
+          
+        case MoveOpt(name) =>
+          moveToDestination(name)
+          nextMarchAction()
+          
+        case _ =>  // finished
       }
     }
 

@@ -1166,12 +1166,20 @@ object FireInTheLake {
   case object Tax        extends SpecialActivity { val name = "Tax" }
   case object Subvert    extends SpecialActivity { val name = "Subvert" }
 
-  def typhoonKateFilter(activities: List[SpecialActivity]): List[SpecialActivity] = {
+  def typhoonKateProhibited(activities: List[SpecialActivity]): List[SpecialActivity] = {
     val Prohibited: Set[SpecialActivity] = Set(AirLift, Transport, Bombard)
     if (momentumInPlay(Mo_TyphoonKate))
-      activities filterNot Prohibited.contains
+      activities filter Prohibited.contains
     else
-      activities
+      Nil
+  }
+  
+  def claymoresProhibited(activities: List[SpecialActivity]): List[SpecialActivity] = {
+    val Prohibited: Set[SpecialActivity] = Set(Ambush)
+    if (momentumInPlay(Mo_Claymores))
+      activities filter Prohibited.contains
+    else
+      Nil
   }
 
   case class SequenceOfPlay(

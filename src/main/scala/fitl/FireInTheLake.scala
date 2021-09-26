@@ -2342,6 +2342,18 @@ object FireInTheLake {
     }
   }
 
+  // Remove pieces from the given space.
+  // US to casualties, all other to available
+  
+  def removePieces(spaceName: String, pieces: Pieces): Unit = if (pieces.total > 0) {
+    loggingControlChanges {
+      val deadUS    = pieces.only(USPieces)
+      val deadOther = pieces.except(USPieces)
+    
+      removeToCasualties(spaceName, deadUS)
+      removeToAvailable(spaceName, deadOther)
+    }
+  }
 
   //  Reveal guerrillas/rangers/irregulars in a space
   def revealPieces(spaceName: String, hidden: Pieces): Unit = if (hidden.total > 0) {
@@ -2488,6 +2500,22 @@ object FireInTheLake {
       }
     }
     selected
+  }
+
+  // Ask the user to select enemy coin pieces to remove.
+  // This function ensures that bases are not selected if there
+  // are any other coin pieces present.
+  def askEnemyCoin(pieces: Pieces, num: Int, prompt: Option[String] = None, allowAbort: Boolean = true): Pieces = {
+    val forces = pieces.only(CoinForces)
+    val bases  = pieces.only(CoinBases)
+    
+    val deadForces = askPieces(forces, num min forces.total, prompt = prompt, allowAbort = allowAbort)
+    val deadBases  = if (deadForces.total < num && (forces - deadForces).isEmpty && bases.nonEmpty)
+      askPieces(bases, num - deadForces.total, prompt = prompt, allowAbort = allowAbort)
+    else
+      Pieces()
+    
+    deadForces + deadBases
   }
 
   // Ask the user to remove the given number of pieces of the requested type from the map.

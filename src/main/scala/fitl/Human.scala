@@ -300,9 +300,8 @@ object Human {
       askCandidateOrBlank("Kill target piece in which space: ", candidates) match {
         case Some(targetName) =>
           val target = game.getSpace(targetName)
-          val forces = target.pieces.only(CoinForces)
-          val bases  = target.pieces.only(CoinBases)
-          val num    = if (forces.total + bases.total > 1 &&
+          val coinPieces = target.pieces.only(CoinPieces)
+          val num    = if (coinPieces.total > 1 &&
                            capabilityInPlay(MainForceBns_Shaded) &&
                            faction == VC && !Special.usedMainForceBns &&
                            askYorN(s"\nDo you wish to remove two enemy pieces in $name? (y/n) ")) {
@@ -311,26 +310,12 @@ object Human {
           }
           else
             1
-          
-          val deadForces = if (forces.nonEmpty)
-            askPieces(forces, num, prompt = Some("Ambushing COIN forces"))
-          else
-            Pieces()
-          
-          val deadBases = if (deadForces.total < num && (forces - deadForces).isEmpty && bases.nonEmpty) {
-            askPieces(bases, num - deadForces.total, prompt = Some("Ambushing COIN bases"))
-          }
-          else
-            Pieces()
-          
-          val deadUS = (deadForces + deadBases).only(USPieces)
-          val deadARVN = (deadForces + deadBases).only(ARVNPieces)
+          val deadPieces = askEnemyCoin(coinPieces, num, prompt = Some(s"Ambushing in $name"))
           
           log(s"\n$faction ambushes in $name")
           log(separator())
           revealPieces(name, Pieces().set(1, ambusher))
-          removeToCasualties(targetName, deadUS)
-          removeToAvailable(targetName, deadARVN)
+          removePieces(targetName, deadPieces)
           Special.selectedSpaces = Special.selectedSpaces + name
           true
           

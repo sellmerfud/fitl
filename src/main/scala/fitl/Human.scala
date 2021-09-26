@@ -227,9 +227,9 @@ object Human {
 
       action match {
         case Event         => executeEvent(faction)
-        case OpPlusSpecial => executeCmd(faction, Params(includeSpecial = true))
-        case OpOnly        => executeCmd(faction)
-        case LimitedOp     => executeCmd(faction, Params(maxSpaces = Some(1)))
+        case OpPlusSpecial => executeOp(faction, Params(includeSpecial = true))
+        case OpOnly        => executeOp(faction)
+        case LimitedOp     => executeOp(faction, Params(maxSpaces = Some(1)))
       }
 
     }
@@ -334,17 +334,17 @@ object Human {
 
   }
 
-  def executeCmd(faction: Faction, params: Params = Params()): Unit = {
+  def executeOp(faction: Faction, params: Params = Params()): Unit = {
     Special.init(params)
     trainingSpaces = Set.empty
 
     faction match {
-      case US  | ARVN => executeCoinCmd(faction, params)
-      case NVA | VC   => executeInsurgentCmd(faction, params)
+      case US  | ARVN => executeCoinOp(faction, params)
+      case NVA | VC   => executeInsurgentOp(faction, params)
     }
   }
 
-  def executeCoinCmd(faction: Faction, params: Params): Unit = {
+  def executeCoinOp(faction: Faction, params: Params): Unit = {
 
     val landsdale = faction == US && momentumInPlay(Mo_GeneralLansdale)
     val notes = List(
@@ -374,7 +374,7 @@ object Human {
     }
   }
 
-  def executeInsurgentCmd(faction: Faction, params: Params): Unit = {
+  def executeInsurgentOp(faction: Faction, params: Params): Unit = {
     val notes = List(
       noteIf(game.inMonsoon, s"March is prohibited [Not allowed in Monsoon]")
     ).flatten
@@ -1183,7 +1183,7 @@ object Human {
   //    Cost=0 AND +3 Aid per guerrilla removed
   // Mo_GeneralLansdale
   //    Assault prohibited
-  //    This is handled in executeCoinCmd()
+  //    This is handled in executeCoinOp()
 
   def executeAssault(faction: Faction, params: Params): Unit = {
     val specialActivities = if (faction == US)

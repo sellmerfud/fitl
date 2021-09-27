@@ -2319,25 +2319,35 @@ object FireInTheLake {
     }
   }
 
-  def removeToAvailable(spaceName: String, pieces: Pieces): Unit = if (pieces.total > 0) {
+  def removeToAvailable(spaceName: String, pieces: Pieces, reason: Option[String] = None): Unit = if (pieces.total > 0) {
     loggingControlChanges {
       val sp = game.getSpace(spaceName)
       assert(sp.pieces contains pieces, s"$spaceName does not contain all requested pieces: $pieces")
       val updated = sp.copy(pieces = sp.pieces - pieces)
       game = game.updateSpace(updated)
-      log(s"\nRemove the following pieces from $spaceName to AVAILABLE:")
+      
+      reason match {
+        case Some(msg) => log(s"\n$msg"); log(separator())
+        case None      => log()
+      }
+      log(s"Remove the following pieces from $spaceName to AVAILABLE:")
       wrap("  ", pieces.descriptions) foreach (log(_))
     }
   }
 
-  def removeToCasualties(spaceName: String, pieces: Pieces): Unit = if (pieces.total > 0) {
+  def removeToCasualties(spaceName: String, pieces: Pieces, reason: Option[String] = None): Unit = if (pieces.total > 0) {
     loggingControlChanges {
       val sp = game.getSpace(spaceName)
       assert(sp.pieces contains pieces, s"$spaceName does not contain all requested pieces: $pieces")
       val updated = sp.copy(pieces = sp.pieces - pieces)
       // Pieces in casualties are always normalized.
       game = game.updateSpace(updated).copy(casualties = game.casualties + pieces.normalized)
-      log(s"\nRemove the following pieces from $spaceName to CASUALTIES:")
+      
+      reason match {
+        case Some(msg) => log(s"\n$msg"); log(separator())
+        case None      => log()
+      }
+      log(s"Remove the following pieces from $spaceName to CASUALTIES:")
       wrap("  ", pieces.descriptions) foreach (log(_))
     }
   }
@@ -2345,11 +2355,15 @@ object FireInTheLake {
   // Remove pieces from the given space.
   // US to casualties, all other to available
   
-  def removePieces(spaceName: String, pieces: Pieces): Unit = if (pieces.total > 0) {
+  def removePieces(spaceName: String, pieces: Pieces, reason: Option[String] = None): Unit = if (pieces.total > 0) {
     loggingControlChanges {
       val deadUS    = pieces.only(USPieces)
       val deadOther = pieces.except(USPieces)
     
+      reason foreach { msg =>
+        log(s"\n$msg")
+        log(separator())
+      }
       removeToCasualties(spaceName, deadUS)
       removeToAvailable(spaceName, deadOther)
     }

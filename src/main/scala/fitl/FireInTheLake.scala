@@ -1268,7 +1268,7 @@ object FireInTheLake {
   //        and subtracting pieces on the map, casualties, and out of play.
   case class GameState(
     scenarioName: String,
-    humanFaction: Faction,
+    humanFactions: Set[Faction],
     cardsPerCampaign: Int,    // Including the Coup! card
     totalCoupCards: Int,   // Total number in the current scenario
     spaces: List[Space],
@@ -1332,7 +1332,7 @@ object FireInTheLake {
       b.toString
     }
 
-    def isHuman(faction: Faction) = faction == humanFaction
+    def isHuman(faction: Faction) = humanFactions(faction)
     def isBot(faction: Faction) = !isHuman(faction)
 
     lazy val useArvnResources = isHuman(US) || isHuman(ARVN)
@@ -1671,12 +1671,32 @@ object FireInTheLake {
           }
           val scenario = scenarios(scenarioName)
           val usePeriodEvents = askYorN("\nAre you using period events? (y/n) ")
-          val humanFaction = askFaction("Which faction do you wish to play:", allowAbort = false)
+          val humanFactions: Set[Faction] = {
+            val num = askInt("How many factions will be played by human players", 0, 4, Some(1), allowAbort = false)
+            def nextHuman(humans: Set[Faction]): Set[Faction] = {
+              if (humans.size == num) 
+                humans
+              else
+              {
+                val remaining = Faction.ALL -- humans
+                val x = humans.size + 1
+                val faction   = askFaction(s"Select the ${ordinal(x)} human faction:", remaining, allowAbort = false)
+                nextHuman(humans + faction)
+              }
+            }
+            
+            num match {
+              case 4 => Faction.ALL
+              case 0 => Set.empty
+              case 1 => Set(askFaction("Select the human faction:", allowAbort = false))
+              case n => nextHuman(Set.empty)
+            }
+          }
 
           // println()
           // gameName = Some(askGameName("Enter a name for your new game: "))
 
-          game = initialGameState(scenario, humanFaction, usePeriodEvents)
+          game = initialGameState(scenario, humanFactions, usePeriodEvents)
 
           logSummary(scenarioSummary)
           log()
@@ -1702,7 +1722,7 @@ object FireInTheLake {
   }
 
 
-  def initialGameState(scenario: Scenario, humanFaction: Faction, usePeriodCapabilities: Boolean) = {
+  def initialGameState(scenario: Scenario, humanFactions: Set[Faction], usePeriodCapabilities: Boolean) = {
     var spaces = DefaultSpaces
     // Apply scenario overrides to countries.
     for (sp <- scenario.spaces)
@@ -1710,7 +1730,7 @@ object FireInTheLake {
 
     GameState(
       scenario.name,
-      humanFaction,
+      humanFactions,
       scenario.cardsPerCampaign,
       scenario.totalCoupCards,
       spaces,

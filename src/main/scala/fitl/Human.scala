@@ -980,9 +980,9 @@ object Human {
       selectCubesToMove()
       activateGuerrillasOnLOCs()
       assaultOneLOC()
-      if (pattonShaded) {
+      if (pattonShaded && movedCubes.size > 0) {
         // TODO:
-        // NVABot.removeEnemyPieces(2, ...)
+        // NVABot.removeEnemyPieces(2, movedCubes.toList)
         println()
         println(separator(char = '='))
         println(s"$M48Patton_Shaded for NVA Bot has not been implemented!")

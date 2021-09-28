@@ -1166,23 +1166,35 @@ object FireInTheLake {
   case object Tax        extends SpecialActivity { val name = "Tax" }
   case object Subvert    extends SpecialActivity { val name = "Subvert" }
 
-  def typhoonKateProhibited(activities: List[SpecialActivity]): List[SpecialActivity] = {
-    val Prohibited: Set[SpecialActivity] = Set(AirLift, Transport, Bombard)
-    if (momentumInPlay(Mo_TyphoonKate))
-      activities filter Prohibited.contains
-    else
-      Nil
+
+  // The following momentum events prohibit special activities
+  // Mo_TyphoonKate     - prohibits air lift, transport, and bombard
+  // Mo_Claymores       - prohibits ambush
+  // Mo_McNamaraLine    - prohibits infiltrate
+  // Mo_Medevac_Shaded  - prohibits air lift
+  // Mo_RollingThunder  - prohibits air strike
+  // Mo_DaNang          - prohibits air strike
+  // Mo_BombingPause    - prohibits air strike
+
+  def prohibitedSpecialActivities(activities: List[SpecialActivity]): List[(String, List[SpecialActivity])] = {
+    val events: List[(String, Set[SpecialActivity])] = List(
+      Mo_TyphoonKate     -> Set(AirLift, Transport, Bombard),
+      Mo_Claymores       -> Set(Ambush),
+      Mo_McNamaraLine    -> Set(Infiltrate),
+      Mo_Medevac_Shaded  -> Set(AirLift),
+      Mo_RollingThunder  -> Set(AirStrike),
+      Mo_DaNang          -> Set(AirStrike),
+      Mo_BombingPause    -> Set(AirStrike)
+    )
+    var result: Map[String, List[SpecialActivity]] = Map.empty.withDefaultValue(Nil)
+    
+    for (a <- activities; (mo, prohibits) <- events if momentumInPlay(mo) && prohibits(a))
+      result += mo -> (a::result(mo))
+    
+    result.toList
   }
   
-  def claymoresProhibited(activities: List[SpecialActivity]): List[SpecialActivity] = {
-    val Prohibited: Set[SpecialActivity] = Set(Ambush)
-    if (momentumInPlay(Mo_Claymores))
-      activities filter Prohibited.contains
-    else
-      Nil
-  }
-
-  case class SequenceOfPlay(
+    case class SequenceOfPlay(
     eligibleThisTurn:   Set[Faction] = Faction.ALL,
     actors:             List[Actor]  = Nil,
     passed:             Set[Faction] = Set.empty,

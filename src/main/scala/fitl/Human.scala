@@ -108,8 +108,9 @@ object Human {
     def add(name: String, pieces: Pieces): Unit = groups += name -> (groups(name) + pieces)
     def remove(name: String, pieces: Pieces): Unit = groups += name -> (groups(name) - pieces)
 
+    def spaces = groups.keys.toSet
     def toList = groups.toList.sortBy(_._1)
-    def size = groups.size
+    def size   = groups.size
   }
   
   def noteIf(cond: Boolean, note: String): Option[String] = if (cond) Some(note) else None
@@ -217,190 +218,6 @@ object Human {
     }
   }
 
-  
-  
-  // A human player has opted to take an action on the current card.
-  def act(): Unit = {
-    object Pass extends Exception
-    val faction = game.nextUp.get
-
-    try {
-      val action = if (game.executingPivotalEvent)
-        Event
-      else {
-        val choices: List[(Option[Action], String)] =
-          (game.sequence.availableActions map (a => Some(a) -> a.toString)) :+ (None -> "Pass")
-
-        askMenu(choices, "\nChoose one:").head getOrElse { throw Pass }
-      }
-
-      game = game.copy(sequence = game.sequence.addActor(faction, action))
-      log()
-      log(s"Move the $faction cylinder to the $action box")
-
-      action match {
-        case Event         => executeEvent(faction)
-        case OpPlusSpecial => executeOp(faction, Params(includeSpecial = true))
-        case OpOnly        => executeOp(faction)
-        case LimitedOp     => executeOp(faction, Params(maxSpaces = Some(1)))
-      }
-
-    }
-    catch {
-      case Pass =>
-        factionPasses(faction)
-    }
-  }
-
-  
-  // US Advise special activity
-  def doAdvise(params: Params): Unit = {
-    val arvnForces = ARVNCubes:::Rangers
-    val cobras = capabilityInPlay(Cobras_Unshaded)
-    // Can remove tunnel marker
-    // Underground guerrillas shield bases/tunnels
-    def hasAssaultTarget(sp: Space): Boolean = {
-      val underground = sp.pieces.has(UndergroundGuerrillas)
-      val activeForces = sp.pieces.has(NVATroops::ActiveGuerrillas)
-      val enemyBases = sp.pieces.has(InsurgentNonTunnels:::InsurgentTunnels)
-      
-      activeForces || (!underground && enemyBases)
-    }
-    
-    // No tunnels
-    // Can remove underground guerrillas
-    def hasSpecialOpsTarget(sp: Space): Boolean = {
-      sp.pieces.has(NVATroops::UndergroundGuerrillas:::ActiveGuerrillas:::InsurgentNonTunnels)
-    }
-    
-    // Part of Advise special activity
-    // Activate 1 underground Irregular/Ranger to remove
-    // 2 enemy pieces.  Bases last (Cannot target Tunnels at all)
-    def useSpecialForces(name: String): Unit = {
-      val enemyForceTypes = NVATroops::UndergroundGuerrillas:::ActiveGuerrillas
-      val sp = game.getSpace(name)
-      val choices = List(
-        choice(sp.pieces.has(Irregulars_U), Irregulars_U, "US Irregular"),
-        choice(sp.pieces.has(Rangers_U),    Rangers_U,    "ARVN Ranger")
-      ).flatten
-      
-      val forceType   = askMenu(choices, "\nActivate which special force:").head
-      val enemyForces = sp.pieces.only(enemyForceTypes)
-      val enemyBases  = sp.pieces.only(InsurgentNonTunnels)
-      val numForces   = 2 min enemyForces.total
-      val numBases    = (2 - numForces) min enemyBases.total
-      
-      log(s"\nAdvise in $name using ${forceType.singular}")
-      log(separator())
-      revealPieces(name, Pieces().set(1, forceType))
-      val deadForces = askPieces(enemyForces, numForces, prompt = Some("Remove enemy forces"))
-      val deadBases  = askPieces(enemyBases, numBases, prompt = Some("Remove enemy bases"))
-      removeToAvailable(name, deadForces + deadBases)
-    }
-    
-    def nextAdviseSpace(): Unit = {
-      val sweepCandidates = spaceNames(game.nonLocSpaces filter { sp =>
-        !sp.isNorthVietnam &&
-        !Special.trainingSpaces(sp.name) &&
-        !Special.selectedSpaces(sp.name) &&
-        sp.pieces.has(arvnForces) &&
-        (sp.pieces.has(UndergroundGuerrillas) || (cobras && hasAssaultTarget(sp)))
-      })
-      val assaultCandidates = spaceNames(game.spaces filter { sp =>
-        !Special.trainingSpaces(sp.name) &&
-        !Special.selectedSpaces(sp.name) &&
-        sp.pieces.has(arvnForces) &&
-        hasAssaultTarget(sp)
-      })
-      val specialForcesCandidates = spaceNames(game.spaces filter { sp =>
-        !Special.trainingSpaces(sp.name) &&
-        !Special.selectedSpaces(sp.name) &&
-        sp.pieces.has(Irregulars_U::Rangers_U::Nil) &&
-        hasSpecialOpsTarget(sp)
-      })
-    
-      val canSweep   = Special.selectedSpaces.size < 2 && sweepCandidates.nonEmpty
-      val canAssault = Special.selectedSpaces.size < 2 && assaultCandidates.nonEmpty
-      val canSpecial = Special.selectedSpaces.size < 2 && specialForcesCandidates.nonEmpty
-      val choices = List(
-        choice(canSweep,   "sweep",   "Sweep a space with ARVN forces"),
-        choice(canAssault, "assault", "Assault a space with ARVN forces"),
-        choice(canSpecial, "special", "Use Irregular/Ranger to remove enemy pieces"),
-        choice(true,       "finished", "Finished selecting Advise spaces")
-      ).flatten
-    
-      askMenu(choices, "\nChoose Advise option:").head match {
-        case "sweep" => 
-          askCandidateOrBlank("ARVN Sweep in which space: ", sweepCandidates) foreach { name =>
-            activateGuerrillasForSweep(name, ARVN)
-            doCobrasUnshaded(name)
-            Special.selectedSpaces = Special.selectedSpaces + name
-          }
-          nextAdviseSpace()
-          
-        case "assault" => 
-          askCandidateOrBlank("ARVN Assault in which space: ", assaultCandidates) foreach { name =>
-            performAssault(name, ARVN, params.copy(free = true))
-            Special.selectedSpaces = Special.selectedSpaces + name
-          }
-          nextAdviseSpace()
-          
-        case "special" => 
-          askCandidateOrBlank("Use Irregular/Ranger in which space: ", specialForcesCandidates) foreach { name =>
-            useSpecialForces(name)
-            Special.selectedSpaces = Special.selectedSpaces + name
-          }
-          nextAdviseSpace()
-        
-        case _ =>
-      }
-    }    
-    
-    log("\nUS chooses the Advise special activity")
-    log(separator())
-    
-    nextAdviseSpace();
-
-    if (askYorN("\nDo you wish to add +6 Aid? (y/n) "))
-      increaseUsAid(6)
-    
-    Special.completed()
-  }
-
-  // US special activity
-  def doAirLift(params: Params): Unit = {
-    log("\nUS Air Lift special activity not yet implemented.")
-  }
-
-  // US special activity
-  def doAirStrike(params: Params): Unit = {
-    log("\nUS Air Strike special activity not yet implemented.")
-  }
-
-  // ARVN special activity
-  def doGovern(params: Params): Unit = {
-    log("\nARVN Govern special activity not yet implemented.")
-  }
-
-  // ARVN special activity
-  def doTransport(params: Params): Unit = {
-    log("\nARVN Transport special activity not yet implemented.")
-  }
-
-  // ARVN special activity
-  def doRaid(params: Params): Unit = {
-    log("\nARVN Raid special activity not yet implemented.")
-  }
-
-  // NVA special activity
-  def doInfiltrate(params: Params): Unit = {
-    log("\nNVA Infiltrate special activity not yet implemented.")
-  }
-
-  // NVA special activity
-  def doBombard(params: Params): Unit = {
-    log("\nNVA Bombard special activity not yet implemented.")
-  }
 
   def activateGuerrillasForSweep(name: String, faction: Faction): Unit = {
     val sp = game.getSpace(name)
@@ -590,6 +407,201 @@ object Human {
     }
   }
   
+  
+  
+  // A human player has opted to take an action on the current card.
+  def act(): Unit = {
+    object Pass extends Exception
+    val faction = game.nextUp.get
+
+    try {
+      val action = if (game.executingPivotalEvent)
+        Event
+      else {
+        val choices: List[(Option[Action], String)] =
+          (game.sequence.availableActions map (a => Some(a) -> a.toString)) :+ (None -> "Pass")
+
+        askMenu(choices, "\nChoose one:").head getOrElse { throw Pass }
+      }
+
+      game = game.copy(sequence = game.sequence.addActor(faction, action))
+      log()
+      log(s"Move the $faction cylinder to the $action box")
+
+      action match {
+        case Event         => executeEvent(faction)
+        case OpPlusSpecial => executeOp(faction, Params(includeSpecial = true))
+        case OpOnly        => executeOp(faction)
+        case LimitedOp     => executeOp(faction, Params(maxSpaces = Some(1)))
+      }
+
+    }
+    catch {
+      case Pass =>
+        factionPasses(faction)
+    }
+  }
+
+  
+  // US Advise special activity
+  // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
+  def doAdvise(params: Params): Unit = {
+    val arvnForces = ARVNCubes:::Rangers
+    val cobras = capabilityInPlay(Cobras_Unshaded)
+    // Can remove tunnel marker
+    // Underground guerrillas shield bases/tunnels
+    def hasAssaultTarget(sp: Space): Boolean = {
+      val underground = sp.pieces.has(UndergroundGuerrillas)
+      val activeForces = sp.pieces.has(NVATroops::ActiveGuerrillas)
+      val enemyBases = sp.pieces.has(InsurgentNonTunnels:::InsurgentTunnels)
+      
+      activeForces || (!underground && enemyBases)
+    }
+    
+    // No tunnels
+    // Can remove underground guerrillas
+    def hasSpecialOpsTarget(sp: Space): Boolean = {
+      sp.pieces.has(NVATroops::UndergroundGuerrillas:::ActiveGuerrillas:::InsurgentNonTunnels)
+    }
+    
+    // Part of Advise special activity
+    // Activate 1 underground Irregular/Ranger to remove
+    // 2 enemy pieces.  Bases last (Cannot target Tunnels at all)
+    def useSpecialForces(name: String): Unit = {
+      val enemyForceTypes = NVATroops::UndergroundGuerrillas:::ActiveGuerrillas
+      val sp = game.getSpace(name)
+      val choices = List(
+        choice(sp.pieces.has(Irregulars_U), Irregulars_U, "US Irregular"),
+        choice(sp.pieces.has(Rangers_U),    Rangers_U,    "ARVN Ranger")
+      ).flatten
+      
+      val forceType   = askMenu(choices, "\nActivate which special force:").head
+      val enemyForces = sp.pieces.only(enemyForceTypes)
+      val enemyBases  = sp.pieces.only(InsurgentNonTunnels)
+      val numForces   = 2 min enemyForces.total
+      val numBases    = (2 - numForces) min enemyBases.total
+      
+      log(s"\nAdvise in $name using ${forceType.singular}")
+      log(separator())
+      revealPieces(name, Pieces().set(1, forceType))
+      val deadForces = askPieces(enemyForces, numForces, prompt = Some("Remove enemy forces"))
+      val deadBases  = askPieces(enemyBases, numBases, prompt = Some("Remove enemy bases"))
+      removeToAvailable(name, deadForces + deadBases)
+    }
+    
+    def nextAdviseSpace(): Unit = {
+      val sweepCandidates = spaceNames(game.nonLocSpaces filter { sp =>
+        !sp.isNorthVietnam &&
+        !Special.trainingSpaces(sp.name) &&
+        !Special.selectedSpaces(sp.name) &&
+        sp.pieces.has(arvnForces) &&
+        (sp.pieces.has(UndergroundGuerrillas) || (cobras && hasAssaultTarget(sp)))
+      })
+      val assaultCandidates = spaceNames(game.spaces filter { sp =>
+        !Special.trainingSpaces(sp.name) &&
+        !Special.selectedSpaces(sp.name) &&
+        sp.pieces.has(arvnForces) &&
+        hasAssaultTarget(sp)
+      })
+      val specialForcesCandidates = spaceNames(game.spaces filter { sp =>
+        !Special.trainingSpaces(sp.name) &&
+        !Special.selectedSpaces(sp.name) &&
+        sp.pieces.has(Irregulars_U::Rangers_U::Nil) &&
+        hasSpecialOpsTarget(sp)
+      })
+    
+      val maxAdvise = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
+      
+      val canSweep   = Special.selectedSpaces.size < maxAdvise && sweepCandidates.nonEmpty
+      val canAssault = Special.selectedSpaces.size < maxAdvise && assaultCandidates.nonEmpty
+      val canSpecial = Special.selectedSpaces.size < maxAdvise && specialForcesCandidates.nonEmpty
+      val choices = List(
+        choice(canSweep,   "sweep",   "Sweep a space with ARVN forces"),
+        choice(canAssault, "assault", "Assault a space with ARVN forces"),
+        choice(canSpecial, "special", "Use Irregular/Ranger to remove enemy pieces"),
+        choice(true,       "finished", "Finished selecting Advise spaces")
+      ).flatten
+    
+      askMenu(choices, "\nChoose Advise option:").head match {
+        case "sweep" => 
+          askCandidateOrBlank("ARVN Sweep in which space: ", sweepCandidates) foreach { name =>
+            activateGuerrillasForSweep(name, ARVN)
+            doCobrasUnshaded(name)
+            Special.selectedSpaces = Special.selectedSpaces + name
+          }
+          nextAdviseSpace()
+          
+        case "assault" => 
+          askCandidateOrBlank("ARVN Assault in which space: ", assaultCandidates) foreach { name =>
+            performAssault(name, ARVN, params.copy(free = true))
+            Special.selectedSpaces = Special.selectedSpaces + name
+          }
+          nextAdviseSpace()
+          
+        case "special" => 
+          askCandidateOrBlank("Use Irregular/Ranger in which space: ", specialForcesCandidates) foreach { name =>
+            useSpecialForces(name)
+            Special.selectedSpaces = Special.selectedSpaces + name
+          }
+          nextAdviseSpace()
+        
+        case _ =>
+      }
+    }    
+    
+    log("\nUS chooses the Advise special activity")
+    log(separator())
+    
+    nextAdviseSpace();
+
+    if (askYorN("\nDo you wish to add +6 Aid? (y/n) "))
+      increaseUsAid(6)
+    
+    Special.completed()
+  }
+
+  // US special activity
+  // Any US Troops plus up to 4 (Irregulars, Rangers, ARVN Troops)
+  // among 4 selected spaces (2 in Monsoon, Never N. Vietnam)
+  def doAirLift(params: Params): Unit = {
+    log("\nUS Air Lift special activity not yet implemented.")
+  }
+
+  // US special activity
+  // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
+  def doAirStrike(params: Params): Unit = {
+    log("\nUS Air Strike special activity not yet implemented.")
+  }
+
+  // ARVN special activity
+  // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
+  def doGovern(params: Params): Unit = {
+    log("\nARVN Govern special activity not yet implemented.")
+  }
+
+  // ARVN special activity
+  def doTransport(params: Params): Unit = {
+    log("\nARVN Transport special activity not yet implemented.")
+  }
+
+  // ARVN special activity
+  // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
+  def doRaid(params: Params): Unit = {
+    log("\nARVN Raid special activity not yet implemented.")
+  }
+
+  // NVA special activity
+  // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
+  // val Mo_559TransportGrp   = "#46 559th Transport Grp"      // Unshaded (Infiltrate is max 1 space)
+  def doInfiltrate(params: Params): Unit = {
+    log("\nNVA Infiltrate special activity not yet implemented.")
+  }
+
+  // NVA special activity
+  def doBombard(params: Params): Unit = {
+    log("\nNVA Bombard special activity not yet implemented.")
+  }
+
   // NVA/VC special activity
   // The ambush activity is noted in the Special object.
   // See the performAmbush() function for carrying out an ambush
@@ -597,18 +609,27 @@ object Human {
   //
   // BoobyTraps_Unshaded - Max 1 ambush space (instead of 2)
   // Mo_Claymores prohibits ambush
-  
+  // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
   def doAmbush(faction: Faction, params: Params): Unit = {
     log(s"\n$faction chooses the Ambush special activity")
     log(separator())
-    if (capabilityInPlay(BoobyTraps_Unshaded))
-      log(s"You may ambush in only one space [$BoobyTraps_Unshaded]")
-    if (faction == VC && capabilityInPlay(MainForceBns_Shaded))
-      log(s"In one ambush space VC may remove 2 pieces [$MainForceBns_Shaded]")
-    if (faction == NVA && capabilityInPlay(PT76_Unshaded))
-      log(s"Each NVA ambush space first remove 1 NVA troop [$PT76_Unshaded]")
-      
-    println("You will be prompted to use ambush at the appropirate time(s) during your operation.")
+    
+    val notes = List(
+      noteIf(momentumInPlay(Mo_TyphoonKate),
+          s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
+      noteIf(capabilityInPlay(BoobyTraps_Unshaded), 
+          s"You may ambush in only one space [$BoobyTraps_Unshaded]"),
+      noteIf(faction == VC && capabilityInPlay(MainForceBns_Shaded),
+          s"In one ambush space VC may remove 2 pieces [$MainForceBns_Shaded]"),
+      noteIf(faction == NVA && capabilityInPlay(PT76_Unshaded),
+          s"Each NVA ambush space first remove 1 NVA troop [$PT76_Unshaded]"),
+      noteIf(true, "You will be prompted to use ambush at the appropriate time(s) during your operation.")
+    ).flatten
+    
+    println("Notes:")
+    println(separator())
+    notes foreach println
+    
     Special.ambushing = true
     Special.completed()
   }
@@ -623,36 +644,63 @@ object Human {
     log("\nVC Subvert special activity not yet implemented.")
   }
 
-
+  // val Mo_TyphoonKate       = "#115 Typhoon Kate"            // Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
+  // val Mo_Claymores         = "#17 Claymores"                // Unshaded (prohibits ambush, affect guerrilla march)
+  // val Mo_Medevac_Shaded    = s"$Medevac_prefix (shaded)"    // (prohibits air lift)
+  // val Mo_RollingThunder    = "#10 Rolling Thunder"          // Shaded   (prohibits air strike)
+  // val Mo_DaNang            = "#22 Da Nang"                  // Shaded (prohibits air strike)
+  // val Mo_McNamaraLine      = "#38 McNamara Line"            // Single event (prohibits infiltrate, prohibits trail improvement by rally)  val Mo_BombingPause      = "#41 Bombing Pause"            // Single event (prohibits air strike)
   def executeSpecialActivity(faction: Faction, params: Params, activities: List[SpecialActivity]): Unit = {
+    val momentumRestrictions = prohibitedSpecialActivities(activities)
+    val prohibited           = momentumRestrictions.map(_._2).foldLeft(Set.empty[SpecialActivity]) { (set, list) => set ++ list }
+    
+    val notes = for ((mo, a) <- momentumRestrictions)
+      yield s"Momentum: $mo prohibits ${andList(a)}"
+    
+    if (notes.nonEmpty) {
+      println("\nNotes:")
+      println(separator())
+      notes foreach println
+    }
+    
     val choices: List[(Option[SpecialActivity], String)] =
-      (activities map (a => Some(a) -> a.toString)) :+
+      (activities filterNot prohibited.apply map (a => Some(a) -> a.toString)) :+
       (None -> "Do not perform a Speical Activitiy now")
 
-    askMenu(choices, "\nChoose special activity:").head foreach { activity =>
-      val savedState = game
-      try {
-        activity match {
-          case Advise     => doAdvise(params)
-          case AirLift    => doAirLift(params)
-          case AirStrike  => doAirStrike(params)
-          case Govern     => doGovern(params)
-          case Transport  => doTransport(params)
-          case Raid       => doRaid(params)
-          case Infiltrate => doInfiltrate(params)
-          case Bombard    => doBombard(params)
-          case Ambush     => doAmbush(faction, params)
-          case Tax        => doTax(params)
-          case Subvert    => doSubvert(params)
+    if (choices.size == 1) {
+      // If all activities have been prohibited
+      // mark the specal as completed so we do not
+      // continue to ask if the user want to do a special
+      // activity.
+      println("\nThere are no Special Activities available")
+      Special.completed()
+    }
+    else {
+      askMenu(choices, "\nChoose special activity:").head foreach { activity =>
+        val savedState = game
+        try {
+          activity match {
+            case Advise     => doAdvise(params)
+            case AirLift    => doAirLift(params)
+            case AirStrike  => doAirStrike(params)
+            case Govern     => doGovern(params)
+            case Transport  => doTransport(params)
+            case Raid       => doRaid(params)
+            case Infiltrate => doInfiltrate(params)
+            case Bombard    => doBombard(params)
+            case Ambush     => doAmbush(faction, params)
+            case Tax        => doTax(params)
+            case Subvert    => doSubvert(params)
+          }
+          Special.completed()
         }
-        Special.completed()
-      }
-      catch {
-        case AbortAction =>
-          println(s"\n>>>> Aborting $activity special activity <<<<")
-          println(separator())
-          displayGameStateDifferences(game, savedState)
-          game = savedState
+        catch {
+          case AbortAction =>
+            println(s"\n>>>> Aborting $activity special activity <<<<")
+            println(separator())
+            displayGameStateDifferences(game, savedState)
+            game = savedState
+        }
       }
     }
   }
@@ -743,8 +791,6 @@ object Human {
       Advise::AirLift::AirStrike::Nil
     else
       Transport::Govern::Nil
-    val kateRemoved         = typhoonKateProhibited(specialActivities)
-    val availableActivities = specialActivities filterNot (a => kateRemoved.contains(a))    
     val canPlaceExtraPolice = faction == US && capabilityInPlay(CombActionPlatoons_Unshaded)
     var placedExtraPolice   = false // only if CombActionPlatoons_Unshaded in play
     val maxTrainSpaces      = params.maxSpaces getOrElse 1000
@@ -765,13 +811,12 @@ object Human {
     }
 
     val notes = List(
-      noteIf(Special.allowed && kateRemoved.nonEmpty, s"${andList(kateRemoved)} prohibited [Momentum: $Mo_TyphoonKate]"),
       noteIf(canPlaceExtraPolice,                     s"May place 1 ARVN Police in 1 training space with US Troops [$CombActionPlatoons_Unshaded]"),
       noteIf(maxPacifySpaces == 2,                    s"May pactify in 2 spaces [$CORDS_Unshaded]"),
       noteIf(maxPacifyLevel == PassiveSupport,        s"May not Pacify to Active Support [$CORDS_Shaded]")
     ).flatten
 
-    def canSpecial = Special.allowed && availableActivities.nonEmpty
+    def canSpecial = Special.allowed
 
     def promptToAddForces(name: String): Unit = {
       val sp = game.getSpace(name)
@@ -859,7 +904,7 @@ object Human {
           selectTrainSpace()
 
         case "special" =>
-          executeSpecialActivity(faction, params, availableActivities)
+          executeSpecialActivity(faction, params, specialActivities)
           selectTrainSpace()
 
         case _ => // finished
@@ -945,7 +990,7 @@ object Human {
             }
 
           case "special" =>
-            executeSpecialActivity(faction, params, availableActivities)
+            executeSpecialActivity(faction, params, specialActivities)
             promptFinalAction()
 
           case _ =>
@@ -965,7 +1010,7 @@ object Human {
 
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
-      executeSpecialActivity(faction, params, availableActivities)
+      executeSpecialActivity(faction, params, specialActivities)
   }
 
   // Cap_M48Patton (shaded)
@@ -979,8 +1024,6 @@ object Human {
       Advise::AirLift::AirStrike::Nil
     else
       Govern::Transport::Raid::Nil
-    val kateRemoved         = typhoonKateProhibited(specialActivities)
-    val availableActivities = specialActivities filterNot (a => kateRemoved.contains(a))    
     val pattonUshaded = faction == US && capabilityInPlay(M48Patton_Unshaded)
     val pattonShaded  = capabilityInPlay(M48Patton_Shaded)
     val bodyCount     = momentumInPlay(Mo_BodyCount)
@@ -1001,13 +1044,12 @@ object Human {
     }
 
     val notes = List(
-      noteIf(Special.allowed && kateRemoved.nonEmpty, s"${andList(kateRemoved)} prohibited [Momentum: $Mo_TyphoonKate]"),
-      noteIf(bodyCount,                               s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]"),
-      noteIf(pattonUshaded,                           s"In follow up assault, remove 2 extra enemy pieces [$M48Patton_Unshaded]"),
-      noteIf(pattonShaded,                            s"After Patrol NVA removes up to 2 cubes that moved [$M48Patton_Shaded]")
+      noteIf(bodyCount,     s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]"),
+      noteIf(pattonUshaded, s"In follow up assault, remove 2 extra enemy pieces [$M48Patton_Unshaded]"),
+      noteIf(pattonShaded,  s"After Patrol NVA removes up to 2 cubes that moved [$M48Patton_Shaded]")
     ).flatten
 
-    def canSpecial = Special.allowed && availableActivities.nonEmpty
+    def canSpecial = Special.allowed
 
     def selectCubesToMove(): Unit = {
       val srcCandidates = spaceNames(game.spaces filter isPatrolSource)
@@ -1028,7 +1070,7 @@ object Human {
           }
           selectCubesToMove()
         case "special" =>
-          executeSpecialActivity(faction, params, availableActivities)
+          executeSpecialActivity(faction, params, specialActivities)
           selectCubesToMove()
 
         case _ => // finished
@@ -1121,7 +1163,7 @@ object Human {
             performAssault(name, faction, assaultParams)
           
           case "special" =>
-            executeSpecialActivity(faction, params, availableActivities)
+            executeSpecialActivity(faction, params, specialActivities)
             assaultOneLOC()
 
           case _ => // finished
@@ -1161,7 +1203,7 @@ object Human {
 
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
-      executeSpecialActivity(faction, params, availableActivities)
+      executeSpecialActivity(faction, params, specialActivities)
   }
 
 
@@ -1175,8 +1217,6 @@ object Human {
       AirLift::AirStrike::Nil
     else
       Transport::Raid::Nil
-    val kateRemoved         = typhoonKateProhibited(specialActivities)
-    val availableActivities = specialActivities filterNot (a => kateRemoved.contains(a))    
     var sweepSpaces     = Set.empty[String]
     var activatedSpaces = Set.empty[String]
     var cobrasSpaces    = Set.empty[String]
@@ -1192,51 +1232,54 @@ object Human {
       
     
     val notes = List(
-      noteIf(Special.allowed && kateRemoved.nonEmpty, s"${andList(kateRemoved)} prohibited [Momentum: $Mo_TyphoonKate]"),
-      noteIf(cobrasUnshaded,                          s"In 2 spaces, you may remove 1 active (untunneled) enemy [$Cobras_Unshaded]"),
-      noteIf(platoonsShaded,                          s"US can select a maximum of 2 spaces [$CombActionPlatoons_Shaded]"),
-      noteIf(boobyTraps,                              s"Each space, VC afterward remove 1 troop on die roll 1-3 [$BoobyTraps_Shaded]")
+      noteIf(cobrasUnshaded, s"In 2 spaces, you may remove 1 active (untunneled) enemy [$Cobras_Unshaded]"),
+      noteIf(platoonsShaded, s"US can select a maximum of 2 spaces [$CombActionPlatoons_Shaded]"),
+      noteIf(boobyTraps,     s"Each space, VC afterward remove 1 troop on die roll 1-3 [$BoobyTraps_Shaded]")
     ).flatten
 
-    def canSpecial = Special.allowed && availableActivities.nonEmpty
+    def canSpecial = Special.allowed
 
-    def moveCubesTo(destName: String): Unit = {
+    def moveTroopsTo(destName: String): Unit = {
       val candidates = sweepSources(destName, faction, alreadyMoved)
-      val choices = List(
-        choice(candidates.nonEmpty, "move",      "Select a space from which to move troops"),
-        choice(canSpecial,          "special",   "Perform a Special Activity"),
-        choice(true,                "finished", s"Finished moving troops to $destName")
-      ).flatten
+      val choices = (candidates map (name => name -> name)) :+ ("finished" -> s"Finished moving troops to $destName")
 
-      log(s"\nMoving cubes into $destName")
-      log(separator())
-      askMenu(choices, "Choose one:").head match {
-        case "move" =>
+      askMenu(choices, s"\nMove troops to $destName from:").head match {
+        case "finished" =>
+        
+        case srcName =>
           val TroopType = if (faction == US) USTroops else ARVNTroops
-          askCandidateOrBlank(s"\nMove $TroopType from which space: ", candidates) foreach { srcName =>
-            val troops = game.getSpace(srcName).pieces.only(TroopType) - alreadyMoved(srcName)
-            val num    = askInt(s"Move how many $TroopType", 0, troops.total)
-          
-            if (num > 0) {
-              val movers = Pieces().set(num, TroopType)
-              alreadyMoved.add(destName, movers)
-              movePieces(movers, srcName, destName)
-            }
+          val troops    = game.getSpace(srcName).pieces.only(TroopType) - alreadyMoved(srcName)
+          val num       = askInt(s"Move how many $TroopType", 0, troops.total)
+        
+          if (num > 0) {
+            val movers = Pieces().set(num, TroopType)
+            alreadyMoved.add(destName, movers)
+            movePieces(movers, srcName, destName)
           }
-          moveCubesTo(destName)
-          
-        case "special" =>
-          executeSpecialActivity(faction, params, availableActivities)
-          moveCubesTo(destName)
-
-        case _ => // finished
+          moveTroopsTo(destName)
+      }
+    }
+    
+    // Per the rules, cubes are moved into sweep spaces "simultaneously"
+    // so we do not allow a "special activity" to be selected while cubes
+    // are being moved.
+    def moveTroops(): Unit = {
+      val destCandidates = sweepSpaces.toList.sorted filter { name =>
+        sweepSources(name, faction, alreadyMoved).nonEmpty
       }
       
+      val choices = (destCandidates map (name => name -> name)) :+ ("finished" -> "Finished moving troops")
+      askMenu(choices, "\nMove cubes to:").head match {
+        case "finished" =>
+        case name =>
+          moveTroopsTo(name)
+          moveTroops()
+      }
     }
     
     // Select provinces/cities (not N. Vietnam)
     def selectSweepSpace(): Unit = {
-      // Note: we allow selecting spaces with out cubes or adjacent cubes because
+      // Note: we allow selecting spaces without cubes or adjacent cubes because
       // the user may air lift cube in...
       val candidates = if (sweepSpaces.size < maxSpaces)
         spaceNames(game.nonLocSpaces filterNot (sp => sp.isNorthVietnam || sweepSpaces(sp.name)))
@@ -1249,7 +1292,7 @@ object Human {
         choice(true,       "finished", s"Finished selecting Sweep spaces")
       ).flatten
       
-      println(s"\nSweep spaces selected")
+      println("\nSweep spaces selected")
       println(separator())
       wrap("", sweepSpaces.toList) foreach println
       
@@ -1259,14 +1302,14 @@ object Human {
             sweepSpaces = sweepSpaces + name
             if (faction == ARVN && !params.free)
               decreaseResources(ARVN, 3)
-            moveCubesTo(name)
+
             if (cobrasUnshaded && cobrasSpaces.size < 2 && doCobrasUnshaded(name))
               cobrasSpaces = cobrasSpaces + name
           }
           selectSweepSpace()
           
         case "special" =>
-          executeSpecialActivity(faction, params, availableActivities)
+          executeSpecialActivity(faction, params, specialActivities)
           selectSweepSpace()
 
         case _ => // finished
@@ -1297,7 +1340,7 @@ object Human {
             }
               
           case "special" =>
-            executeSpecialActivity(faction, params, availableActivities)
+            executeSpecialActivity(faction, params, specialActivities)
             activateGuerrillas()
 
           case name =>
@@ -1316,13 +1359,14 @@ object Human {
       notes foreach println
     
     selectSweepSpace()
+    moveTroops()
     if (sweepSpaces.nonEmpty) {
       activateGuerrillas()
     }
     
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
-      executeSpecialActivity(faction, params, availableActivities)
+      executeSpecialActivity(faction, params, specialActivities)
   }
 
 
@@ -1465,8 +1509,6 @@ object Human {
       AirLift::AirStrike::Nil
     else
       Transport::Raid::Nil
-    val kateRemoved         = typhoonKateProhibited(specialActivities)
-    val availableActivities = specialActivities filterNot (a => kateRemoved.contains(a))    
     val bodyCount           = momentumInPlay(Mo_BodyCount)
     val abramsUnshaded      = faction == US && capabilityInPlay(Abrams_Unshaded)
     val abramsShaded        = faction == US && capabilityInPlay(Abrams_Shaded) && !params.limOpOnly
@@ -1487,17 +1529,16 @@ object Human {
     }
 
     val notes = List(
-      noteIf(Special.allowed && kateRemoved.nonEmpty, s"${andList(kateRemoved)} prohibited [Momentum: $Mo_TyphoonKate]"),
-      noteIf(abramsUnshaded,       s"In 1 space you may remove 1 (untunneled) base first [$Abrams_Unshaded]"),
-      noteIf(abramsShaded,         s"Select a maximum of 2 spaces [$Abrams_Shaded]"),
-      noteIf(m48Patton,            s"In 2 non-Lowland spaces remove 2 extra enemy pieces [$M48Patton_Unshaded]"),
-      noteIf(cobras,               s"Each space, remove 1 troop on die roll 1-3 [$Cobras_Shaded]"),
-      noteIf(sdUnshaded,           s"Each space, may remove 1 underground guerrilla [$SearchAndDestroy_Unshaded]"),
-      noteIf(sdShaded,             s"Each province, shift support toward Active Opposition [$SearchAndDestroy_Shaded]"),
-      noteIf(bodyCount,            s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]")
+      noteIf(abramsUnshaded, s"In 1 space you may remove 1 (untunneled) base first [$Abrams_Unshaded]"),
+      noteIf(abramsShaded,   s"Select a maximum of 2 spaces [$Abrams_Shaded]"),
+      noteIf(m48Patton,      s"In 2 non-Lowland spaces remove 2 extra enemy pieces [$M48Patton_Unshaded]"),
+      noteIf(cobras,         s"Each space, remove 1 troop on die roll 1-3 [$Cobras_Shaded]"),
+      noteIf(sdUnshaded,     s"Each space, may remove 1 underground guerrilla [$SearchAndDestroy_Unshaded]"),
+      noteIf(sdShaded,       s"Each province, shift support toward Active Opposition [$SearchAndDestroy_Shaded]"),
+      noteIf(bodyCount,      s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]")
     ).flatten
 
-    def canSpecial = Special.allowed && availableActivities.nonEmpty
+    def canSpecial = Special.allowed
 
     def selectAssaultSpace(): Unit = {
 
@@ -1557,7 +1598,7 @@ object Human {
           selectAssaultSpace()
 
         case "special" =>
-          executeSpecialActivity(faction, params, availableActivities)
+          executeSpecialActivity(faction, params, specialActivities)
           selectAssaultSpace()
 
         case _ => // finished
@@ -1573,7 +1614,7 @@ object Human {
 
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
-      executeSpecialActivity(faction, params, availableActivities)
+      executeSpecialActivity(faction, params, specialActivities)
   }
 
   // ====================================================================
@@ -1589,8 +1630,6 @@ object Human {
       Infiltrate::Bombard::Nil
     else
       Tax::Subvert::Nil
-    val kateRemoved         = typhoonKateProhibited(specialActivities)
-    val availableActivities = specialActivities filterNot (a => kateRemoved.contains(a))    
     val mcnamara    = faction == NVA && momentumInPlay(Mo_McNamaraLine)
     val sa2s        = faction == NVA && !mcnamara && capabilityInPlay(SA2s_Shaded)
     val aaa         = faction == NVA && !mcnamara && !params.limOpOnly && capabilityInPlay(AAA_Unshaded)
@@ -1599,14 +1638,13 @@ object Human {
     var didCadres   = false
     
     val notes = List(
-      noteIf(Special.allowed && kateRemoved.nonEmpty, s"${andList(kateRemoved)} prohibited [Momentum: $Mo_TyphoonKate]"),
-      noteIf(mcnamara,             s"Trail improvemnet is prohibited [Momentum: $Mo_McNamaraLine]"),
-      noteIf(sa2s,                 s"Trail improvement is 2 boxes instead of 1 [$SA2s_Shaded]"),
-      noteIf(aaa,                  s"Rally that improves the Trail may select 1 space only [$AAA_Unshaded]"),
-      noteIf(cadres,               s"May Agitate in one space with an existing base [$Cadres_Shaded]")
+      noteIf(mcnamara, s"Trail improvemnet is prohibited [Momentum: $Mo_McNamaraLine]"),
+      noteIf(sa2s,     s"Trail improvement is 2 boxes instead of 1 [$SA2s_Shaded]"),
+      noteIf(aaa,      s"Rally that improves the Trail may select 1 space only [$AAA_Unshaded]"),
+      noteIf(cadres,   s"May Agitate in one space with an existing base [$Cadres_Shaded]")
     ).flatten
 
-    def canSpecial = Special.allowed && availableActivities.nonEmpty
+    def canSpecial = Special.allowed
 
     def promptToAddPieces(name: String): Unit = {
       val sp            = game.getSpace(name)
@@ -1698,7 +1736,7 @@ object Human {
           selectRallySpace()
         
         case "special" =>
-          executeSpecialActivity(faction, params, availableActivities)
+          executeSpecialActivity(faction, params, specialActivities)
           selectRallySpace()
         
         case _ =>
@@ -1726,7 +1764,7 @@ object Human {
       
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
-      executeSpecialActivity(faction, params, availableActivities)
+      executeSpecialActivity(faction, params, specialActivities)
   }
 
   // MainForceBns_Unshaded - March into LOC/Support activate on moving+COIN > 1 (vice >3)
@@ -1736,10 +1774,6 @@ object Human {
       Infiltrate::Bombard::Ambush::Nil
     else
       Tax::Subvert::Ambush::Nil
-    val kateRemoved         = typhoonKateProhibited(specialActivities)
-    val clayRemoved         = claymoresProhibited(specialActivities)
-    val availableActivities = specialActivities filterNot (a => kateRemoved.contains(a) || clayRemoved.contains(a))
-    
     val moveableTypes   = if (faction == NVA) NVATroops::NVAGuerrillas else VCGuerrillas
     val maxDestinations = params.maxSpaces getOrElse 1000
     var destinations    = Set.empty[String]
@@ -1750,10 +1784,8 @@ object Human {
     val movedInto       = new MovingGroups()  // All pieces that have moved into each dest space
     
     val notes = List(
-      noteIf(Special.allowed && kateRemoved.nonEmpty, s"${andList(kateRemoved)} prohibited [Momentum: $Mo_TyphoonKate]"),
-      noteIf(Special.allowed && clayRemoved.nonEmpty, s"${andList(clayRemoved)} prohibited [Momentum: $Mo_Claymores]"),
-      noteIf(mainForceBins,                           s"March into LOC/Support activates if moving+COIN > 1 [$MainForceBns_Unshaded]"),
-      noteIf(claymores,                               s"Remove 1 guerrilla in each marching group that activates [$Mo_Claymores]")
+      noteIf(mainForceBins, s"March into LOC/Support activates if moving+COIN > 1 [$MainForceBns_Unshaded]"),
+      noteIf(claymores,     s"Remove 1 guerrilla in each marching group that activates [$Mo_Claymores]")
     ).flatten
     
     def moveablePieces(name: String) = {
@@ -1830,9 +1862,11 @@ object Human {
       }
     }
     
-    def canSpecial = Special.allowed && availableActivities.nonEmpty
+    def canSpecial = Special.allowed
 
-    def ambushCandidates = if (Special.canAmbush) {
+    val maxAmbush = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
+
+    def ambushCandidates = if (Special.canAmbush && Special.selectedSpaces.size < maxAmbush) {
       val underground = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
       destinations.toList.sorted filter { name =>
         !(Special.selectedSpaces contains name) &&   // Can't ambush same space twice
@@ -1868,7 +1902,7 @@ object Human {
           nextMarchAction()
         
         case "special" =>
-          executeSpecialActivity(faction, params, availableActivities)
+          executeSpecialActivity(faction, params, specialActivities)
           nextMarchAction()
           
         
@@ -1904,7 +1938,7 @@ object Human {
           
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
-      executeSpecialActivity(faction, params, availableActivities)
+      executeSpecialActivity(faction, params, specialActivities)
   }
 
   // PT76_Unshaded - Each NVA attack space, first remove 1 NVA troop cube (also ambush)
@@ -1914,9 +1948,6 @@ object Human {
       Bombard::Ambush::Nil
     else
       Tax::Ambush::Nil
-    val kateRemoved         = typhoonKateProhibited(specialActivities)
-    val clayRemoved         = claymoresProhibited(specialActivities)
-    val availableActivities = specialActivities filterNot (a => kateRemoved.contains(a) || clayRemoved.contains(a))
     val pt76_unshaded      = faction == NVA && capabilityInPlay(PT76_Unshaded)
     val pt76_shaded        = faction == NVA && capabilityInPlay(PT76_Shaded)
 
@@ -1925,13 +1956,11 @@ object Human {
     val guerrillas   = if (faction == NVA) NVAGuerrillas else VCGuerrillas
 
     val notes = List(
-      noteIf(Special.allowed && kateRemoved.nonEmpty, s"${andList(kateRemoved)} prohibited [Momentum: $Mo_TyphoonKate]"),
-      noteIf(Special.allowed && clayRemoved.nonEmpty, s"${andList(clayRemoved)} prohibited [Momentum: $Mo_Claymores]"),
       noteIf(pt76_unshaded, s"Each NVA attack space first remove 1 NVA troop [$PT76_Unshaded]"),
       noteIf(pt76_shaded,   s"In 1 NVA attack space, remove 1 enemy per Troop [$PT76_Shaded]")
     ).flatten
 
-    def canSpecial = Special.allowed && availableActivities.nonEmpty
+    def canSpecial = Special.allowed
     
     val isAttackSpace = (sp: Space) => {
       !attackSpaces.contains(sp.name) &&
@@ -1944,13 +1973,16 @@ object Human {
       sp.pieces.has(guerrillas)       &&
       ambushTargets(sp.name).nonEmpty
     }    
+    
+    val maxAmbush = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
 
     def nextAttackAction(): Unit = {
       val hasTheCash       = params.free || game.resources(faction) > 0
       val attackCandidates = spaceNames(game.spaces filter isAttackSpace)
       val ambushCandidates = spaceNames(game.spaces filter isAmbushSpace)
       val canAttack        = hasTheCash && attackCandidates.nonEmpty && attackSpaces.size < maxAttacks
-      val canAmbush        = hasTheCash && Special.canAmbush && ambushCandidates.nonEmpty && attackSpaces.size < maxAttacks
+      val canAmbush        = hasTheCash && Special.canAmbush && Special.selectedSpaces.size < maxAmbush &&
+                             ambushCandidates.nonEmpty && attackSpaces.size < maxAttacks
       val choices = List(
         choice(canAttack,  "attack",  s"Select a space to Attack"),
         choice(canAmbush,  "ambush",  s"Select a space to Ambush"),
@@ -1974,7 +2006,7 @@ object Human {
           nextAttackAction()
         
         case "special" =>
-          executeSpecialActivity(faction, params, availableActivities)
+          executeSpecialActivity(faction, params, specialActivities)
           nextAttackAction()
 
         case _ =>  // finished
@@ -1991,7 +2023,7 @@ object Human {
 
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
-      executeSpecialActivity(faction, params, availableActivities)
+      executeSpecialActivity(faction, params, specialActivities)
   }
 
   // Cadres_Unshaded - VC terror must remove two guerrillas per space
@@ -2001,17 +2033,14 @@ object Human {
     else
       Tax::Subvert::Nil
     val cadres              = faction == VC && capabilityInPlay(Cadres_Unshaded)
-    val kateRemoved         = typhoonKateProhibited(specialActivities)
-    val availableActivities = specialActivities filterNot (a => kateRemoved.contains(a))
     var selectedSpaces      = List.empty[String]
     val maxSpaces           = params.maxSpaces getOrElse 1000
     val underground         = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
     
-    def canSpecial = Special.allowed && availableActivities.nonEmpty
+    def canSpecial = Special.allowed
      
     val notes = List(
-      noteIf(Special.allowed && kateRemoved.nonEmpty, s"${andList(kateRemoved)} prohibited [Momentum: $Mo_TyphoonKate]"),
-      noteIf(cadres,                                  s"$faction must remove 2 guerrillas in each terror space [$Cadres_Unshaded]")
+      noteIf(cadres, s"$faction must remove 2 guerrillas in each terror space [$Cadres_Unshaded]")
     ).flatten
     
     
@@ -2075,7 +2104,7 @@ object Human {
           nextTerrorAction()
 
         case "special" =>
-          executeSpecialActivity(faction, params, availableActivities)
+          executeSpecialActivity(faction, params, specialActivities)
           nextTerrorAction()
 
         case _ => // finished
@@ -2093,7 +2122,7 @@ object Human {
           
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
-      executeSpecialActivity(faction, params, availableActivities)
+      executeSpecialActivity(faction, params, specialActivities)
     
   }
 }

@@ -424,28 +424,28 @@ object FireInTheLake {
   case object VCBase          extends PieceType { val name = "VC Base" }
   case object VCTunnel        extends PieceType { val name = "VC Tunneled Base" }
 
-  val USPieces        = List(USTroops, Irregulars_U, Irregulars_A, USBase)
-  val ARVNPieces      = List(ARVNTroops, ARVNPolice, Rangers_U, Rangers_A, ARVNBase)
-  val NVAPieces       = List(NVATroops, NVAGuerrillas_U, NVAGuerrillas_A, NVABase, NVATunnel)
-  val VCPieces        = List(VCGuerrillas_U, VCGuerrillas_A, VCBase, VCTunnel)
-  val CoinPieces      = USPieces:::ARVNPieces
-  val InsurgentPieces = NVAPieces:::VCPieces
-  val NonNVAPieces    = USPieces:::ARVNPieces:::VCPieces
-  val CoinBases       = List(USBase, ARVNBase)
-  val InsurgentBases  = List(NVATunnel, NVABase, VCTunnel, VCBase)
+  val USPieces            = List(USTroops, Irregulars_U, Irregulars_A, USBase)
+  val ARVNPieces          = List(ARVNTroops, ARVNPolice, Rangers_U, Rangers_A, ARVNBase)
+  val NVAPieces           = List(NVATroops, NVAGuerrillas_U, NVAGuerrillas_A, NVABase, NVATunnel)
+  val VCPieces            = List(VCGuerrillas_U, VCGuerrillas_A, VCBase, VCTunnel)
+  val CoinPieces          = USPieces:::ARVNPieces
+  val InsurgentPieces     = NVAPieces:::VCPieces
+  val NonNVAPieces        = USPieces:::ARVNPieces:::VCPieces
+  val CoinBases           = List(USBase, ARVNBase)
+  val InsurgentBases      = List(NVATunnel, NVABase, VCTunnel, VCBase)
   val InsurgentNonTunnels = List(NVABase, VCBase)
   val InsurgentTunnels    = List(NVATunnel, VCTunnel)
-  val Irregulars      = List(Irregulars_A, Irregulars_U)
-  val Rangers         = List(Rangers_A, Rangers_U)
-  val NVAGuerrillas   = List(NVAGuerrillas_A, NVAGuerrillas_U)
-  val VCGuerrillas    = List(VCGuerrillas_A, VCGuerrillas_U)
-  val ARVNCubes       = List(ARVNPolice, ARVNTroops)
-  val FlippablePieces = List(Irregulars_U, Irregulars_A, Rangers_U, Rangers_A,
-                             NVAGuerrillas_U, NVAGuerrillas_A, VCGuerrillas_U, VCGuerrillas_A)
-  val Guerrillas      = List(NVAGuerrillas_A, VCGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_U)
-  val ActiveGuerrillas      = List(NVAGuerrillas_A, VCGuerrillas_A)
+  val Irregulars          = List(Irregulars_A, Irregulars_U)
+  val Rangers             = List(Rangers_A, Rangers_U)
+  val NVAGuerrillas       = List(NVAGuerrillas_A, NVAGuerrillas_U)
+  val VCGuerrillas        = List(VCGuerrillas_A, VCGuerrillas_U)
+  val ARVNCubes           = List(ARVNPolice, ARVNTroops)
+  val FlippablePieces     = List(Irregulars_U, Irregulars_A, Rangers_U, Rangers_A,
+                                                  NVAGuerrillas_U, NVAGuerrillas_A, VCGuerrillas_U, VCGuerrillas_A)
+  val Guerrillas          = List(NVAGuerrillas_A, VCGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_U)
+  val ActiveGuerrillas    = List(NVAGuerrillas_A, VCGuerrillas_A)
   val UndergroundGuerrillas = List(NVAGuerrillas_U, VCGuerrillas_U)
-  val CoinForces      = List(USTroops, Irregulars_A, Irregulars_U, ARVNTroops, ARVNPolice, Rangers_A, Rangers_U)
+  val CoinForces          = List(USTroops, Irregulars_A, Irregulars_U, ARVNTroops, ARVNPolice, Rangers_A, Rangers_U)
 
   val factionPieces: Map[Faction, List[PieceType]] = Map(
     US   -> USPieces,

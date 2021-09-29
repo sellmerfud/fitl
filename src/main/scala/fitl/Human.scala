@@ -110,6 +110,7 @@ object Human {
 
     def spaces = groups.keys.toSet
     def toList = groups.toList.sortBy(_._1)
+    def allPieces = toList.foldLeft(Pieces()) { (all, group) => all + group._2 }
     def size   = groups.size
   }
   
@@ -553,10 +554,8 @@ object Human {
     log(separator())
     
     nextAdviseSpace();
-
     if (askYorN("\nDo you wish to add +6 Aid? (y/n) "))
       increaseUsAid(6)
-    
     Special.completed()
   }
 
@@ -564,11 +563,139 @@ object Human {
   // Any US Troops plus up to 4 (Irregulars, Rangers, ARVN Troops)
   // among 4 selected spaces (2 in Monsoon, Never N. Vietnam)
   def doAirLift(params: Params): Unit = {
-    log("\nUS Air Lift special activity not yet implemented.")
+    val Others: List[PieceType] = ARVNTroops::Rangers:::Irregulars
+    val maxAirLiftSpaces = if (game.inMonsoon) 2 else 4
+    var airLiftSpaces    = List.empty[String]
+    val liftedOthers     = new MovingGroups()  // ARVN troops, Rangers, Irregulars (max 4)
+    
+    def totalLiftedOthers = liftedOthers.allPieces.total
+    
+    // All US Troops and Others that have moved are always included.
+    // Others that have not moved only if total others < 4
+    def moveablePieces(sp: Space) = {
+      val usTroopsAndLiftedOthers = sp.pieces.only(USTroops) + liftedOthers(sp.name)
+      val unmovedOthers = sp.pieces.only(Others) - liftedOthers(sp.name)
+      
+      if (totalLiftedOthers < 4)
+        usTroopsAndLiftedOthers + unmovedOthers
+      else
+        usTroopsAndLiftedOthers
+    }
+    
+    def airLiftCandidates = spaceNames(game.spaces filter { sp =>
+      !sp.isNorthVietnam && !airLiftSpaces.contains(sp.name)
+    })
+    
+    def liftOutCandidates = if (airLiftSpaces.size > 1)
+      airLiftSpaces.filter(name => moveablePieces(game.getSpace(name)).nonEmpty) 
+    else
+      Nil
+
+    
+    // Lift forces out and place them in a destination space
+    def liftForcesOutOf(srcName: String): Unit = {
+      val ForceTypes = List(USTroops, Irregulars_U, Irregulars_A, ARVNTroops, Rangers_U, Rangers_A)
+      val destCandidates = airLiftSpaces filter (_ != srcName)
+      val choices = (destCandidates map (name => name -> name)) :+ ("none" -> "Do not move forces now")
+      
+      def moveForces(destName: String): Unit = {
+        val src           = game.getSpace(srcName)
+        val dest          = game.getSpace(destName)
+        val eligible      = moveablePieces(src)
+        val others        = eligible.only(Others)
+        val unmovedOthers = eligible.only(Others) - liftedOthers(srcName)
+        val maxNewOthers  = (4 - totalLiftedOthers) min unmovedOthers.total
+        def maxForce(t: PieceType): Int = {
+          if (t == USTroops)
+            eligible.numOf(USTroops)
+          else
+            liftedOthers(srcName).numOf(t) + (maxNewOthers min unmovedOthers.numOf(t))
+        }
+        val forceChoices = ForceTypes flatMap { t =>
+          val num = maxForce(t)
+          val name = if (num == 1) t.singular else t.plural
+          if (num > 0) Some(Some(t) -> s"Air Lift $name") else None
+        }
+        val choices = forceChoices :+ (None -> s"Finished moving forces out of $srcName")
+        
+        println(s"\nAir Lifting forces from $srcName to $destName")
+        askMenu(choices, "Choose one:").head match {
+          case None =>
+          case Some(t) =>
+            val num = askInt(s"Move how many $t", 0, maxForce(t))
+            movePieces(Pieces().set(num, t), srcName, destName)
+            // Update liftedOthers 
+            if (t != USTroops) {
+              val numMovedBefore = liftedOthers(srcName).numOf(t)
+              val numFirstMove   = (num - numMovedBefore) max 0
+              val numMovingAgain = num - numFirstMove
+              liftedOthers.remove(srcName, Pieces().set(numMovingAgain, t))
+              liftedOthers.add(destName, Pieces().set(num, t))
+            }
+            moveForces(destName)
+        }
+      }
+      
+      askMenu(choices, "\nLift forces to which space:").head match {
+        case "none"   =>
+        case destName =>
+          moveForces(destName)
+      }
+    }
+
+    def nextAirLiftAction(): Unit = {
+      val selectChoice = choice(airLiftSpaces.size < maxAirLiftSpaces, "select", "Select an Air Lift space").toList
+      val moveChoices  = liftOutCandidates map (name => name -> s"Lift forces out of $name")
+      val choices      = selectChoice:::moveChoices:::List("finished" -> "Finished with Air Lift")
+    
+      println(s"\n${amountOf(airLiftSpaces.size, "space")} selected for Air Lift [max $maxAirLiftSpaces]")
+      println(separator())
+      wrap("", airLiftSpaces) foreach println
+      askMenu(choices, "\nSelect one:").head match {
+        case "select" =>
+          askCandidateOrBlank("\nAir Lift in which space: ", airLiftCandidates) foreach { name =>
+            airLiftSpaces = airLiftSpaces :+ name
+          }
+          nextAirLiftAction()
+          
+        case "finished" =>
+         
+        case name =>
+          liftForcesOutOf(name)
+          nextAirLiftAction()
+      }
+    }
+    
+    // Start of Air Lift Special Activity
+    // ------------------------------------
+    log("\nUS chooses the Air Lift special activity")
+    log(separator())
+    if (game.inMonsoon)
+      log("May only choose 2 spaces in Monsoon")
+    
+    nextAirLiftAction()
+    Special.completed()
   }
 
   // US special activity
+  // Destroy exposed insurent units and degrade trail
+  // Up to 6 spaces (2 in Monsoon) each with any US or ARVN piece
+  // Roll d6 to determine number of hits
+  // 2 hits may be used to degrade trail by one box (only once)
+  // 1 hit per enemy piece removed.  (NVATroops, then active guerrillas, then exposed bases)
+  // Shift each City/Province with >= 1 Population one level toward Active Opposition
+  //
   // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
+  // Mo_WildWeasels - Either degrade trail OR remove only 1 piece (not 1-6)
+  // TopGun_Unshaded - degrade trail by 2 boxes instead of 1
+  // TopGun_Shaded - degrade of trail requires d6 = 4-6 (after expending 2 hits)
+  // ArcLight_Unshaded - 1 space may be Province without COIN pieces (including N. Vietnam)
+  // ArcLight_Shaded - spaces removing >1 piece shift two levels toward Active Opposition
+  // LaserGuidedBombs_Unshaded - In space were only 1 piece removed, no shift toward Active Opposition
+  // LaserGuidedBombs_Shaded - Remove no more than 2 pieces total
+  // AAA_Shaded - Cannot degrade the trail below 2
+  // MiGs_Shaded - If trail degraded, US remove 1 Available Troop to Casualties
+  // SA2s_Unshaded - When trail degraded, US removes 1 NVA piece (including untunneled base) outside the South
   def doAirStrike(params: Params): Unit = {
     log("\nUS Air Strike special activity not yet implemented.")
   }
@@ -628,7 +755,8 @@ object Human {
     
     println("Notes:")
     println(separator())
-    notes foreach println
+    for (note <- notes)
+      log(note)
     
     Special.ambushing = true
     Special.completed()
@@ -660,7 +788,8 @@ object Human {
     if (notes.nonEmpty) {
       println("\nNotes:")
       println(separator())
-      notes foreach println
+      for (note <- notes)
+        log(note)
     }
     
     val choices: List[(Option[SpecialActivity], String)] =
@@ -740,7 +869,8 @@ object Human {
     if (notes.nonEmpty) {
       println("Notes:")
       println(separator())
-      notes foreach println
+      for (note <- notes)
+        log(note)
     }
 
     askMenu(choices, "\nChoose operation:").head match {
@@ -884,7 +1014,7 @@ object Human {
         choice(true,       "finished", "Finished selecting spaces")
       ).flatten
 
-      println(s"\nSpaces selected for Training")
+      println(s"\n${amountOf(selectedSpaces.size, "space")} selected for Training")
       println(separator())
       wrap("", selectedSpaces) foreach println
 
@@ -1001,8 +1131,8 @@ object Human {
 
     log(s"\n$faction chooses Train operation")
     log(separator())
-    if (notes.nonEmpty)
-      notes foreach println
+    for (note <- notes)
+      log(note)
 
     selectTrainSpace()
     if (selectedSpaces.nonEmpty)
@@ -1183,7 +1313,8 @@ object Human {
       }
       if (notes.nonEmpty) {
         println(separator())
-        notes foreach println
+        for (note <- notes)
+          log(note)
       }
       
       selectCubesToMove()
@@ -1355,8 +1486,8 @@ object Human {
     
     log(s"\n$faction chooses Sweep operation")
     log(separator())
-    if (notes.nonEmpty)
-      notes foreach println
+    for (note <- notes)
+      log(note)
     
     selectSweepSpace()
     moveTroops()
@@ -1607,8 +1738,8 @@ object Human {
 
     log(s"\n$faction chooses Assault operation")
     log(separator())
-    if (notes.nonEmpty)
-      notes foreach println
+    for (note <- notes)
+      log(note)
 
     selectAssaultSpace()
 
@@ -1711,7 +1842,7 @@ object Human {
         choice(true,       "finished", "Finished selecting spaces")
       ).flatten
       
-      println(s"\nSpaces selected for Rally")
+      println(s"\n${amountOf(rallySpaces.size, "space")} selected for Rally")
       println(separator())
       wrap("", rallySpaces) foreach println
         
@@ -1745,8 +1876,8 @@ object Human {
 
     log(s"\n$faction chooses Rally operation")
     log(separator())
-    if (notes.nonEmpty)
-      notes foreach println
+    for (note <- notes)
+      log(note)
     
     selectRallySpace()
     
@@ -1931,8 +2062,8 @@ object Human {
 
     log(s"\n$faction chooses March operation")
     log(separator())
-    if (notes.nonEmpty)
-      notes foreach println
+    for (note <- notes)
+      log(note)
     
     nextMarchAction()
           
@@ -2016,8 +2147,8 @@ object Human {
 
     log(s"\n$faction chooses Attack operation")
     log(separator())
-    if (notes.nonEmpty)
-      notes foreach println
+    for (note <- notes)
+      log(note)
 
     nextAttackAction()
 
@@ -2064,7 +2195,7 @@ object Human {
         choice(true,       "finished", "Finished selecting spaces")
       ).flatten
 
-      println(s"\nSpaces selected for Terror")
+      println(s"\n${amountOf(selectedSpaces.size, "space")} selected for Terror")
       println(separator())
       wrap("", selectedSpaces) foreach println
 
@@ -2115,8 +2246,8 @@ object Human {
     
     log(s"\n$faction chooses Terror operation")
     log(separator())
-    if (notes.nonEmpty)
-      notes foreach println
+    for (note <- notes)
+      log(note)
     
     nextTerrorAction()
           

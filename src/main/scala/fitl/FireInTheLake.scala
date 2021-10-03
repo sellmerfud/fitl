@@ -239,6 +239,9 @@ object FireInTheLake {
   val LOC_CanTho_BacLieu          = "LOC Can Tho -- Bac Lieu"
   val LOC_CanTho_LongPhu          = "LOC Can Tho -- Long Phu"
 
+  val OutsideSouth =  List(NorthVietnam, CentralLaos, SouthernLaos, NortheastCambodia,
+                           TheFishhook, TheParrotsBeak, Sihanoukville)
+  
   val LocLastOrdering = new Ordering[String] {
     def compare(x: String, y: String) = {
       (x startsWith "LOC", y startsWith "LOC") match {
@@ -522,7 +525,7 @@ object FireInTheLake {
     def hasBase(faction: Faction) = only(BasePieces).totalFaction(faction) > 0
     def hasExposedInsurgents = has(NVATroops) ||
                                has(ActiveGuerrillas) ||
-                               (!has(Guerrillas) && has(InsurgentBases))
+                               (!has(Guerrillas) && has(InsurgentNonTunnels))
 
     def total = totalOf(AllPieceTypes)
 
@@ -1058,7 +1061,7 @@ object FireInTheLake {
 
   // Momentum markers
   val Mo_WildWeasels       = "#5 Wild Weasels"              // Shaded   (affects Air Strike)
-  val Mo_ADSID             = "#7 ADSID"                     // Unshaded (affects change to trail value)
+  val Mo_ADSID             = "#7 ADSID"                     // Unshaded (-6 NVA resources at any trail change)
   val Mo_RollingThunder    = "#10 Rolling Thunder"          // Shaded   (prohibits air strike)
   val Mo_Medevac_Unshaded  = s"$Medevac_prefix (unshaded)"  // (affects commitment phase during coup round)
   val Mo_Medevac_Shaded    = s"$Medevac_prefix (shaded)"    // (prohibits air lift)
@@ -2211,6 +2214,10 @@ object FireInTheLake {
     if (newTrail != game.trail) {
       game = game.copy(trail = newTrail)
       log(s"Improve the trail by ${amountOf(num, "box", Some("boxes"))} to $newTrail")
+      if (momentumInPlay(Mo_ADSID) && game.isHuman(NVA)) {
+        log(s"Momentum $Mo_ADSID triggers")
+        decreaseResources(NVA, 6)
+      }
     }
   }
   
@@ -2219,6 +2226,10 @@ object FireInTheLake {
     if (newTrail != game.trail) {
       game = game.copy(trail = newTrail)
       log(s"Degrade the trail by ${amountOf(num, "box", Some("boxes"))} to $newTrail")
+      if (momentumInPlay(Mo_ADSID) && game.isHuman(NVA)) {
+        log(s"Momentum $Mo_ADSID triggers")
+        decreaseResources(NVA, 6)
+      }
     }
   }
 
@@ -2380,6 +2391,22 @@ object FireInTheLake {
         case None      => log()
       }
       log(s"Remove the following pieces from $spaceName to CASUALTIES:")
+      wrap("  ", pieces.descriptions) foreach (log(_))
+    }
+  }
+  
+  def removeAvailableToCasualties(pieces: Pieces, reason: Option[String] = None): Unit = if (pieces.total > 0) {
+    loggingPointsChanges {
+      val available = game.availablePieces
+      assert(available contains pieces, s"All requested pieces are not available: $pieces")
+      // Pieces in casualties are always normalized.
+      game = game.copy(casualties = game.casualties + pieces.normalized)
+      
+      reason match {
+        case Some(msg) => log(s"\n$msg"); log(separator())
+        case None      => log()
+      }
+      log(s"Remove the following pieces from AVAILABLE to CASUALTIES:")
       wrap("  ", pieces.descriptions) foreach (log(_))
     }
   }

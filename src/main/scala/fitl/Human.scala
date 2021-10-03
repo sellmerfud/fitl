@@ -130,6 +130,72 @@ object Human {
     spaceNames(srcSpaces)
   }
   
+  // Return the number of exposed insurgent pieces
+  // Bases are only included if there are not hidden guerrillas
+  def numExposedInsurgents(pieces: Pieces): Int = {
+    val exposedForces = pieces.totalOf(NVATroops::ActiveGuerrillas)
+    val exposedBases  = if (pieces.has(UndergroundGuerrillas)) 0
+                        else pieces.totalOf(NVABase::VCBase::Nil)
+    exposedForces + exposedBases
+  }
+  
+  //  Kill exposed insurgent pieces up to the max allowd.
+  //  NVA Troops first
+  //  Then active guerrillas (prompt user for which to remove)
+  //  Then if no troops/guerrillas remain bases can be removed
+  //  If `canRevealTunnel` is true, and no other Insurgent pieces
+  //  remain, then the tunnel marker is removed.
+  //  Return the number of pieces removed.
+  def killExposedInsurgents(name: String, maxRemoval: Int, canRevealTunnel: Boolean): Pieces = {
+    loggingControlChanges {
+      var removed    = Pieces()
+      def pieces     = game.getSpace(name).pieces
+      def remaining  = maxRemoval - removed.total
+      
+      (remaining min pieces.numOf(NVATroops)) match {
+        case 0 =>
+        case num =>
+          val toRemove = Pieces(nvaTroops = num)
+          removeToAvailable(name, toRemove)
+          removed = removed + toRemove
+      }
+      
+      (remaining min pieces.totalOf(ActiveGuerrillas)) match {
+        case 0 =>
+        case num =>
+          val prompt = s"\nRemove active guerrillas"
+          val toRemove = askPieces(pieces, num, ActiveGuerrillas, Some(prompt))
+          removeToAvailable(name, toRemove)
+          removed = removed + toRemove
+      }
+      
+      if (!pieces.has(NVATroops::Guerrillas)) {
+        (remaining min pieces.totalOf(InsurgentNonTunnels)) match {
+          case 0 =>
+          case num =>
+            val prompt = s"\nRemove untunneled bases"
+            val toRemove = askPieces(pieces, num, InsurgentNonTunnels, Some(prompt))
+            removeToAvailable(name, toRemove)
+            removed = removed + toRemove
+        }
+        
+        if (canRevealTunnel && remaining > 0 && pieces.has(InsurgentTunnels)) {
+          val die = d6
+          val success = die > 3
+          log("\nNext piece to remove would be a tunneled base")
+          log(separator())
+          log(s"Die roll is: ${die} [${if (success) "Tunnel destroyed!" else "No effect"}]")
+          if (success) {
+            val prompt = "\nRemove tunnel marker"
+            val tunnel = askPieces(pieces, 1, InsurgentTunnels, Some(prompt))
+            removeTunnelMarker(name, tunnel.explode().head)
+          }
+        }
+      }
+      removed
+    }
+  }
+  
   // Returns false if user decides not to pacify in space
   def pacifySpace(name: String, faction: Faction): Boolean = {
     val cost        = if (momentumInPlay(Mo_BlowtorchKomer)) 1 else 3
@@ -687,17 +753,197 @@ object Human {
   //
   // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
   // Mo_WildWeasels - Either degrade trail OR remove only 1 piece (not 1-6)
+  // Mo_ADSID       - -6 NVA resrouces at any trail change
   // TopGun_Unshaded - degrade trail by 2 boxes instead of 1
-  // TopGun_Shaded - degrade of trail requires d6 = 4-6 (after expending 2 hits)
+  // TopGun_Shaded   - degrade of trail requires d6 = 4-6 (after expending 2 hits)
   // ArcLight_Unshaded - 1 space may be Province without COIN pieces (including N. Vietnam)
   // ArcLight_Shaded - spaces removing >1 piece shift two levels toward Active Opposition
   // LaserGuidedBombs_Unshaded - In space were only 1 piece removed, no shift toward Active Opposition
   // LaserGuidedBombs_Shaded - Remove no more than 2 pieces total
   // AAA_Shaded - Cannot degrade the trail below 2
   // MiGs_Shaded - If trail degraded, US remove 1 Available Troop to Casualties
-  // SA2s_Unshaded - When trail degraded, US removes 1 NVA piece (including untunneled base) outside the South
+  // SA2s_Unshaded - When trail degraded, US removes 1 NVA piece (including untunneled base) outside the South (includes N. Vietnam)
+  // Mo_Oriskany   - Shaded (prohibits degrade of trail) (includes air strike, coup round, NOT evnts!)
   def doAirStrike(params: Params): Unit = {
-    log("\nUS Air Strike special activity not yet implemented.")
+    val adsid = game.isHuman(NVA) && momentumInPlay(Mo_ADSID)
+    val oriskany = momentumInPlay(Mo_Oriskany)
+    val migs_shaded = capabilityInPlay(MiGs_Shaded) && !capabilityInPlay(TopGun_Unshaded)
+    val aaa_shaded = capabilityInPlay(AAA_Shaded)
+    val arclight_unshaded = capabilityInPlay(ArcLight_Unshaded)
+    val maxHits     = d6
+    val maxSpaces = if      (momentumInPlay(Mo_TyphoonKate)) 1
+                    else if (game.inMonsoon) 2
+                    else 6
+    val maxPieces = if (momentumInPlay(Mo_WildWeasels)) 1 else if (capabilityInPlay(LaserGuidedBombs_Shaded)) 2 else maxHits
+    var strikeSpaces = Set.empty[String]
+    var removedSpaces = Set.empty[String] // strike spaces where pieces have been removed
+    var totalRemoved = 0
+    var arclight_unshaded_used = false
+    def isCandidate(sp: Space) = {
+      params.spaceAllowed(sp.name)   &&   // Event may limit to certain spaces
+      !strikeSpaces(sp.name)         &&
+      sp.pieces.hasExposedInsurgents &&
+      (sp.pieces.has(CoinPieces) || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))      
+    }
+                      
+    val notes = List(
+      noteIf(game.inMonsoon, "Max 2 spaces in Monsoon"),
+      noteIf(momentumInPlay(Mo_TyphoonKate), s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
+      noteIf(momentumInPlay(Mo_WildWeasels), s"Air Strike my EITHER degrade the trail or remove only 1 piece [Momentum: $Mo_WildWeasels]"),
+      noteIf(oriskany, s"Trail change is prohibited [Momentum: $Mo_Oriskany]"),
+      noteIf(adsid, s"-6 NVA resources at any trail change [Momentum: $Mo_ADSID]"),
+      noteIf(capabilityInPlay(TopGun_Unshaded),s"Degrading the trail shifts two boxes [$TopGun_Unshaded]"),
+      noteIf(capabilityInPlay(TopGun_Shaded), s"Degrading the requires a die roll of 4-6 [$TopGun_Shaded]"),
+      noteIf(capabilityInPlay(ArcLight_Unshaded), s"May Air Strike in one Province without COIN pieces [$ArcLight_Unshaded]"),
+      noteIf(capabilityInPlay(ArcLight_Shaded), s"Spaces removing more than 1 piece shift 2 levels toward Active Opposition [$ArcLight_Shaded]"),
+      noteIf(capabilityInPlay(LaserGuidedBombs_Unshaded), s"Spaces removing only 1 piece do not shift toward Active Opposition [$LaserGuidedBombs_Unshaded]"),
+      noteIf(capabilityInPlay(LaserGuidedBombs_Shaded), s"Remove no more than 2 pieces total [$LaserGuidedBombs_Shaded]"),
+      noteIf(capabilityInPlay(AAA_Shaded), s"Cannot degrade the trail below 2 [$AAA_Shaded]"),
+      noteIf(migs_shaded, s"If trail degraded, US removes 1 Available Troop to Casualties [$MiGs_Shaded]"),
+      noteIf(capabilityInPlay(SA2s_Unshaded), s"When trail degraded, US removes 1 NVA piece outside the South [$SA2s_Unshaded]")
+    ).flatten
+
+    def nextAirStrikeAction(hitsRemaining: Int, hasDegraded: Boolean): Unit = {
+      if (momentumInPlay(Mo_WildWeasels) && (hasDegraded || totalRemoved > 0)) {
+        println(s"\nNo more Air Strike actions allowed [Momentum: $Mo_WildWeasels")
+        pause()
+      }
+      else {
+        val StrikeOpt  = "strike:(.*)".r
+        val selectCandidates = spaceNames(game.spaces filter isCandidate)
+        val strikeCandidates = (strikeSpaces -- removedSpaces).toList filter (name => game.getSpace(name).pieces.hasExposedInsurgents)
+        val canSelect  = hitsRemaining > 0 && strikeSpaces.size < maxSpaces && selectCandidates.nonEmpty
+        val minTrail   = if (aaa_shaded) 2 else 1
+        val canDegrade = game.trail > minTrail && hitsRemaining > 1 && !hasDegraded && !oriskany
+        val topChoices = List(
+          choice(canSelect,  "select",  "Select a space to Strike"),
+          choice(canDegrade, "degrade", "Degrade the trail")
+        ).flatten
+        
+        def performDegrade(): Unit = {
+          val die    = d6
+          val success = !capabilityInPlay(TopGun_Shaded) || die > 3
+          val numBoxes = {
+            val num = if (capabilityInPlay(TopGun_Unshaded)) 2 else 1
+            val newTrail = (game.trail - num) max minTrail
+            game.trail - newTrail
+          }
+          
+          if (capabilityInPlay(TopGun_Shaded))
+            log(s"\nDie roll ($TopGun_Shaded): %die [${if (success) "Success!" else "Failure"}]")
+          
+          if (success) {
+            degradeTrail(numBoxes)
+            
+            if (migs_shaded && game.availablePieces.has(USTroops))
+                removeAvailableToCasualties(Pieces(usTroops = 1), Some(s"$MiGs_Shaded triggers"))
+            
+            if (capabilityInPlay(SA2s_Unshaded)) {
+              val CanRemove = List(NVABase, NVATroops, NVAGuerrillas_U, NVAGuerrillas_A)
+              log(s"\n$SA2s_Unshaded triggers")
+              val sa2Candidates = spaceNames(spaces(OutsideSouth) filter (_.pieces.has(CanRemove)))
+              if (sa2Candidates.isEmpty)
+                log("There are no NVA outside the south that can be removed") // Very unlikely!
+              else {
+                val name = askCandidate("Remove NVA piece from which space: ", sa2Candidates)
+                val sp = game.getSpace(name)
+                val toRemove = askPieces(sp.pieces, 1, CanRemove)
+                removeToAvailable(name, toRemove)                    
+              }
+            }
+          }
+        }
+        
+        // Returns number of pieces removed
+        def performStrike(name: String): Int = {
+          val pieces       = game.getSpace(name).pieces
+          val maxNumber    = numExposedInsurgents(pieces) min hitsRemaining
+          val num          = askInt(s"\nRemove how many pieces from $name", 1, maxNumber)
+          val killedPieces = killExposedInsurgents(name, num, canRevealTunnel = false)
+
+          
+          if (num > 0) {
+            val sp = game.getSpace(name)
+            val numShift = if (sp.isLOC || sp.population == 0 || sp.support == ActiveOpposition)
+              0
+            else if (num > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
+              log(s"\n$ArcLight_Shaded triggers")
+              log(s"Shift 2 levels toward Active Opposition")
+              2
+            }
+            else if (num == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded)) {
+              log(s"\n$LaserGuidedBombs_Unshaded triggers")
+              log(s"No shift toward Active Opposition")
+              0
+            }
+            else {
+              log(s"\nShift 1 level toward Active Opposition")
+              1
+            }
+            decreaseSupport(name, numShift)            
+          }
+          removedSpaces = removedSpaces + name
+          num
+        }
+        
+        // Show nextAirStrikeAction menu
+        
+        val strikeChoices = if (hitsRemaining > 0 && totalRemoved < maxPieces)
+          strikeCandidates map (name => s"strike:$name" -> s"Remove insurgents in $name")
+        else
+          Nil
+        
+        val choices = (topChoices:::strikeChoices) :+ ("finished" -> "Finished with Air Strike activity")
+        println(s"\nAir Strike spaces selected [Max $maxSpaces]")
+        println(separator())
+        wrap("", strikeSpaces.toList) foreach println
+        if (!oriskany) {
+          if (hasDegraded)
+            println("\nYou have already degraded the trail")
+          else
+            println("\nYou have not yet degraded the trail")          
+        }
+        
+        val canRemove = (maxPieces - totalRemoved) min hitsRemaining
+        if (choices.size == 1)
+          println("\nThere are no strike targets and you cannot degraded the trail")
+        else
+          askMenu(choices, s"\nChoose one: (${amountOf(hitsRemaining, "hit")} remaining, remove up to ${amountOf(canRemove, "piece")})").head match {
+            case "select" =>
+              askCandidateOrBlank("\nAir Strike in which space:", selectCandidates) foreach { name =>
+                strikeSpaces = strikeSpaces + name
+              }
+              nextAirStrikeAction(hitsRemaining, hasDegraded)
+              
+            case "degrade" =>
+              performDegrade()
+              nextAirStrikeAction(hitsRemaining - 2, true)
+              
+            case StrikeOpt(name) =>
+              val numRemoved = performStrike(name)
+              totalRemoved -= numRemoved
+              
+              nextAirStrikeAction(hitsRemaining - numRemoved, hasDegraded)
+              
+            case _ => // finished
+          }
+      }
+    }
+    
+    // Start of Air Lift Special Activity
+    // ------------------------------------
+    log("\nUS chooses the Air Strike special activity")
+    log(separator())
+    for (note <- notes)
+      log(note)
+  
+    log("\nRolling a die to determine the number of hits")
+    log(separator())
+    log(s"Number of hits: $maxHits")
+    
+    nextAirStrikeAction(maxHits, false)
+    Special.completed()
+    
   }
 
   // ARVN special activity
@@ -742,19 +988,13 @@ object Human {
     log(separator())
     
     val notes = List(
-      noteIf(momentumInPlay(Mo_TyphoonKate),
-          s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
-      noteIf(capabilityInPlay(BoobyTraps_Unshaded), 
-          s"You may ambush in only one space [$BoobyTraps_Unshaded]"),
-      noteIf(faction == VC && capabilityInPlay(MainForceBns_Shaded),
-          s"In one ambush space VC may remove 2 pieces [$MainForceBns_Shaded]"),
-      noteIf(faction == NVA && capabilityInPlay(PT76_Unshaded),
-          s"Each NVA ambush space first remove 1 NVA troop [$PT76_Unshaded]"),
+      noteIf(momentumInPlay(Mo_TyphoonKate),s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
+      noteIf(capabilityInPlay(BoobyTraps_Unshaded), s"You may ambush in only one space [$BoobyTraps_Unshaded]"),
+      noteIf(faction == VC && capabilityInPlay(MainForceBns_Shaded),s"In one ambush space VC may remove 2 pieces [$MainForceBns_Shaded]"),
+      noteIf(faction == NVA && capabilityInPlay(PT76_Unshaded),s"Each NVA ambush space first remove 1 NVA troop [$PT76_Unshaded]"),
       noteIf(true, "You will be prompted to use ambush at the appropriate time(s) during your operation.")
     ).flatten
     
-    println("Notes:")
-    println(separator())
     for (note <- notes)
       log(note)
     
@@ -1514,7 +1754,8 @@ object Human {
     val baseFirst   = remove1BaseFirst && pieces.has(InsurgentNonTunnels)
     val underground = remove1Underground && pieces.has(UndergroundGuerrillas)
     val totalLosses = sp.assaultLosses(faction) + (if (params.assaultRemovesTwoExtra) 2 else 0)
-    var remaining   = totalLosses
+    var killedPieces = Pieces()
+    def remaining   = totalLosses - killedPieces.total
 
     // Log all control changes at the end of the assault
     loggingControlChanges {
@@ -1530,69 +1771,39 @@ object Human {
       
       log(s"The assault inflicts ${amountOf(totalLosses, "hit")}")
 
+      // Abrams unshaded
       if (remaining > 0 && baseFirst) {
         val prompt = s"\nRemove a base first [$Abrams_Unshaded]"
         val removed = askPieces(pieces, 1, InsurgentNonTunnels, Some(prompt))
         removeToAvailable(name, removed)
-        remaining -= removed.total
+        killedPieces = killedPieces + removed
       }
 
+      // Search and Destory unshaded
       if (remaining > 0 && underground) {
         val prompt = s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]"
         val removed = askPieces(pieces, 1, UndergroundGuerrillas, Some(prompt))
         removeToAvailable(name, removed)
-        if (momentumInPlay(Mo_BodyCount)) {
-          log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]")
-          increaseUsAid(3)
-        }
-        remaining -= removed.total
-      }
-
-      (remaining min pieces.numOf(NVATroops)) match {
-        case 0 =>
-        case num =>
-          removeToAvailable(name, Pieces(nvaTroops = num))
-          remaining -= num
-      }
-
-      (remaining min pieces.totalOf(ActiveGuerrillas)) match {
-        case 0 =>
-        case num =>
-          val prompt = s"\nRemove active guerrillas"
-          val removed = askPieces(pieces, num, ActiveGuerrillas, Some(prompt))
-          removeToAvailable(name, removed)
-          if (momentumInPlay(Mo_BodyCount)) {
-            log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]")
-            increaseUsAid(3 * removed.total)
-          }
-          remaining -= removed.total
-      }
-
-      if (!pieces.has(UndergroundGuerrillas)) {
-        (remaining min pieces.totalOf(InsurgentNonTunnels)) match {
-          case 0 =>
-          case num =>
-            val prompt = s"\nRemove untunneled bases"
-            val removed = askPieces(pieces, num, InsurgentNonTunnels, Some(prompt))
-            removeToAvailable(name, removed)
-            increaseUsAid(removed.total * 6)
-            remaining -= removed.total
-        }
-
-        if (remaining > 0 && pieces.has(InsurgentTunnels)) {
-          val die = d6
-          val success = die > 3
-          log("\nNext piece to remove would be a tunneled base")
-          log(s"Die roll is: ${die} [${if (success) "Tunnel destroyed!" else "No effect"}]")
-          if (success) {
-            val prompt = "\nRemove tunnel marker"
-            val tunnel = askPieces(pieces, 1, InsurgentTunnels, Some(prompt))
-            removeTunnelMarker(name, tunnel.explode().head)
-          }
-        }
+        killedPieces = killedPieces + removed
       }
       
-      if (remaining == totalLosses)
+      // Remove exposed insurgent pieces
+      killedPieces = killedPieces + killExposedInsurgents(name, remaining, canRevealTunnel = true)
+
+      // Body Count momentum
+      if (momentumInPlay(Mo_BodyCount) && killedPieces.totalOf(Guerrillas) > 0) {
+        log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]")
+        increaseUsAid(3 * killedPieces.totalOf(Guerrillas))
+      }
+      
+      // Each removed base adds +6 aid
+      if (killedPieces.totalOf(InsurgentNonTunnels) > 0) {
+        log(s"\nEach insurgent base removed adds +6 Aid")
+        increaseUsAid(6 * killedPieces.totalOf(InsurgentNonTunnels))
+        
+      }
+
+      if (killedPieces.isEmpty)
         log("\nNo insurgemnt pieces were removed in the assault")
 
       // Cobras_Shaded
@@ -1761,6 +1972,7 @@ object Human {
       Infiltrate::Bombard::Nil
     else
       Tax::Subvert::Nil
+    val adsid       = faction == NVA && momentumInPlay(Mo_ADSID)
     val mcnamara    = faction == NVA && momentumInPlay(Mo_McNamaraLine)
     val sa2s        = faction == NVA && !mcnamara && capabilityInPlay(SA2s_Shaded)
     val aaa         = faction == NVA && !mcnamara && !params.limOpOnly && capabilityInPlay(AAA_Unshaded)
@@ -1772,6 +1984,7 @@ object Human {
       noteIf(mcnamara, s"Trail improvemnet is prohibited [Momentum: $Mo_McNamaraLine]"),
       noteIf(sa2s,     s"Trail improvement is 2 boxes instead of 1 [$SA2s_Shaded]"),
       noteIf(aaa,      s"Rally that improves the Trail may select 1 space only [$AAA_Unshaded]"),
+      noteIf(adsid,    s"-6 NVA resources at any trail change [Momentum: $Mo_ADSID]"),
       noteIf(cadres,   s"May Agitate in one space with an existing base [$Cadres_Shaded]")
     ).flatten
 

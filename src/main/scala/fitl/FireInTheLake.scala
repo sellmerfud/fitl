@@ -994,7 +994,7 @@ object FireInTheLake {
   val Cap_SA2s               = "#34 SA-2s"                   // affects air strike degrading trail / NVA rally improving trail
   val Cap_PT76               = "#45 PT-76"                   // affects NVA attack
   val Cap_ArmoredCavalry     = "#61 Armored Cavalry"         // affects ARVN transport
-  val Cap_MandateOfHeaver    = "#86 Mandate of Heaven"       // affects ARVN govern
+  val Cap_MandateOfHeaven    = "#86 Mandate of Heaven"       // affects ARVN govern
   val Cap_BoobyTraps         = "#101 Booby Traps"            // affects ambush / sweep
   val Cap_MainForceBns       = "#104 Main Force Bns"         // affects insurgent march / VC ambush
   val Cap_Cadres             = "#116 Cadres"                 // affects VC terror and agitate / VC rally agitate
@@ -1004,7 +1004,7 @@ object FireInTheLake {
     Cap_TopGun, Cap_ArcLight, Cap_Abrams, Cap_Cobras, Cap_M48Patton,
     Cap_CombActionPlatoons, Cap_CORDS, Cap_LaserGuidedBombs, Cap_SearchAndDestroy,
     Cap_AAA, Cap_LongRangeGuns, Cap_MiGs, Cap_SA2s, Cap_PT76, Cap_ArmoredCavalry,
-    Cap_MandateOfHeaver, Cap_BoobyTraps, Cap_MainForceBns, Cap_Cadres
+    Cap_MandateOfHeaven, Cap_BoobyTraps, Cap_MainForceBns, Cap_Cadres
   )
 
   //  Records a capability that is currently in play
@@ -1031,7 +1031,7 @@ object FireInTheLake {
   val SA2s_Unshaded               = unshadedCapability(Cap_SA2s)
   val PT76_Unshaded               = unshadedCapability(Cap_PT76)
   val ArmoredCavalry_Unshaded     = unshadedCapability(Cap_ArmoredCavalry)
-  val MandateOfHeaver_Unshaded    = unshadedCapability(Cap_MandateOfHeaver)
+  val MandateOfHeaven_Unshaded    = unshadedCapability(Cap_MandateOfHeaven)
   val BoobyTraps_Unshaded         = unshadedCapability(Cap_BoobyTraps)
   val MainForceBns_Unshaded       = unshadedCapability(Cap_MainForceBns)
   val Cadres_Unshaded             = unshadedCapability(Cap_Cadres)
@@ -1051,7 +1051,7 @@ object FireInTheLake {
   val SA2s_Shaded                 = shadedCapability(Cap_SA2s)
   val PT76_Shaded                 = shadedCapability(Cap_PT76)
   val ArmoredCavalry_Shaded       = shadedCapability(Cap_ArmoredCavalry)
-  val MandateOfHeaver_Shaded      = shadedCapability(Cap_MandateOfHeaver)
+  val MandateOfHeaven_Shaded      = shadedCapability(Cap_MandateOfHeaven)
   val BoobyTraps_Shaded           = shadedCapability(Cap_BoobyTraps)
   val MainForceBns_Shaded         = shadedCapability(Cap_MainForceBns)
   val Cadres_Shaded               = shadedCapability(Cap_Cadres)
@@ -1513,9 +1513,10 @@ object FireInTheLake {
     b += f"Trail          : ${game.trail}%2d"
     if (game.isBot(US))
       b += s"US Policy      : ${game.usPolicy}"
-
+    
+    b += separator()
+    b += s"RVN Leader     : ${game.currentRvnLeader}"
     if (game.cardsDrawn > 0) {
-      b += separator()
       b += s"Current card   : ${deck(game.currentCard).fullString}"
       game.onDeckCard foreach { num =>
         b += s"On deck card   : ${deck(num).fullString}"
@@ -1975,7 +1976,16 @@ object FireInTheLake {
 
 
   // Resolve the Coup phase, then reset the sequence of play and draw the next card.
+  // ------------------
+  // Mo_Oriskany            - Shaded (prohibits degrade of trail) (includes air strike, coup round, NOT evnts!)
+  // Mo_Medevac_Unshaded    - In Commitment Phase (immediately move all US TROOPS in CASUALTIES to AVAILABLE,
+  //                          no TROOPS go out of play.  See note: For effect when #73 Great Society is played.
+  // Mo_BlowtorchKomer      - Pacify costs 1 resource per step/terror, during Support phase
+  // MandateOfHeaven_Shaded - ARVN Pacify is maximum 1 space (instead of 4)
+  // Cadres_Unshaded        - VC to Agigate must remove 2 VC guerrillas per space (or not possible there)
+  // RVN_Leader_NguyenCaoKy - US/ARVN pacification costs 4 resources per Terror/Level
   def resolveCoupCard(): Unit = {
+    
     game = game.copy(coupCardsPlayed = game.coupCardsPlayed + 1)
     log("Epoch resolution has not been implemented.")
     // NOTE: Check game.prevCardWasCoup
@@ -2299,32 +2309,38 @@ object FireInTheLake {
   def increaseSupport(name: String, num: Int): Unit = if (num > 0) {
     loggingPointsChanges {
       val sp = game.getSpace(name)
-      val newSupport = try SupportType(sp.support.value + num)
-      catch {
-        case _: IllegalArgumentException =>
-          throw new IllegalStateException(s"Cannot increase support from ${sp.support} by $num levels")
-      }
+      if (sp.population > 0) {
+        val newSupport = try SupportType(sp.support.value + num)
+        catch {
+          case _: IllegalArgumentException =>
+            throw new IllegalStateException(s"Cannot increase support from ${sp.support} by $num levels")
+        }
 
-      val updated = sp.copy(support = newSupport)
-      game = game.updateSpace(updated)
-      logSupportChange(sp, updated)
+        val updated = sp.copy(support = newSupport)
+        game = game.updateSpace(updated)
+        logSupportChange(sp, updated)        
+      }
     }
   }
 
   def decreaseSupport(name: String, num: Int): Unit = if (num > 0) {
     loggingPointsChanges {
       val sp = game.getSpace(name)
-      val newSupport = try SupportType(sp.support.value - num)
-      catch {
-        case _: IllegalArgumentException =>
-          throw new IllegalStateException(s"Cannot decrease support from ${sp.support} by $num levels")
-      }
+      if (sp.population > 0) {
+        val newSupport = try SupportType(sp.support.value - num)
+        catch {
+          case _: IllegalArgumentException =>
+            throw new IllegalStateException(s"Cannot decrease support from ${sp.support} by $num levels")
+        }
 
-      val updated = sp.copy(support = newSupport)
-      game = game.updateSpace(updated)
-      logSupportChange(sp, updated)
+        val updated = sp.copy(support = newSupport)
+        game = game.updateSpace(updated)
+        logSupportChange(sp, updated)        
+      }
     }
   }
+
+  def isRVNLeader(name: String) = game.currentRvnLeader == name
 
   def capabilityInPlay(cap: Capability) = game.capabilities contains cap
 

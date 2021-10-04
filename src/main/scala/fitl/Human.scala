@@ -197,8 +197,16 @@ object Human {
   }
   
   // Returns false if user decides not to pacify in space
-  def pacifySpace(name: String, faction: Faction): Boolean = {
-    val cost        = if (momentumInPlay(Mo_BlowtorchKomer)) 1 else 3
+  def pacifySpace(name: String, faction: Faction, coupRound: Boolean): Boolean = {
+    
+    val nguyenCaoKy = isRVNLeader(RVN_Leader_NguyenCaoKy)
+    val blowtorch   = momentumInPlay(Mo_BlowtorchKomer)
+    // In Coup Round The leader takes precedence over Blowtorch because it was played
+    // more recently.  Otherwise the Blowtorch momentum was played more recently and take precedence.
+    val cost = if (coupRound)
+        (if (nguyenCaoKy) 4 else if (blowtorch) 1 else 3)
+    else
+        (if (blowtorch) 1 else if (nguyenCaoKy) 4 else 3)
     val maxLevel    = if (faction == US && capabilityInPlay(CORDS_Shaded)) PassiveSupport else ActiveSupport
     val sp          = game.getSpace(name)
     val maxShift    = ((maxLevel.value - sp.support.value) max 0) min 2
@@ -907,7 +915,7 @@ object Human {
         val canRemove = (maxPieces - totalRemoved) min hitsRemaining
         if (choices.size == 1) {
           val degradeMsg = if (hasDegraded) "" else " and you cannot degrade the trail"
-          println(s"\n ${amountOf(hitsRemaining, "hit") remaining}")
+          println(s"\n ${amountOf(hitsRemaining, "hit")} remaining}")
           println(s"There are no strike targets $degradeMsg")
         }
         else
@@ -935,7 +943,7 @@ object Human {
     
     // Start of Air Lift Special Activity
     // ------------------------------------
-    log("\nUS chooses the Air Strike special activity")
+    log("\nUS chooses Air Strike special activity")
     log(separator())
     for (note <- notes)
       log(note)
@@ -950,12 +958,129 @@ object Human {
   }
 
   // ARVN special activity
-  // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
+  // Mo_TyphoonKate           - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
+  // MandateOfHeaven_Unshaded - 1 Govern space may transfer Aid to Patronage without shifting support
+  // MandateOfHeaven_Shaded   - ARVN Govern is maximum 1 space
+  // RVN_Leader_YoungTurks    - Each ARVN Govern adds +2 Patronage
   def doGovern(params: Params): Unit = {
-    log("\nARVN Govern special activity not yet implemented.")
+    val young_turks     = isRVNLeader(RVN_Leader_YoungTurks)
+    val kate            = momentumInPlay(Mo_TyphoonKate)
+    var heaven_unshaded_used = false
+    val heaven_unshaded = capabilityInPlay(MandateOfHeaven_Unshaded)
+    val heaven_shaded   = capabilityInPlay(MandateOfHeaven_Shaded)
+    val maxSpaces       = if (kate || heaven_shaded) 1 else 2
+    
+    val notes = List(
+      noteIf(young_turks,     s"Each ARVN Govern add +2 Patronage [Leader $RVN_Leader_YoungTurks]"),
+      noteIf(kate,            s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
+      noteIf(heaven_unshaded, s"1 Govern space may transfer Aid to Patronage with no shift in support [$MandateOfHeaven_Unshaded]"),
+      noteIf(heaven_shaded,   s"ARVN Govern is maximum 1 space [$MandateOfHeaven_Shaded]")
+    ).flatten
+    
+    // Allow zero pop spaces if Young Turks is leader because
+    // player may want the +2 Patronage 
+    def isCandidate(sp: Space) = {
+        !sp.isLOC         &&
+        sp.coinControlled &&
+        sp.name != Saigon &&
+        (sp.population > 0 || young_turks) &&
+        !Special.trainingSpaces(sp.name)
+    }
+    
+    def nextGovernAction(): Unit = {
+      val candidates = spaceNames(game.spaces filter isCandidate)
+      val canSelect  = Special.selectedSpaces.size < maxSpaces && candidates.nonEmpty
+      val choices = List(
+        choice(canSelect, "select",   "Select a Govern space"),
+        choice(true,      "finished", "Finished with Govern activity")
+      ).flatten
+      
+      println(s"\n${amountOf(Special.selectedSpaces.size, "space")} selected for Govern")
+      println(separator())
+      wrap("", Special.selectedSpaces.toList) foreach println
+      
+      askMenu(choices, "\nGovern:").head match {
+        case "select" =>
+          askCandidateOrBlank("\nGovern in which space: ", candidates) foreach { name =>
+            val sp           = game.getSpace(name)
+            val canPatronage = sp.population > 0 && sp.pieces.totalOf(ARVNCubes) > sp.pieces.numOf(USTroops)
+            
+            val action = if (sp.population == 0)  // Special case for Young Turks
+              "turks_only"
+            else if (!canPatronage)
+              "gain_aid"
+            else {
+              val choices = List(
+                "xfer_patronage" -> s"Transfer population value from Aid to Patronage (${sp.population})",
+                "gain_aid"       -> s"Add 3 times population value to Aid (${3 * sp.population})"
+              )
+              
+              askMenu(choices, s"\nSelect Govern action for $name:").head
+            }
+
+            Special.selectedSpaces = Special.selectedSpaces + name
+            
+            log(s"\nARVN Governs in $name (population: ${sp.population})")
+            log(separator())
+            loggingPointsChanges {
+              if (action == "xfer_patronage") {
+                val num = (game.patronage min sp.population)
+                log("Transfer population value from Aid to Patronage")
+                decreaseUsAid(num)
+                increasePatronage(num)
+              
+                if (sp.population > 0 && sp.support != Neutral) {
+                  val skipShift = heaven_unshaded && !heaven_unshaded_used &&
+                       askYorN(s"Do you wish to use [$MandateOfHeaven_Unshaded] to avoid shifting support? (y/n) ")
+                
+                  if (skipShift)
+                    heaven_unshaded_used = true
+                  else {
+                    if (sp.support > Neutral)
+                      decreaseSupport(name, 1)
+                    else
+                      increaseSupport(name, 1)
+                  }
+                }
+              }
+              else if (action == "gain_aid") {
+                log("Add 3 times population value to Aid")
+                increaseUsAid(sp.population * 3)
+              }
+              else
+                log(s"$name has zero population.  Cannot gain Aid or transfer Aid to Patronage")
+                
+              //  Young turks always applies if in play
+              if (young_turks) {
+                log(s"$RVN_Leader_YoungTurks leader effect triggers")
+                increasePatronage(2)
+              }              
+            }
+          }
+          nextGovernAction()
+        
+        case _ =>
+      }
+    }
+    
+    // Start of Govern Special Activity
+    // ------------------------------------
+    log("\nARVN chooses Govern special activity")
+    log(separator())
+    for (note <- notes)
+      log(note)
+  
+    nextGovernAction()
+    Special.completed()
+    
+
   }
 
   // ARVN special activity
+  // Mo_TyphoonKate          - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
+  // ArmoredCavalry_Unshaded - ARVN in 1 Transport destination (AFTER OPS) may free assault
+  // ArmoredCavalry_Shaded   - Transport Rangers only (NO TROOPS)
+  // RVN_Leader_NguyenKhanh  - Transport uses max 1 LOC space
   def doTransport(params: Params): Unit = {
     log("\nARVN Transport special activity not yet implemented.")
   }
@@ -967,13 +1092,17 @@ object Human {
   }
 
   // NVA special activity
-  // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
-  // val Mo_559TransportGrp   = "#46 559th Transport Grp"      // Unshaded (Infiltrate is max 1 space)
+  // Mo_TyphoonKate         - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
+  // val Mo_McNamaraLine    - prohibits infiltrate
+  // val Mo_559TransportGrp - Infiltrate is max 1 space
   def doInfiltrate(params: Params): Unit = {
     log("\nNVA Infiltrate special activity not yet implemented.")
   }
 
   // NVA special activity
+  // Mo_TyphoonKate         - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
+  // LongRangeGuns_Unshaded - NVA Bombard is max 1 space
+  // LongRangeGuns_Shaded   - NVA Bombard is max 3 spaces
   def doBombard(params: Params): Unit = {
     log("\nNVA Bombard special activity not yet implemented.")
   }
@@ -1159,11 +1288,12 @@ object Human {
   //    US Training may pacify in 2 Training spaces (cost is unchanged)
   // CORDS_Shaded
   //    US Training may pacify only to PassiveSupport (Not ActiveSupport)
+  // RVN_Leader_NguyenCaoKy - US/ARVN pacification costs 4 resources per Terror/Level
   def executeTrain(faction: Faction, params: Params): Unit = {
     val specialActivities = if (faction == US)
       Advise::AirLift::AirStrike::Nil
     else
-      Transport::Govern::Nil
+      Govern::Transport::Nil
     val canPlaceExtraPolice = faction == US && capabilityInPlay(CombActionPlatoons_Unshaded)
     var placedExtraPolice   = false // only if CombActionPlatoons_Unshaded in play
     val maxTrainSpaces      = params.maxSpaces getOrElse 1000
@@ -1172,6 +1302,7 @@ object Human {
     var selectedSpaces      = List.empty[String]
     var arvnPlacedIn        = List.empty[String]
     var pacifySpaces        = List.empty[String]
+    val nguyenCaoKy         = isRVNLeader(RVN_Leader_NguyenCaoKy)
     val isCandidate = (sp: Space) => {
       val valid = if (faction == ARVN) !sp.isLOC && !sp.nvaControlled
                   else                 !sp.isLOC && sp.pieces.has(USPieces)
@@ -1184,9 +1315,10 @@ object Human {
     }
 
     val notes = List(
-      noteIf(canPlaceExtraPolice,                     s"May place 1 ARVN Police in 1 training space with US Troops [$CombActionPlatoons_Unshaded]"),
-      noteIf(maxPacifySpaces == 2,                    s"May pactify in 2 spaces [$CORDS_Unshaded]"),
-      noteIf(maxPacifyLevel == PassiveSupport,        s"May not Pacify to Active Support [$CORDS_Shaded]")
+      noteIf(nguyenCaoKy,                      s"Pacification costs 4 resources per terror/level [Leader: $RVN_Leader_NguyenCaoKy]"),
+      noteIf(canPlaceExtraPolice,              s"May place 1 ARVN Police in 1 training space with US Troops [$CombActionPlatoons_Unshaded]"),
+      noteIf(maxPacifySpaces == 2,             s"May pactify in 2 spaces [$CORDS_Unshaded]"),
+      noteIf(maxPacifyLevel == PassiveSupport, s"May not Pacify to Active Support [$CORDS_Shaded]")
     ).flatten
 
     def canSpecial = Special.allowed
@@ -1327,7 +1459,7 @@ object Human {
         askMenu(choices, "\nChoose final Train action:").head match {
           case "pacify" =>
             askCandidateOrBlank("\nPacify in which space: ", pacifyCandidates) foreach { name =>
-            if (pacifySpace(name, faction))
+            if (pacifySpace(name, faction, coupRound = false))
               pacifySpaces = name :: pacifySpaces
             }
             

@@ -769,6 +769,8 @@ object Cards {
     )),
     
     // ------------------------------------------------------------------------
+    // Mo_Medevac_Unshaded    - In Commitment Phase (immediately move all US TROOPS in CASUALTIES to AVAILABLE,
+    //                          no TROOPS go out of play.  See note: For effect when #73 Great Society is played.
     entry(new Card(73, "Great Society", 
       ListMap(ARVN -> PlaceHolder, NVA -> PlaceHolder, US -> PlaceHolder, VC -> PlaceHolder),
       DualEvent,

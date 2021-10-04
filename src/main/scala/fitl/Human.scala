@@ -224,7 +224,7 @@ object Human {
         case n                    => (n -> s"Remove ${amountOf(sp.terror, "terror marker")} and shift ${amountOf(n - sp.terror, "level")} to ${SupportType(sp.support.value + (n - sp.terror))}")
       }
       
-      val num = askMenu(choices, "\nChoose one:", allowAbort = false).head
+      val num = askMenu(choices, "\nPacify:", allowAbort = false).head
       if (num == 0)
         false
       else {
@@ -267,7 +267,7 @@ object Human {
         case n                    => (n -> s"Remove ${amountOf(sp.terror, "terror marker")} and shift ${amountOf(n - sp.terror, "level")} to ${SupportType(sp.support.value - (n - sp.terror))}")
       }
       
-      val num = askMenu(choices, "\nChoose one:", allowAbort = false).head
+      val num = askMenu(choices, "\nAgitate:", allowAbort = false).head
       if (num == 0)
         false
       else {
@@ -905,10 +905,13 @@ object Human {
         }
         
         val canRemove = (maxPieces - totalRemoved) min hitsRemaining
-        if (choices.size == 1)
-          println("\nThere are no strike targets and you cannot degraded the trail")
+        if (choices.size == 1) {
+          val degradeMsg = if (hasDegraded) "" else " and you cannot degrade the trail"
+          println(s"\n ${amountOf(hitsRemaining, "hit") remaining}")
+          println(s"There are no strike targets $degradeMsg")
+        }
         else
-          askMenu(choices, s"\nChoose one: (${amountOf(hitsRemaining, "hit")} remaining, remove up to ${amountOf(canRemove, "piece")})").head match {
+          askMenu(choices, s"\nAir Strike: (${amountOf(hitsRemaining, "hit")} remaining, remove up to ${amountOf(canRemove, "piece")})").head match {
             case "select" =>
               askCandidateOrBlank("\nAir Strike in which space:", selectCandidates) foreach { name =>
                 strikeSpaces = strikeSpaces + name
@@ -1263,7 +1266,7 @@ object Human {
         println(s"\nThere are no${more} spaces eligible for Training")
       }
 
-      askMenu(choices, "\nChoose one:").head match {
+      askMenu(choices, "\nTraining:").head match {
         case "select" =>
           askCandidateOrBlank("\nTrain in which space: ", candidates) foreach { name =>
             log(s"\n$faction selects $name for Training")
@@ -1433,7 +1436,7 @@ object Human {
       if (srcCandidates.isEmpty)
         println(s"\nThere are no spaces with cube eligible to move on patrol")
 
-      askMenu(choices, "\nChoose one:").head match {
+      askMenu(choices, "\nMoving Cubes:").head match {
         case "move" =>
           askCandidateOrBlank("\nMove cubes out of which space: ", srcCandidates) foreach { src =>
             moveCubesFrom(src)
@@ -1667,7 +1670,7 @@ object Human {
       println(separator())
       wrap("", sweepSpaces.toList) foreach println
       
-      askMenu(choices, "\nChoose one:").head match {
+      askMenu(choices, "\nSweep spaces:").head match {
         case "sweep" =>
           askCandidateOrBlank("\nSweep in which space: ", candidates) foreach { name =>
             sweepSpaces = sweepSpaces + name
@@ -1703,7 +1706,7 @@ object Human {
         val spaceChoices = candidates map (n => n -> s"Activate guerrillas in $n")
         val choices = topChoices ::: spaceChoices
         
-        askMenu(choices, "\nChoose one:").head match {
+        askMenu(choices, "\nSweep activation:").head match {
           case "all" | "rest" =>
             for (name <- candidates) {
               activateGuerrillasForSweep(name, faction)
@@ -1911,7 +1914,7 @@ object Human {
           println(s"\nThere are no${more} spaces eligible for Assault")
       }
 
-      askMenu(choices, "\nChoose one:").head match {
+      askMenu(choices, "\nAssault:").head match {
         case "select" =>
           askCandidateOrBlank("\nAssault in which space: ", candidates) foreach { name =>
             val assaultParams = if (m48Patton &&
@@ -2059,7 +2062,7 @@ object Human {
       println(separator())
       wrap("", rallySpaces) foreach println
         
-      askMenu(choices, "\nChoose one:").head match {
+      askMenu(choices, "\nRally:").head match {
         case "select" =>
           askCandidateOrBlank("\nRally in which space: ", candidates) foreach { name =>
             //  Note: COIN control does not prevent agitation here
@@ -2237,7 +2240,7 @@ object Human {
       val moveChoices   = moveCandidates map (name => s"move:$name" -> s"Move pieces into $name")
       val lastChoice    = List("finished" -> "Finished with March operation")
               
-      askMenu(topChoices:::ambushChoices:::moveChoices:::lastChoice, "\nChoose one:").head match {
+      askMenu(topChoices:::ambushChoices:::moveChoices:::lastChoice, "\nMarch:").head match {
         case "select" =>
           askCandidateOrBlank("\nAdd which space as a march destination: ", candidates) foreach { name =>
             destinations = destinations + name
@@ -2334,7 +2337,7 @@ object Human {
         choice(true,       "finished", "Finished with Attack operation")
       ).flatten
               
-      askMenu(choices, "\nChoose one:").head match {
+      askMenu(choices, "\nAttack:").head match {
         case "attack" =>
           askCandidateOrBlank("\nAttack which space: ", attackCandidates) foreach { name =>
             performAttack(name, faction, free = params.free)
@@ -2417,7 +2420,7 @@ object Human {
         println(s"\nThere are no${more} spaces eligible for a Terror operation")
       }
 
-      askMenu(choices, "\nChoose one:").head match {
+      askMenu(choices, "\nTerror:").head match {
         case "select" =>
           askCandidateOrBlank("\nTerrorize which space: ", candidates) foreach { name =>
             def sp = game.getSpace(name)

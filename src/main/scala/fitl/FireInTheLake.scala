@@ -348,20 +348,22 @@ object FireInTheLake {
   )
 
   def getAdjacent(name: String): Set[String] = adjacencyMap(name)
-  def areAdjacent(name1: String, name2: String) = getAdjacent(name1) contains name2
+  def areAdjacent(name1: String, name2: String): Boolean = getAdjacent(name1) contains name2
   def getAdjacentLOCs(name: String): Set[String] = getAdjacent(name) filter { x => game.getSpace(x).isLOC }
   def getAdjacentCities(name: String): Set[String] = getAdjacent(name) filter { x => game.getSpace(x).isCity }
-  def getAdjacentLOCsAndCities(name: String) = getAdjacentLOCs(name) ++ getAdjacentCities(name)
-  
+  def getAdjacentProvinces(name: String): Set[String] = getAdjacent(name) filter { x => game.getSpace(x).isProvince }
+  def getAdjacentLOCsAndCities(name: String): Set[String] = getAdjacentLOCs(name) ++ getAdjacentCities(name)
+  def getAdjacentNonLOCs(name: String): Set[String] = getAdjacentProvinces(name) ++ getAdjacentCities(name)
   //  All spaces in Laos and Cambodia
   val LaosCambodia = List(CentralLaos, SouthernLaos, NortheastCambodia, TheFishhook, TheParrotsBeak, Sihanoukville)
   
   def isInLaosCambodia(name: String) = LaosCambodia contains name
   
   //  Return a sequence of all spaces that can be reached from the given space by patrolling cubes.
-  //  A cube can move on to adjacent LOCs/Cities and keep moving via adjacent LOCs/Cities until
+  //  A cube can move onto adjacent LOCs/Cities and keep moving via adjacent LOCs/Cities until
   //  it reaches a space with an insurgent piece.
   def getPatrolDestinations(srcName: String): Seq[String] = {
+    
     @tailrec def getDests(candidates: Set[String], destinations: Set[String]): Set[String] = {
       if (candidates.isEmpty)
         destinations
@@ -370,14 +372,58 @@ object FireInTheLake {
         val sp        = game.getSpace(name)
         val isDest    = name != srcName && (sp.isLOC || sp.isCity)
         val endOfPath = name != srcName && sp.pieces.has(InsurgentPieces)
-        val adjacent  = if (endOfPath) Set.empty else (getAdjacentLOCsAndCities(name) - srcName)
+        val adjacent  = if (endOfPath) Set.empty[String] else (getAdjacentLOCsAndCities(name) - srcName)
         val newDests  = if (isDest) destinations + name else destinations
-        val newCandidates = candidates.tail ++ adjacent -- destinations
+        val newCandidates = candidates.tail ++ (adjacent -- destinations)
         getDests(newCandidates, newDests)
       }          
     }
     
     getDests(Set(srcName), Set.empty).toList.sorted
+  }
+  
+  
+  //  Return a sequence of all spaces that can be reached from the given space by Transported pieces.
+  //  A piece MAY move onto an adjacent LOC.  Then can continue moving through adjacent LOC/Cities.
+  //  Finally MAY then move to an adjacent space (Never N. Vietnam)
+  //  It it ever enters a spcace with any Insurgent piece, then it must stop.
+  //  if RVN_Leader_NguyenKhanh is in play then only 1 LOC can be used
+  def getTransportDestinations(srcName: String): Seq[String] = {
+    val nguyen_khanh     = isRVNLeader(RVN_Leader_NguyenKhanh)  
+    
+    @tailrec def getLocDests(locsCities: Set[String], destinations: Set[String]): Set[String] = {
+      if (locsCities.isEmpty)
+        destinations
+      else {
+        val name = locsCities.head
+        val sp   = game.getSpace(name)
+        
+        if (sp.pieces.has(InsurgentPieces))  // Enemy pieces stop movement
+          getLocDests(locsCities.tail, destinations + name)
+        else {
+          val adjacentMove = if (nguyen_khanh)
+            getAdjacentCities(name)
+          else
+            getAdjacentLOCsAndCities(name)
+          
+          val adjacentDest = if (nguyen_khanh)
+            (getAdjacentNonLOCs(name) - NorthVietnam)
+          else
+            (getAdjacent(name) - NorthVietnam)
+          
+            val newLocsCities = locsCities.tail ++ (adjacentMove -- destinations)
+            val newDests  = destinations ++ adjacentDest + name
+            getLocDests(newLocsCities, newDests)
+        }
+      }          
+    }
+    
+    // The piece can always stay put or can move to any adjacent Province/City.
+    val immediateDests = Set(srcName) ++ (getAdjacentNonLOCs(srcName) - NorthVietnam)
+    // The first move must be onto a LOC (not City)
+    val locDests = getLocDests(getAdjacentLOCs(srcName), Set.empty)
+    
+    (immediateDests ++ locDests).toList.sorted
   }
 
   // A space is adjacent for sweep movement if it is truly adjacent to the destination
@@ -449,6 +495,7 @@ object FireInTheLake {
   val ActiveGuerrillas    = List(NVAGuerrillas_A, VCGuerrillas_A)
   val UndergroundGuerrillas = List(NVAGuerrillas_U, VCGuerrillas_U)
   val CoinForces          = List(USTroops, Irregulars_A, Irregulars_U, ARVNTroops, ARVNPolice, Rangers_A, Rangers_U)
+  val InsurgentForces     = List(NVATroops, NVAGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_A, VCGuerrillas_U)
 
   val factionPieces: Map[Faction, List[PieceType]] = Map(
     US   -> USPieces,
@@ -2470,7 +2517,7 @@ object FireInTheLake {
   def hidePieces(spaceName: String, visible: Pieces): Unit = if (visible.total > 0) {
     val Valid = List(Irregulars_A, Rangers_A, NVAGuerrillas_A, VCGuerrillas_A)
     val sp = game.getSpace(spaceName)
-    assert(visible.only(Valid) != visible, s"hidePieces() called with non-active pieces: $visible")
+    assert(visible.only(Valid) == visible, s"hidePieces() called with non-active pieces: $visible")
     assert(sp.pieces contains visible, s"hidePieces() $spaceName does not contain all requested pieces: $visible")
     
     val hidden = Pieces(
@@ -3815,8 +3862,9 @@ object FireInTheLake {
 
     def nextAdjustment(): Unit = {
       val sp        = game.getSpace(name)
-      val pieces    = sp.pieces
-      val available = game.availablePieces
+      val forbidden = if (sp.isLOC) CoinBases:::InsurgentBases else Nil
+      val pieces    = sp.pieces.except(forbidden)
+      val available = game.availablePieces.except(forbidden)
       val pieceChoices: List[(Option[PieceType], String)] = AllPieceTypes flatMap { t =>
         if (pieces.has(t) || available.has(normalizedType(t)))
           Some(Some(t) -> t.plural)

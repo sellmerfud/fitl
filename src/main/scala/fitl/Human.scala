@@ -75,6 +75,7 @@ object Human {
     var trainingSpaces: Set[String] = Set.empty  // Spaces where Advise/Govern cannot be done (Training)
 
     var selectedSpaces = Set.empty[String]  // Spaces selected for the Special Activity
+    var transportDestinations = Set.empty[String]
 
     def init(params: Params): Unit = {
       allowSpecial     = params.includeSpecial
@@ -83,6 +84,7 @@ object Human {
       usedMainForceBns = false
       selectedSpaces   = Set.empty  // For Advise/Govern activities
       trainingSpaces   = Set.empty
+      transportDestinations = Set.empty
     }
 
     def allowed = allowSpecial && !specialTaken
@@ -1080,8 +1082,75 @@ object Human {
   // ArmoredCavalry_Shaded   - Transport Rangers only (NO TROOPS)
   // RVN_Leader_NguyenKhanh  - Transport uses max 1 LOC space
   def doTransport(params: Params): Unit = {
-    log("\nARVN Transport special activity not yet implemented.")
+    val nguyen_khanh     = isRVNLeader(RVN_Leader_NguyenKhanh)
+    val armored_unshaded = capabilityInPlay(ArmoredCavalry_Unshaded)
+    val armored_shaded   = capabilityInPlay(ArmoredCavalry_Shaded)
+    val pieceTypes       = if (armored_shaded) Rangers else ARVNTroops::Rangers
+    val piecesName       = if (armored_shaded) "Rangers" else "Troops/Rangers"
+    val srcPrompt        = s"\nMove $piecesName out of which space: "
+    val srcCandidates    = spaceNames(game.spaces filter (_.pieces.has(pieceTypes)))
+
+    val notes = List(
+      noteIf(nguyen_khanh,     s"Transport used max 1 LOC space [Leader $RVN_Leader_NguyenKhanh]"),
+      noteIf(armored_unshaded, s"In one Transport destination may Free Assault (after Ops) [$ArmoredCavalry_Unshaded]"),
+      noteIf(armored_shaded,   s"Transport Rangers only (NO Troops) [$ArmoredCavalry_Shaded]")
+    ).flatten
+    
+    // Start of Transport Special Activity
+    // ------------------------------------
+    
+    log("\nARVN chooses Transport special activity")
+    log(separator())
+    for (note <- notes)
+      log(note)
+  
+      
+    val srcName        = askCandidate(srcPrompt, srcCandidates)
+    val eligible       = game.getSpace(srcName).pieces.only(pieceTypes)
+    val maxMovers      = eligible.total min 6
+    val numMovers      = askInt(s"\nMove how many $piecesName out of $srcName", 0, maxMovers)
+    if (numMovers > 0) {
+      var movingPieces   = askPieces(eligible, numMovers, prompt = Some(s"Selecting $piecesName to Transport"))
+      val destCandidates = getTransportDestinations(srcName)
+    
+      def nextDestination(movers: Pieces, candidates: Seq[String]): Unit = {
+        if (movers.nonEmpty) {
+          println(s"\n${amountOf(movers.total, "piece")} remaining to move")
+          val destName = askCandidate(s"\nSelect a Transport destination space: ", candidates)
+          val minNum   = if (candidates.size == 1) movers.total else 1
+          val maxNum   = movers.total
+          val num      = askInt(s"Move how many $piecesName to $destName", minNum, maxNum)
+          val moveNow  = askPieces(movers, num)
+          Special.transportDestinations = Special.transportDestinations + destName
+          movePieces(moveNow, srcName, destName)
+          nextDestination(movers - moveNow, candidates filterNot (_ == destName))
+        }
+      }
+    
+      nextDestination(movingPieces, destCandidates)
+    }
+    
+    // Flip all rangers underground
+    for (sp <- game.spaces; if sp.pieces.has(Rangers_A))
+      hidePieces(sp.name, sp.pieces.only(Rangers_A))
+    Special.completed()
   }
+
+
+  // If Transport special activity was used,  then Armored Cavalry (unshaded)
+  // allows ARVN to free assault in one Transport destination
+  def armoredCavalryAssault(): Unit = {
+    val isCandidate = (sp: Space) => sp.pieces.has(InsurgentPieces) &&sp.pieces.has(ARVNCubes)
+    val candidates = spaceNames(Special.transportDestinations map game.getSpace filter isCandidate)
+    
+    if (candidates.nonEmpty && askYorN(s"\nDo you wish to perform a free assault in 1 transport destinaion via [$ArmoredCavalry_Unshaded]? (y/n) ")) {
+        val name = askCandidate("Free Assault in which space: ", candidates)
+        
+        log(s"\n$ArmoredCavalry_Unshaded triggers a free Assault")
+        performAssault(name, ARVN, Params(free = true))
+    }
+  }
+    
 
   // ARVN special activity
   // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)  
@@ -1518,9 +1587,15 @@ object Human {
     if (selectedSpaces.nonEmpty)
       promptFinalAction() // Pacify, Place base, Xfer Patronage to ARVN resources
 
+    
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
       executeSpecialActivity(faction, params, specialActivities)
+    
+    // If Transport special activity was used,  then Armored Cavalry (unshaded)
+    // allows ARVN to free assault in one Transport destination
+    if (capabilityInPlay(ArmoredCavalry_Unshaded) && Special.transportDestinations.nonEmpty)
+      armoredCavalryAssault()
   }
 
   // Cap_M48Patton (shaded)
@@ -1567,7 +1642,7 @@ object Human {
       if (srcCandidates.isEmpty)
         println(s"\nThere are no spaces with cube eligible to move on patrol")
 
-      askMenu(choices, "\nMoving Cubes:").head match {
+      askMenu(choices, "\nMoving Patrol cubes:").head match {
         case "move" =>
           askCandidateOrBlank("\nMove cubes out of which space: ", srcCandidates) foreach { src =>
             moveCubesFrom(src)
@@ -1586,7 +1661,7 @@ object Human {
         val destCandidates = getPatrolDestinations(srcName).sorted(LocLastOrdering)
         val eligible       = patrolCubes(src)
 
-        println(s"\nMoving cubes out of $srcName")
+        println(s"\nMoving Patrol cubes out of $srcName")
         println(separator())
         wrap("These cubes can move   : ", eligible.descriptions) foreach println
         if (frozen(srcName).nonEmpty)
@@ -1715,6 +1790,11 @@ object Human {
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
       executeSpecialActivity(faction, params, specialActivities)
+    
+    // If Transport special activity was used,  then Armored Cavalry (unshaded)
+    // allows ARVN to free assault in one Transport destination
+    if (capabilityInPlay(ArmoredCavalry_Unshaded) && Special.transportDestinations.nonEmpty)
+      armoredCavalryAssault()
   }
 
 

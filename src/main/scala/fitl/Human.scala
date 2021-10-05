@@ -794,23 +794,6 @@ object Human {
       (sp.pieces.has(CoinPieces) || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))      
     }
                       
-    val notes = List(
-      noteIf(game.inMonsoon, "Max 2 spaces in Monsoon"),
-      noteIf(momentumInPlay(Mo_TyphoonKate), s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
-      noteIf(momentumInPlay(Mo_WildWeasels), s"Air Strike my EITHER degrade the trail or remove only 1 piece [Momentum: $Mo_WildWeasels]"),
-      noteIf(oriskany, s"Trail change is prohibited [Momentum: $Mo_Oriskany]"),
-      noteIf(adsid, s"-6 NVA resources at any trail change [Momentum: $Mo_ADSID]"),
-      noteIf(capabilityInPlay(TopGun_Unshaded),s"Degrading the trail shifts two boxes [$TopGun_Unshaded]"),
-      noteIf(capabilityInPlay(TopGun_Shaded), s"Degrading the requires a die roll of 4-6 [$TopGun_Shaded]"),
-      noteIf(capabilityInPlay(ArcLight_Unshaded), s"May Air Strike in one Province without COIN pieces [$ArcLight_Unshaded]"),
-      noteIf(capabilityInPlay(ArcLight_Shaded), s"Spaces removing more than 1 piece shift 2 levels toward Active Opposition [$ArcLight_Shaded]"),
-      noteIf(capabilityInPlay(LaserGuidedBombs_Unshaded), s"Spaces removing only 1 piece do not shift toward Active Opposition [$LaserGuidedBombs_Unshaded]"),
-      noteIf(capabilityInPlay(LaserGuidedBombs_Shaded), s"Remove no more than 2 pieces total [$LaserGuidedBombs_Shaded]"),
-      noteIf(capabilityInPlay(AAA_Shaded), s"Cannot degrade the trail below 2 [$AAA_Shaded]"),
-      noteIf(migs_shaded, s"If trail degraded, US removes 1 Available Troop to Casualties [$MiGs_Shaded]"),
-      noteIf(capabilityInPlay(SA2s_Unshaded), s"When trail degraded, US removes 1 NVA piece outside the South [$SA2s_Unshaded]")
-    ).flatten
-
     def nextAirStrikeAction(hitsRemaining: Int, hasDegraded: Boolean): Unit = {
       if (momentumInPlay(Mo_WildWeasels) && (hasDegraded || totalRemoved > 0)) {
         println(s"\nNo more Air Strike actions allowed [Momentum: $Mo_WildWeasels")
@@ -941,6 +924,23 @@ object Human {
       }
     }
     
+    val notes = List(
+      noteIf(game.inMonsoon, "Max 2 spaces in Monsoon"),
+      noteIf(momentumInPlay(Mo_TyphoonKate), s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
+      noteIf(momentumInPlay(Mo_WildWeasels), s"Air Strike my EITHER degrade the trail or remove only 1 piece [Momentum: $Mo_WildWeasels]"),
+      noteIf(oriskany, s"Trail change is prohibited [Momentum: $Mo_Oriskany]"),
+      noteIf(adsid, s"-6 NVA resources at any trail change [Momentum: $Mo_ADSID]"),
+      noteIf(capabilityInPlay(TopGun_Unshaded),s"Degrading the trail shifts two boxes [$TopGun_Unshaded]"),
+      noteIf(capabilityInPlay(TopGun_Shaded), s"Degrading the requires a die roll of 4-6 [$TopGun_Shaded]"),
+      noteIf(capabilityInPlay(ArcLight_Unshaded), s"May Air Strike in one Province without COIN pieces [$ArcLight_Unshaded]"),
+      noteIf(capabilityInPlay(ArcLight_Shaded), s"Spaces removing more than 1 piece shift 2 levels toward Active Opposition [$ArcLight_Shaded]"),
+      noteIf(capabilityInPlay(LaserGuidedBombs_Unshaded), s"Spaces removing only 1 piece do not shift toward Active Opposition [$LaserGuidedBombs_Unshaded]"),
+      noteIf(capabilityInPlay(LaserGuidedBombs_Shaded), s"Remove no more than 2 pieces total [$LaserGuidedBombs_Shaded]"),
+      noteIf(capabilityInPlay(AAA_Shaded), s"Cannot degrade the trail below 2 [$AAA_Shaded]"),
+      noteIf(migs_shaded, s"If trail degraded, US removes 1 Available Troop to Casualties [$MiGs_Shaded]"),
+      noteIf(capabilityInPlay(SA2s_Unshaded), s"When trail degraded, US removes 1 NVA piece outside the South [$SA2s_Unshaded]")
+    ).flatten
+    
     // Start of Air Lift Special Activity
     // ------------------------------------
     log("\nUS chooses Air Strike special activity")
@@ -969,13 +969,6 @@ object Human {
     val heaven_unshaded = capabilityInPlay(MandateOfHeaven_Unshaded)
     val heaven_shaded   = capabilityInPlay(MandateOfHeaven_Shaded)
     val maxSpaces       = if (kate || heaven_shaded) 1 else 2
-    
-    val notes = List(
-      noteIf(young_turks,     s"Each ARVN Govern add +2 Patronage [Leader $RVN_Leader_YoungTurks]"),
-      noteIf(kate,            s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
-      noteIf(heaven_unshaded, s"1 Govern space may transfer Aid to Patronage with no shift in support [$MandateOfHeaven_Unshaded]"),
-      noteIf(heaven_shaded,   s"ARVN Govern is maximum 1 space [$MandateOfHeaven_Shaded]")
-    ).flatten
     
     // Allow zero pop spaces if Young Turks is leader because
     // player may want the +2 Patronage 
@@ -1063,6 +1056,13 @@ object Human {
       }
     }
     
+    val notes = List(
+      noteIf(young_turks,     s"Each ARVN Govern add +2 Patronage [Leader $RVN_Leader_YoungTurks]"),
+      noteIf(kate,            s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
+      noteIf(heaven_unshaded, s"1 Govern space may transfer Aid to Patronage with no shift in support [$MandateOfHeaven_Unshaded]"),
+      noteIf(heaven_shaded,   s"ARVN Govern is maximum 1 space [$MandateOfHeaven_Shaded]")
+    ).flatten
+    
     // Start of Govern Special Activity
     // ------------------------------------
     log("\nARVN chooses Govern special activity")
@@ -1072,8 +1072,6 @@ object Human {
   
     nextGovernAction()
     Special.completed()
-    
-
   }
 
   // ARVN special activity
@@ -1225,11 +1223,6 @@ object Human {
   def executeCoinOp(faction: Faction, params: Params): Unit = {
 
     val landsdale = faction == US && momentumInPlay(Mo_GeneralLansdale)
-    val notes = List(
-      noteIf(game.inMonsoon, s"Sweep is prohibited [Not allowed in Monsoon]"),
-      noteIf(landsdale,      s"US Assault is prohibited [Momentum: ${Mo_GeneralLansdale}]")
-    ).flatten
-
     val availOps = CoinOp.ALL filter {
       case Train   => true
       case Patrol  => true
@@ -1237,6 +1230,11 @@ object Human {
       case Assault => !landsdale
     }
     val choices = availOps map (op => op -> op.toString)
+
+    val notes = List(
+      noteIf(game.inMonsoon, s"Sweep is prohibited [Not allowed in Monsoon]"),
+      noteIf(landsdale,      s"US Assault is prohibited [Momentum: ${Mo_GeneralLansdale}]")
+    ).flatten
 
     if (notes.nonEmpty) {
       println("Notes:")
@@ -1254,10 +1252,6 @@ object Human {
   }
 
   def executeInsurgentOp(faction: Faction, params: Params): Unit = {
-    val notes = List(
-      noteIf(game.inMonsoon, s"March is prohibited [Not allowed in Monsoon]")
-    ).flatten
-
     val availOps = InsurgentOp.ALL filter {
       case Rally  => true
       case March  => !game.inMonsoon
@@ -1265,6 +1259,17 @@ object Human {
       case Terror => true
     }
     val choices = availOps map (op => op -> op.toString)
+
+    val notes = List(
+      noteIf(game.inMonsoon, s"March is prohibited [Not allowed in Monsoon]")
+    ).flatten
+
+    if (notes.nonEmpty) {
+      println("Notes:")
+      println(separator())
+      for (note <- notes)
+        log(note)
+    }
     
     askMenu(choices, "\nChoose operation:").head match {
       case Rally  => executeRally(faction, params)
@@ -1313,13 +1318,6 @@ object Human {
       !selectedSpaces.contains(sp.name) &&       // Not already selected
       !Special.selectedSpaces.contains(sp.name)  // Not selected for Advise/Govern Special Activity
     }
-
-    val notes = List(
-      noteIf(nguyenCaoKy,                      s"Pacification costs 4 resources per terror/level [Leader: $RVN_Leader_NguyenCaoKy]"),
-      noteIf(canPlaceExtraPolice,              s"May place 1 ARVN Police in 1 training space with US Troops [$CombActionPlatoons_Unshaded]"),
-      noteIf(maxPacifySpaces == 2,             s"May pactify in 2 spaces [$CORDS_Unshaded]"),
-      noteIf(maxPacifyLevel == PassiveSupport, s"May not Pacify to Active Support [$CORDS_Shaded]")
-    ).flatten
 
     def canSpecial = Special.allowed
 
@@ -1502,7 +1500,14 @@ object Human {
         }
       }
     }
-
+    
+    
+    val notes = List(
+      noteIf(nguyenCaoKy,                      s"Pacification costs 4 resources per terror/level [Leader: $RVN_Leader_NguyenCaoKy]"),
+      noteIf(canPlaceExtraPolice,              s"May place 1 ARVN Police in 1 training space with US Troops [$CombActionPlatoons_Unshaded]"),
+      noteIf(maxPacifySpaces == 2,             s"May pactify in 2 spaces [$CORDS_Unshaded]"),
+      noteIf(maxPacifyLevel == PassiveSupport, s"May not Pacify to Active Support [$CORDS_Shaded]")
+    ).flatten
 
     log(s"\n$faction chooses Train operation")
     log(separator())
@@ -1547,12 +1552,6 @@ object Human {
       val onNetwork = sp.isLOC || sp.isCity || getAdjacentLOCs(sp.name).nonEmpty || getAdjacentCities(sp.name).nonEmpty
       onNetwork && patrolCubes(sp).nonEmpty && reachesLimOpDest
     }
-
-    val notes = List(
-      noteIf(bodyCount,     s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]"),
-      noteIf(pattonUshaded, s"In follow up assault, remove 2 extra enemy pieces [$M48Patton_Unshaded]"),
-      noteIf(pattonShaded,  s"After Patrol NVA removes up to 2 cubes that moved [$M48Patton_Shaded]")
-    ).flatten
 
     def canSpecial = Special.allowed
 
@@ -1676,7 +1675,13 @@ object Human {
       }
     }
     
-              
+    
+    val notes = List(
+      noteIf(bodyCount,     s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]"),
+      noteIf(pattonUshaded, s"In follow up assault, remove 2 extra enemy pieces [$M48Patton_Unshaded]"),
+      noteIf(pattonShaded,  s"After Patrol NVA removes up to 2 cubes that moved [$M48Patton_Shaded]")
+    ).flatten
+          
     log(s"\n$faction chooses Patrol operation")
     log(separator())
     if (hasTheCash) {
@@ -1732,17 +1737,7 @@ object Human {
     val boobyTraps      = capabilityInPlay(BoobyTraps_Shaded)
     val defaultMax      = if (platoonsShaded) 2 else 1000
     val maxSpaces       = params.maxSpaces getOrElse defaultMax
-    
-    if (params.maxSpaces.isEmpty && faction == US  && capabilityInPlay(CombActionPlatoons_Shaded))
-      log(s"US can select a maximum of 2 spaces [$CombActionPlatoons_Shaded]")
-      
-    
-    val notes = List(
-      noteIf(cobrasUnshaded, s"In 2 spaces, you may remove 1 active (untunneled) enemy [$Cobras_Unshaded]"),
-      noteIf(platoonsShaded, s"US can select a maximum of 2 spaces [$CombActionPlatoons_Shaded]"),
-      noteIf(boobyTraps,     s"Each space, VC afterward remove 1 troop on die roll 1-3 [$BoobyTraps_Shaded]")
-    ).flatten
-
+        
     def canSpecial = Special.allowed
 
     def moveTroopsTo(destName: String): Unit = {
@@ -1858,6 +1853,13 @@ object Human {
       else if (activatedSpaces.isEmpty)
         log(s"\nNo guerrillas can be activated in the ${amountOf(sweepSpaces.size, "sweep space")}")
     }
+    
+    
+    val notes = List(
+      noteIf(cobrasUnshaded, s"In 2 spaces, you may remove 1 active (untunneled) enemy [$Cobras_Unshaded]"),
+      noteIf(platoonsShaded, s"US can select a maximum of 2 spaces [$CombActionPlatoons_Shaded]"),
+      noteIf(boobyTraps,     s"Each space, VC afterward remove 1 troop on die roll 1-3 [$BoobyTraps_Shaded]")
+    ).flatten
     
     log(s"\n$faction chooses Sweep operation")
     log(separator())
@@ -2005,16 +2007,6 @@ object Human {
       sp.pieces.has(cubes)
     }
 
-    val notes = List(
-      noteIf(abramsUnshaded, s"In 1 space you may remove 1 (untunneled) base first [$Abrams_Unshaded]"),
-      noteIf(abramsShaded,   s"Select a maximum of 2 spaces [$Abrams_Shaded]"),
-      noteIf(m48Patton,      s"In 2 non-Lowland spaces remove 2 extra enemy pieces [$M48Patton_Unshaded]"),
-      noteIf(cobras,         s"Each space, remove 1 troop on die roll 1-3 [$Cobras_Shaded]"),
-      noteIf(sdUnshaded,     s"Each space, may remove 1 underground guerrilla [$SearchAndDestroy_Unshaded]"),
-      noteIf(sdShaded,       s"Each province, shift support toward Active Opposition [$SearchAndDestroy_Shaded]"),
-      noteIf(bodyCount,      s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]")
-    ).flatten
-
     def canSpecial = Special.allowed
 
     def selectAssaultSpace(): Unit = {
@@ -2082,6 +2074,16 @@ object Human {
       }
     }
 
+    val notes = List(
+      noteIf(abramsUnshaded, s"In 1 space you may remove 1 (untunneled) base first [$Abrams_Unshaded]"),
+      noteIf(abramsShaded,   s"Select a maximum of 2 spaces [$Abrams_Shaded]"),
+      noteIf(m48Patton,      s"In 2 non-Lowland spaces remove 2 extra enemy pieces [$M48Patton_Unshaded]"),
+      noteIf(cobras,         s"Each space, remove 1 troop on die roll 1-3 [$Cobras_Shaded]"),
+      noteIf(sdUnshaded,     s"Each space, may remove 1 underground guerrilla [$SearchAndDestroy_Unshaded]"),
+      noteIf(sdShaded,       s"Each province, shift support toward Active Opposition [$SearchAndDestroy_Shaded]"),
+      noteIf(bodyCount,      s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]")
+    ).flatten
+
     log(s"\n$faction chooses Assault operation")
     log(separator())
     for (note <- notes)
@@ -2114,16 +2116,7 @@ object Human {
     val cadres      = faction == VC  && capabilityInPlay(Cadres_Shaded)
     var rallySpaces = List.empty[String]
     var didCadres   = false
-    
-    val notes = List(
-      noteIf(mcnamara, s"Trail improvemnet is prohibited [Momentum: $Mo_McNamaraLine]"),
-      noteIf(sa2s,     s"Trail improvement is 2 boxes instead of 1 [$SA2s_Shaded]"),
-      noteIf(aaa,      s"Rally that improves the Trail may select 1 space only [$AAA_Unshaded]"),
-      noteIf(adsid,    s"-6 NVA resources at any trail change [Momentum: $Mo_ADSID]"),
-      noteIf(cadres,   s"May Agitate in one space with an existing base [$Cadres_Shaded]")
-    ).flatten
-
-    def canSpecial = Special.allowed
+    def canSpecial  = Special.allowed
 
     def promptToAddPieces(name: String): Unit = {
       val sp            = game.getSpace(name)
@@ -2221,6 +2214,14 @@ object Human {
         case _ =>
       }
     }
+    
+    val notes = List(
+      noteIf(mcnamara, s"Trail improvemnet is prohibited [Momentum: $Mo_McNamaraLine]"),
+      noteIf(sa2s,     s"Trail improvement is 2 boxes instead of 1 [$SA2s_Shaded]"),
+      noteIf(aaa,      s"Rally that improves the Trail may select 1 space only [$AAA_Unshaded]"),
+      noteIf(adsid,    s"-6 NVA resources at any trail change [Momentum: $Mo_ADSID]"),
+      noteIf(cadres,   s"May Agitate in one space with an existing base [$Cadres_Shaded]")
+    ).flatten
 
     log(s"\n$faction chooses Rally operation")
     log(separator())
@@ -2261,12 +2262,7 @@ object Human {
     // Normally movedInto(name) == frozen(name), however for NVA pieces moving along the trail
     // they can be in the movedInto bucket but not the frozen bucket
     val movedInto       = new MovingGroups()  // All pieces that have moved into each dest space
-    
-    val notes = List(
-      noteIf(mainForceBins, s"March into LOC/Support activates if moving+COIN > 1 [$MainForceBns_Unshaded]"),
-      noteIf(claymores,     s"Remove 1 guerrilla in each marching group that activates [$Mo_Claymores]")
-    ).flatten
-    
+        
     def moveablePieces(name: String) = {
       val moveable = game.getSpace(name).pieces.only(moveableTypes)
       // NVA pieces that moved in Laos/Cambodia can keep moving if the trail > 0
@@ -2408,6 +2404,11 @@ object Human {
       }
     }
 
+    val notes = List(
+      noteIf(mainForceBins, s"March into LOC/Support activates if moving+COIN > 1 [$MainForceBns_Unshaded]"),
+      noteIf(claymores,     s"Remove 1 guerrilla in each marching group that activates [$Mo_Claymores]")
+    ).flatten
+
     log(s"\n$faction chooses March operation")
     log(separator())
     for (note <- notes)
@@ -2433,13 +2434,7 @@ object Human {
     val maxAttacks   = params.maxSpaces getOrElse 1000
     var attackSpaces = Set.empty[String]
     val guerrillas   = if (faction == NVA) NVAGuerrillas else VCGuerrillas
-
-    val notes = List(
-      noteIf(pt76_unshaded, s"Each NVA attack space first remove 1 NVA troop [$PT76_Unshaded]"),
-      noteIf(pt76_shaded,   s"In 1 NVA attack space, remove 1 enemy per Troop [$PT76_Shaded]")
-    ).flatten
-
-    def canSpecial = Special.allowed
+    def canSpecial   = Special.allowed
     
     val isAttackSpace = (sp: Space) => {
       !attackSpaces.contains(sp.name) &&
@@ -2490,8 +2485,12 @@ object Human {
 
         case _ =>  // finished
       }
-      
     }
+
+    val notes = List(
+      noteIf(pt76_unshaded, s"Each NVA attack space first remove 1 NVA troop [$PT76_Unshaded]"),
+      noteIf(pt76_shaded,   s"In 1 NVA attack space, remove 1 enemy per Troop [$PT76_Shaded]")
+    ).flatten
 
     log(s"\n$faction chooses Attack operation")
     log(separator())
@@ -2511,17 +2510,11 @@ object Human {
       Bombard::Nil
     else
       Tax::Subvert::Nil
-    val cadres              = faction == VC && capabilityInPlay(Cadres_Unshaded)
-    var selectedSpaces      = List.empty[String]
-    val maxSpaces           = params.maxSpaces getOrElse 1000
-    val underground         = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
-    
-    def canSpecial = Special.allowed
-     
-    val notes = List(
-      noteIf(cadres, s"$faction must remove 2 guerrillas in each terror space [$Cadres_Unshaded]")
-    ).flatten
-    
+    val cadres         = faction == VC && capabilityInPlay(Cadres_Unshaded)
+    var selectedSpaces = List.empty[String]
+    val maxSpaces      = params.maxSpaces getOrElse 1000
+    val underground    = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U    
+    def canSpecial     = Special.allowed
     
     // terrorMarkersAvailable
     def nextTerrorAction(): Unit = {
@@ -2591,6 +2584,9 @@ object Human {
         
     }
     
+    val notes = List(
+      noteIf(cadres, s"$faction must remove 2 guerrillas in each terror space [$Cadres_Unshaded]")
+    ).flatten
     
     log(s"\n$faction chooses Terror operation")
     log(separator())

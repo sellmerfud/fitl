@@ -1854,6 +1854,7 @@ object FireInTheLake {
     val action = (param: Option[String]) => ()
   }
 
+
   object ShowCmd extends Command {
     val name = "show"
 
@@ -1861,7 +1862,7 @@ object FireInTheLake {
                  |  show scenario  - name of the current scenario
                  |  show summary   - current score, resources, etc.
                  |  show pieces    - available pieces, casualties, out of play pieces
-                 |  show events    - capabilities and momentum events in play
+                 |  show events    - capabilities, momentum, pivotal events
                  |  show sequence  - current sequence of play
                  |  show all       - entire game state
                  |  show <space>   - state of a single space""".stripMargin
@@ -1883,21 +1884,18 @@ object FireInTheLake {
   object AdjustCmd extends Command {
     val name = "adjust"
     val desc = """Adjust game settings  (Minimal rule checking is applied)
-                              |  adjust imperium        - Imperium track
-                              |  adjust roads           - Road maintenance
-                              |  adjust sea             - Toggle patrolled value of a sea
-                              |  adjust prestige        - Dux prestige
-                              |  adjust wealth          - Civatates wealth
-                              |  adjust dux res         - Dux resources
-                              |  adjust civ res         - Civatates resources
-                              |  adjust saxon renown    - Saxon renown
-                              |  adjust scotti renown   - Scotti renown
-                              |  adjust cavalry         - Cavalry in the casualties/out of play boxes
-                              |  adjust comitates       - Off board Comitates (not yet in play)
-                              |  adjust refugees        - Available refugee markers
+                              |  adjust aid             - US Aid level
+                              |  adjust patronage       - ARVN Patronage
+                              |  adjust resources       - Faction resources
+                              |  adjust econ            - Econ marker value
+                              |  adjust trail           - Trail value
+                              |  adjust uspolicy        - Current US Policy
+                              |  adjust casualties      - Pieces in the Casualties box
+                              |  adjust out of play     - Pieces in the Out of Play box
                               |  adjust capabilities    - Capabilities currently in play
                               |  adjust momentum        - Momentum events currently in play
-                              |  adjust niall           - Number of Saxon raider on Niall Noigiallach card
+                              |  adjust rvnLeaders      - Stack of RVN Leaders
+                              |  adjust pivotal         - Adjust available Pivotal event cards
                               |  adjust bot debug       - Toggle debug output of bot logic
                               |  adjust <space>         - Space specific settings""".stripMargin
 
@@ -3247,8 +3245,8 @@ object FireInTheLake {
     val names = cmds map (_.name)
     param match {
       case None =>
-        println("Available commands: (type help <command> for more detail)")
-        println(orList(names))
+        println(s"Available commands: ${orList(names)}")
+        println("Type help <command> for more detail")
       case Some(p) =>
         for (name <- matchOne(p, names); cmd <- cmds find (_.name == name))
           println(cmd.desc)
@@ -3358,7 +3356,7 @@ object FireInTheLake {
     val agitate = if (game.isBot(VC)) List("agitate") else Nil
     val options = (
       List("resources", "aid", "patronage", "econ", "trail", "uspolicy", "casualties", "out of play",
-      "capabilities", "momentum", "rvnLeaders", "pivot cards", "bot debug") ::: agitate
+      "capabilities", "momentum", "rvnLeaders", "pivotal", "bot debug") ::: agitate
     ).sorted ::: SpaceNames
 
     val choice = askOneOf("[Adjust] (? for list): ", options, param, allowNone = true, allowAbort = false)
@@ -3375,7 +3373,7 @@ object FireInTheLake {
       case "capabilities" => adjustCapabilities()
       case "momentum"     => adjustMomentum()
       case "rvnLeaders"   => adjustRvnLeaders()
-      case "pivot cards"  => adjustPivotalCards()
+      case "pivotal"      => adjustPivotalCards()
       case "bot debug"    => adjustBotDebug()
       case name           => adjustSpace(name)
     }

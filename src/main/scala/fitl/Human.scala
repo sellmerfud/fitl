@@ -614,6 +614,10 @@ object Human {
         choice(true,       "finished", "Finished selecting Advise spaces")
       ).flatten
 
+      println(s"\n${amountOf(Special.selectedSpaces.size, "space")} of $maxAdvise selected for Advise")
+      println(separator())
+      wrap("", Special.selectedSpaces.toList) foreach println
+
       askMenu(choices, "\nChoose Advise option:").head match {
         case "sweep" =>
           askCandidateOrBlank("ARVN Sweep in which space: ", sweepCandidates) foreach { name =>
@@ -647,7 +651,6 @@ object Human {
     nextAdviseSpace();
     if (askYorN("\nDo you wish to add +6 Aid? (y/n) "))
       increaseUsAid(6)
-    Special.completed()
   }
 
   // US special activity
@@ -739,9 +742,11 @@ object Human {
       val moveChoices  = liftOutCandidates map (name => name -> s"Lift forces out of $name")
       val choices      = selectChoice:::moveChoices:::List("finished" -> "Finished with Air Lift")
 
-      println(s"\n${amountOf(airLiftSpaces.size, "space")} selected for Air Lift [max $maxAirLiftSpaces]")
+
+      println(s"\n${amountOf(airLiftSpaces.size, "space")} of $maxAirLiftSpaces selected for Air Lift")
       println(separator())
       wrap("", airLiftSpaces) foreach println
+      
       askMenu(choices, "\nSelect one:").head match {
         case "select" =>
           askCandidateOrBlank("\nAir Lift in which space: ", airLiftCandidates) foreach { name =>
@@ -765,7 +770,6 @@ object Human {
       log("May only choose 2 spaces in Monsoon")
 
     nextAirLiftAction()
-    Special.completed()
   }
 
   // US special activity
@@ -902,9 +906,11 @@ object Human {
           Nil
 
         val choices = (topChoices:::strikeChoices) :+ ("finished" -> "Finished with Air Strike activity")
-        println(s"\nAir Strike spaces selected [Max $maxSpaces]")
+        
+        println(s"\n${amountOf(strikeSpaces.size, "space")} of $maxSpaces selected for Air Strike")
         println(separator())
         wrap("", strikeSpaces.toList) foreach println
+        
         if (!oriskany) {
           if (hasDegraded)
             println("\nYou have already degraded the trail")
@@ -970,8 +976,6 @@ object Human {
     log(s"Number of hits: $maxHits")
 
     nextAirStrikeAction(maxHits, false)
-    Special.completed()
-
   }
 
   // ARVN special activity
@@ -1005,7 +1009,7 @@ object Human {
         choice(true,      "finished", "Finished with Govern activity")
       ).flatten
 
-      println(s"\n${amountOf(Special.selectedSpaces.size, "space")} selected for Govern")
+      println(s"\n${amountOf(Special.selectedSpaces.size, "space")} of $maxSpaces selected for Govern")
       println(separator())
       wrap("", Special.selectedSpaces.toList) foreach println
 
@@ -1088,7 +1092,6 @@ object Human {
       log(note)
 
     nextGovernAction()
-    Special.completed()
   }
 
   // ARVN special activity
@@ -1148,7 +1151,6 @@ object Human {
     // Flip all rangers underground
     for (sp <- game.spaces; if sp.pieces.has(Rangers_A))
       hidePieces(sp.name, sp.pieces.only(Rangers_A))
-    Special.completed()
   }
 
 
@@ -1195,6 +1197,10 @@ object Human {
         choice(canSelect, "select",   "Select a Raid space"),
         choice(true,      "finished", "Finished selecting Raid spaces")
       ).flatten
+
+      println(s"\n${amountOf(raidSpaces.size, "space")} of $maxSpaces selected for Raid")
+      println(separator())
+      wrap("", raidSpaces.toList) foreach println
 
       askMenu(choices, "\nRaid:").head match {
         case "select" =>
@@ -1351,6 +1357,10 @@ object Human {
         choice(true,      "finished", "Finished with Infiltrate special activity")
       ).flatten
       
+      println(s"\n${amountOf(infiltrateSpaces.size, "space")} of $maxSpaces selected for Infiltrate")
+      println(separator())
+      wrap("", infiltrateSpaces.toList) foreach println
+      
       
       askMenu(choices, "\nInfiltrate:").head match {
         case "select" => 
@@ -1387,8 +1397,78 @@ object Human {
   // LongRangeGuns_Unshaded - NVA Bombard is max 1 space
   // LongRangeGuns_Shaded   - NVA Bombard is max 3 spaces
   def doBombard(params: Params): Unit = {
-    log("\nNVA Bombard special activity not yet implemented.")
+    val CoinTroops = USTroops::ARVNTroops::Nil
+    val longRange_unshaded = capabilityInPlay(LongRangeGuns_Unshaded)
+    val longRange_shaded   = capabilityInPlay(LongRangeGuns_Shaded)
+    var bombardSpaces      = Set.empty[String]
+    val maxSpaces = if      (longRange_unshaded) 1
+                    else if (longRange_shaded)   3
+                    else                         2
+                      
+    val isCandidate = (sp: Space) => {
+      val enemyCondition = sp.pieces.totalOf(CoinTroops) > 2 || (sp.pieces.has(CoinTroops) && sp.pieces.has(CoinBases))
+      lazy val hasAdjacentTroops = getAdjacent(sp.name) exists { name =>
+        game.getSpace(name).pieces.numOf(NVATroops) > 2
+      }
+      
+      enemyCondition && (sp.pieces.numOf(NVATroops) > 2 || hasAdjacentTroops)
+    }
+    
+    def bombardSpace(name: String): Unit = {
+      val sp = game.getSpace(name)
+      
+      log(s"\nNVA Bombards in $name")
+      log(separator())
+      
+      val toRemove  = askPieces(sp.pieces, 1, CoinTroops, Some("Bombarding a Coin Troop"))
+      val pieceType = toRemove.getTypes.head
+      if (pieceType == USTroops)
+        removeToCasualties(name, Pieces(usTroops = 1))
+      else
+        removeToAvailable(name, Pieces(arvnTroops = 1))
+    }
+    
+    def nextBombardAction(): Unit = {
+      val candidates = spaceNames(game.spaces filter isCandidate)
+      val canSelect  = bombardSpaces.size < maxSpaces && candidates.nonEmpty
+      val choices    = List(
+        choice(canSelect, "select",   "Select a space to Bombard"),
+        choice(true,      "finished", "Finished with Bombard special activity")
+      ).flatten
+      
+      println(s"\n${amountOf(bombardSpaces.size, "space")} of $maxSpaces selected for Bombard")
+      println(separator())
+      wrap("", bombardSpaces.toList) foreach println
+      
+      askMenu(choices, "\nBombard:").head match {
+        case "select" =>
+          askCandidateOrBlank("\nBombard in which space: ", candidates) foreach { name =>
+            bombardSpace(name)
+            bombardSpaces = bombardSpaces + name
+          }
+        nextBombardAction()  
+          
+        case _ =>
+      }
+    }
+    
+    // Start of Bombard Special Activity
+    // ------------------------------------
+    
+    val notes = List(
+      noteIf(longRange_unshaded, s"NVA Bombard is max 1 space [$LongRangeGuns_Unshaded]"),
+      noteIf(longRange_shaded,   s"NVA Bombard is max 3 space [$LongRangeGuns_Unshaded]")
+    ).flatten
+
+
+    log("\nNVA chooses Infiltrate special activity")
+    log(separator())
+    for (note <- notes)
+      log(note)
+      
+    nextBombardAction()
   }
+  
 
   // NVA/VC special activity
   // The ambush activity is noted in the Special object.
@@ -1414,7 +1494,6 @@ object Human {
       log(note)
 
     Special.ambushing = true
-    Special.completed()
   }
 
   // VC special activity
@@ -2089,7 +2168,7 @@ object Human {
         choice(true,       "finished", s"Finished selecting Sweep spaces")
       ).flatten
 
-      println("\nSweep spaces selected")
+      println(s"\n${amountOf(sweepSpaces.size, "space")} selected for Sweep")
       println(separator())
       wrap("", sweepSpaces.toList) foreach println
 
@@ -2664,6 +2743,10 @@ object Human {
       val moveChoices   = moveCandidates map (name => s"move:$name" -> s"Move pieces into $name")
       val lastChoice    = List("finished" -> "Finished with March operation")
 
+      println(s"\n${amountOf(destinations.size, "destination")} selected for March")
+      println(separator())
+      wrap("", destinations.toList) foreach println
+
       askMenu(topChoices:::ambushChoices:::moveChoices:::lastChoice, "\nMarch:").head match {
         case "select" =>
           askCandidateOrBlank("\nAdd which space as a march destination: ", candidates) foreach { name =>
@@ -2759,6 +2842,10 @@ object Human {
         choice(canSpecial, "special",  "Perform a Special Activity"),
         choice(true,       "finished", "Finished with Attack operation")
       ).flatten
+
+      println(s"\n${amountOf(attackSpaces.size, "space")} selected for Attack")
+      println(separator())
+      wrap("", attackSpaces.toList) foreach println
 
       askMenu(choices, "\nAttack:").head match {
         case "attack" =>

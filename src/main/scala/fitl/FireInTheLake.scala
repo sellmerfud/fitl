@@ -2450,7 +2450,6 @@ object FireInTheLake {
         case None      => log()
       }
       
-      log()
       for (desc <- pieces.descriptions)
         log(s"Remove $desc from $spaceName to AVAILABLE")
     }
@@ -2468,7 +2467,6 @@ object FireInTheLake {
         case Some(msg) => log(s"\n$msg"); log(separator())
         case None      => log()
       }
-      log()
       for (desc <- pieces.descriptions)
         log(s"Remove $desc from $spaceName to CASUALTIES")
     }
@@ -2485,7 +2483,6 @@ object FireInTheLake {
         case Some(msg) => log(s"\n$msg"); log(separator())
         case None      => log()
       }
-      log()
       for (desc <- pieces.descriptions)
         log(s"Remove $desc from AVAILABLE to CASUALTIES")
     }
@@ -2701,16 +2698,17 @@ object FireInTheLake {
 
     val removed = nextSpace(Vector.empty, candidateNames)
 
-    loggingControlChanges {
-      log()
-      for ((name, removedPieces) <- removed) {
-        val sp = game.getSpace(name)
-        val updated = sp.copy(pieces = sp.pieces - removedPieces)
-        game = game.updateSpace(updated)
-        for (desc <- removedPieces.descriptions)        
-          log(s"Remove $desc from $name to AVAILABLE")
+    if (removed.nonEmpty)
+      loggingControlChanges {
+        log()
+        for ((name, removedPieces) <- removed) {
+          val sp = game.getSpace(name)
+          val updated = sp.copy(pieces = sp.pieces - removedPieces)
+          game = game.updateSpace(updated)
+          for (desc <- removedPieces.descriptions)        
+            log(s"Remove $desc from $name to AVAILABLE")
+        }
       }
-    }
   }
 
   // Ask the number of each type of pieces to place in the given space up to the

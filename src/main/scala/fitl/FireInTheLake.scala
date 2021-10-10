@@ -543,6 +543,20 @@ object FireInTheLake {
   }
 
 
+  def getInsurgentCounterPart(pieceType: PieceType): PieceType = {
+    pieceType match {
+      case NVAGuerrillas_U => VCGuerrillas_U 
+      case NVAGuerrillas_A => VCGuerrillas_A 
+      case NVABase         => VCBase         
+      case NVATunnel       => VCTunnel       
+      case VCGuerrillas_U  => NVAGuerrillas_U
+      case VCGuerrillas_A  => NVAGuerrillas_A
+      case VCBase          => NVABase        
+      case VCTunnel        => NVATunnel      
+      case _ => throw new IllegalArgumentException(s"getInsurgentCounterPart called with $pieceType")
+    }
+  }
+
   // Class used to keep track of the pieces in a particular space
   case class Pieces(
     usTroops: Int        = 0,
@@ -2418,8 +2432,9 @@ object FireInTheLake {
 
       assert(pieces.totalBases + sp.pieces.totalBases <= 2, s"Cannot place more than 2 bases in $spaceName")
       game = game.updateSpace(sp.copy(pieces = sp.pieces + pieces))
-      log(s"\nPlace the following pieces from AVAILABLE into $spaceName:")
-      wrap("  ", pieces.descriptions) foreach (log(_))
+      log()
+      for (desc <- pieces.descriptions)        
+        log(s"Place $desc from AVAILABLE into $spaceName")
     }
   }
 
@@ -2434,8 +2449,10 @@ object FireInTheLake {
         case Some(msg) => log(s"\n$msg"); log(separator())
         case None      => log()
       }
-      log(s"Remove the following pieces from $spaceName to AVAILABLE:")
-      wrap("  ", pieces.descriptions) foreach (log(_))
+      
+      log()
+      for (desc <- pieces.descriptions)
+        log(s"Remove $desc from $spaceName to AVAILABLE")
     }
   }
 
@@ -2451,8 +2468,9 @@ object FireInTheLake {
         case Some(msg) => log(s"\n$msg"); log(separator())
         case None      => log()
       }
-      log(s"Remove the following pieces from $spaceName to CASUALTIES:")
-      wrap("  ", pieces.descriptions) foreach (log(_))
+      log()
+      for (desc <- pieces.descriptions)
+        log(s"Remove $desc from $spaceName to CASUALTIES")
     }
   }
   
@@ -2467,8 +2485,9 @@ object FireInTheLake {
         case Some(msg) => log(s"\n$msg"); log(separator())
         case None      => log()
       }
-      log(s"Remove the following pieces from AVAILABLE to CASUALTIES:")
-      wrap("  ", pieces.descriptions) foreach (log(_))
+      log()
+      for (desc <- pieces.descriptions)
+        log(s"Remove $desc from AVAILABLE to CASUALTIES")
     }
   }
 
@@ -2504,11 +2523,9 @@ object FireInTheLake {
     val updated = sp.copy(pieces = sp.pieces - hidden + visible)
     game = game.updateSpace(updated)
     
-    if (visible.total == 1)
-      log(s"\nIn $spaceName, flip the following piece to its active side")
-    else
-      log(s"\nIn $spaceName, flip the following pieces to their active sides")
-    wrap("  ", hidden.descriptions) foreach (log(_))
+    log()
+    for (desc <- hidden.descriptions)
+      log(s"In $spaceName, flip $desc to ACTIVE")
   }
   
   //  Hide guerrillas/rangers/irregulars in a space
@@ -2525,12 +2542,10 @@ object FireInTheLake {
       vcGuerrillas_A  = visible.vcGuerrillas_U)
     val updated = sp.copy(pieces = sp.pieces - visible + hidden)
     game = game.updateSpace(updated)
-    
-    if (visible.total == 1)
-      log(s"\nIn $spaceName, flip the following piece to its underground side")
-    else
-      log(s"\nIn $spaceName, flip the following pieces to their underground sides")
-    wrap("  ", visible.descriptions) foreach (log(_))
+
+    log()
+    for (desc <- visible.descriptions)
+      log(s"In $spaceName, flip $desc to UNDERGROUND")
   }
   
   
@@ -2546,9 +2561,10 @@ object FireInTheLake {
     val updatedDst = dstSpace.copy(pieces = dstSpace.pieces + pieces)
     loggingControlChanges {
       game = game.updateSpace(updatedSrc).updateSpace(updatedDst)
-      log(s"\nMove the following pieces from $source to $dest:")
-      log(separator())
-      wrap("", pieces.descriptions) foreach (log(_))
+      
+      log()
+      for (desc <- pieces.descriptions)
+        log(s"Move $desc from $source to $dest")      
     }
   }
 
@@ -2559,7 +2575,7 @@ object FireInTheLake {
     val tunnel = if (base == VCBase) VCTunnel else NVATunnel
     val updated = sp.copy(pieces = sp.pieces.remove(1, base).add(1, tunnel))
     game = game.updateSpace(updated)
-    log(s"\nAdd a tunnel marker to a $base in $spaceName")
+    log(s"\nAdd a tunnel marker to a ${base.singular} in $spaceName")
   }
 
   def removeTunnelMarker(spaceName: String, tunnel: PieceType): Unit = {
@@ -2569,7 +2585,7 @@ object FireInTheLake {
     val base = if (tunnel == VCTunnel) VCBase else NVABase
     val updated = sp.copy(pieces = sp.pieces.remove(1, tunnel).add(1, base))
     game = game.updateSpace(updated)
-    log(s"\nRemove a tunnel marker from a $base in $spaceName")
+    log(s"\nRemove a tunnel marker from a ${base.singular} in $spaceName")
   }
 
 
@@ -2691,7 +2707,8 @@ object FireInTheLake {
         val sp = game.getSpace(name)
         val updated = sp.copy(pieces = sp.pieces - removedPieces)
         game = game.updateSpace(updated)
-        log(s"Remove ${andList(removedPieces.descriptions)} from $name to AVAILABLE")
+        for (desc <- removedPieces.descriptions)        
+          log(s"Remove $desc from $name to AVAILABLE")
       }
     }
   }
@@ -2763,6 +2780,21 @@ object FireInTheLake {
     }
   }
 
+  // The User has already determined how many of a given piece type to place.
+  // If there are not enough of the pieces in the available box, then we must
+  // ask for vountariy removal.
+  def ensurePieceTypeAvailable(pieceType: PieceType, num: Int): Unit = {
+    assert(game.piecesToPlace.numOf(pieceType) >= num, "askPieceTypeToPlace: Not enought pieces can be placed")
+    
+    if (game.availablePieces.numOf(pieceType) <  num) {
+      val mustRemove = num - game.availablePieces.numOf(pieceType)
+      
+      println(s"\nThere are not enough ${pieceType.genericPlural} in the available box")
+      voluntaryRemoval(mustRemove, pieceType)
+    }
+  }
+  
+  
   // If there are not sufficient bases in the available box, then the user is
   // asked to remove one from the map.
   // IMPORTANT:

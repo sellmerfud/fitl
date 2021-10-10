@@ -1461,7 +1461,7 @@ object Human {
     ).flatten
 
 
-    log("\nNVA chooses Infiltrate special activity")
+    log("\nNVA chooses Bombard special activity")
     log(separator())
     for (note <- notes)
       log(note)
@@ -1510,6 +1510,16 @@ object Human {
     else
       sp.population > 0 && sp.pieces.has(VCGuerrillas_U) && !sp.coinControlled
     
+    def taxSpace(name: String): Unit = {
+      val sp  = game.getSpace(name)
+      val num = if (sp.isLOC) sp.printedEconValue else 2 * sp.population
+      log(s"\nVC Taxes in $name")
+      log(separator())
+      revealPieces(name, Pieces(vcGuerrillas_U = 1))
+      increaseResources(VC, num)
+      if (sp.support != ActiveSupport)
+        increaseSupport(name, 1)
+    }
     
     def nextTaxAction(): Unit = {
       val candidates = spaceNames(game.spaces filter isCandidate)
@@ -1526,15 +1536,7 @@ object Human {
       askMenu(choices, "\nTax:").head match {
         case "select" =>
           askCandidateOrBlank("\nTax in which space: ", candidates) foreach { name =>
-            val sp = game.getSpace(name)
-            
-            val num = if (sp.isLOC) sp.printedEconValue else 2 * sp.population
-            log(s"\nVC Taxes in $name")
-            log(separator())
-            revealPieces(name, Pieces(vcGuerrillas_U = 1))
-            increaseResources(VC, num)
-            if (sp.support != ActiveSupport)
-              increaseSupport(name, 1)
+            taxSpace(name)
             taxSpaces = taxSpaces + name
           }
         nextTaxAction()  
@@ -1551,7 +1553,7 @@ object Human {
     ).flatten
 
 
-    log("\nNVA chooses Infiltrate special activity")
+    log("\nVC chooses Tax special activity")
     log(separator())
     for (note <- notes)
       log(note)
@@ -1562,7 +1564,93 @@ object Human {
   // VC special activity
   // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
   def doSubvert(params: Params): Unit = {
-    log("\nVC Subvert special activity not yet implemented.")
+    val kate          = momentumInPlay(Mo_TyphoonKate)
+    val maxSpaces     = if (kate) 1 else 2
+    var subvertSpaces = Set.empty[String]
+    var cubesRemoved  = 0
+    
+    val isCandidate = (sp: Space) => sp.pieces.has(VCGuerrillas_U) && sp.pieces.has(ARVNCubes)
+
+    def removeCubes(name: String): Unit = {
+      val sp       =  game.getSpace(name)
+      val eligible = sp.pieces.only(ARVNCubes)
+      val num      = eligible.total min 2
+      val toRemove = askPieces(eligible, num)
+      
+      log(s"\nVC Subverts in $name")
+      log(separator())
+      removeToAvailable(name, toRemove)
+      cubesRemoved += toRemove.total
+    }
+    
+    def replaceCube(name: String): Unit = {
+      val sp       =  game.getSpace(name)
+      val eligible = sp.pieces.only(ARVNCubes)
+      val toRemove = askPieces(eligible, 1, prompt = Some("Select ARVN cube to replace"))
+      
+      log(s"\nVC Subverts in $name")
+      log(separator())
+      removeToAvailable(name, toRemove)
+      ensurePieceTypeAvailable(VCGuerrillas_U, 1)
+      placePieces(name, Pieces().set(1, VCGuerrillas_U))
+      cubesRemoved += toRemove.total
+    }
+    
+    def subvertSpace(name: String): Unit = {
+        val sp = game.getSpace(name)
+        val choices = List(
+          "remove"  -> "Remove ARVN Cubes",
+          "replace" -> "Replace 1 ARVN Cube with a VC Guerrilla"
+        )
+        
+        askMenu(choices, s"\nSubvert in $name").head match {
+          case "remove" => removeCubes(name)
+          case _        => replaceCube(name)
+        }
+    }
+    
+    def nextSubvertAction(): Unit = {
+      val candidates = spaceNames(game.spaces filter isCandidate)
+      val canSelect  = subvertSpaces.size < maxSpaces && candidates.nonEmpty
+      val choices    = List(
+        choice(canSelect, "select",   "Select a space to Subvert"),
+        choice(true,      "finished", "Finished with Subvert special activity")
+      ).flatten
+      
+      println(s"\n${amountOf(subvertSpaces.size, "space")} of $maxSpaces selected for Subvert")
+      println(separator())
+      wrap("", subvertSpaces.toList) foreach println
+      
+      askMenu(choices, "\nSubvert:").head match {
+        case "select" =>
+          askCandidateOrBlank("\nSubvert in which space: ", candidates) foreach { name =>
+            subvertSpace(name)
+            subvertSpaces = subvertSpaces + name
+          }
+        nextSubvertAction()  
+          
+        case _ =>
+          log(s"\nTotal ARVN pieces removed by the Subvert activity: $cubesRemoved")
+          decreasePatronage(cubesRemoved / 2)
+      } 
+    }    
+    
+    
+    // Start of Subvert Special Activity
+    // ------------------------------------
+    
+    val notes = List(
+      noteIf(kate, s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]")
+    ).flatten
+
+
+    log("\nVC chooses Subvert special activity")
+    log(separator())
+    for (note <- notes)
+      log(note)
+      
+    nextSubvertAction()
+
   }
 
   // val Mo_TyphoonKate       = "#115 Typhoon Kate"            // Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)

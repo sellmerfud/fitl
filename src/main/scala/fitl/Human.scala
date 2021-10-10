@@ -1493,15 +1493,74 @@ object Human {
     for (note <- notes)
       log(note)
 
+    // Set the ambushing flag.  The user will be prompted to ambush in the current
+    // action: Attack, Patrol
     Special.ambushing = true
   }
 
   // VC special activity
+  // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
   def doTax(params: Params): Unit = {
-    log("\nVC Tax special activity not yet implemented.")
+    val kate      = momentumInPlay(Mo_TyphoonKate)
+    var taxSpaces = Set.empty[String]
+    val maxSpaces = if (kate) 1 else 4
+    
+    val isCandidate = (sp: Space) => if (sp.isLOC)
+      sp.printedEconValue > 0 && sp.pieces.has(VCGuerrillas_U)
+    else
+      sp.population > 0 && sp.pieces.has(VCGuerrillas_U) && !sp.coinControlled
+    
+    
+    def nextTaxAction(): Unit = {
+      val candidates = spaceNames(game.spaces filter isCandidate)
+      val canSelect  = taxSpaces.size < maxSpaces && candidates.nonEmpty
+      val choices    = List(
+        choice(canSelect, "select",   "Select a space to Tax"),
+        choice(true,      "finished", "Finished with Tax special activity")
+      ).flatten
+      
+      println(s"\n${amountOf(taxSpaces.size, "space")} of $maxSpaces selected for Tax")
+      println(separator())
+      wrap("", taxSpaces.toList) foreach println
+      
+      askMenu(choices, "\nTax:").head match {
+        case "select" =>
+          askCandidateOrBlank("\nTax in which space: ", candidates) foreach { name =>
+            val sp = game.getSpace(name)
+            
+            val num = if (sp.isLOC) sp.printedEconValue else 2 * sp.population
+            log(s"\nVC Taxes in $name")
+            log(separator())
+            revealPieces(name, Pieces(vcGuerrillas_U = 1))
+            increaseResources(VC, num)
+            if (sp.support != ActiveSupport)
+              increaseSupport(name, 1)
+            taxSpaces = taxSpaces + name
+          }
+        nextTaxAction()  
+          
+        case _ =>
+      } 
+    }    
+    
+    // Start of Tax Special Activity
+    // ------------------------------------
+    
+    val notes = List(
+      noteIf(kate, s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]")
+    ).flatten
+
+
+    log("\nNVA chooses Infiltrate special activity")
+    log(separator())
+    for (note <- notes)
+      log(note)
+      
+    nextTaxAction()
   }
 
   // VC special activity
+  // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
   def doSubvert(params: Params): Unit = {
     log("\nVC Subvert special activity not yet implemented.")
   }
@@ -1711,21 +1770,23 @@ object Human {
 
       askMenu(choices, s"\nTraining in $name:").head match {
         case "extra" =>
-          val toPlace = askPiecesToPlace(name, ARVNPolice::Nil, maxToPlace = 1)
-          placePieces(name, toPlace)
+          ensurePieceTypeAvailable(ARVNPolice, 1)
+          placePieces(name, Pieces().set(1, ARVNPolice))
 
         case "irregulars" =>
-          val toPlace = askPiecesToPlace(name, Irregulars_U::Nil, maxToPlace = 2)
-          placePieces(name, toPlace)
+          val num = askInt("\nPlace how many Irregulars", 0, 2)
+          ensurePieceTypeAvailable(Irregulars_U, num)
+          placePieces(name, Pieces().set(num, Irregulars_U))
 
         case "rangers" =>
-          val toPlace = askPiecesToPlace(name, Rangers_U::Nil, maxToPlace = 2)
-          if (toPlace.total > 0) {
+          val num = askInt("\nPlace how many Rangers", 0, 2)
+          if (num > 0) {
             log()
             if (!params.free)
               decreaseResources(ARVN, 3)
+            ensurePieceTypeAvailable(Rangers_U, num)
             arvnPlacedIn = name :: arvnPlacedIn
-            placePieces(name, toPlace)
+            placePieces(name, Pieces().set(num, Rangers_U))
           }
 
         case "cubes" =>
@@ -1833,18 +1894,11 @@ object Human {
               askCandidateOrBlank("\nPlace an ARVN base in which space: ", baseCandidates) match {
                 case None       => promptFinalAction()
                 case Some(name) =>
-                  // askToPlace will ask the user to vountarily remove a base from the map
-                  // if necessary.  If the user chooses not to, then it will return an
-                  // empty Pieces instance.
-                  val toPlace = askToPlaceBase(name, ARVNBase);
-                  if (toPlace.isEmpty)
-                    promptFinalAction()
-                  else {
-                    val sp    = game.getSpace(name)
-                    val cubes = askPieces(sp.pieces, 3, ARVNCubes,  Some("Removing ARVN cubes to replace with base"))
-                    removeToAvailable(name, cubes)
-                    placePieces(name, toPlace)
-                  }
+                  val sp    = game.getSpace(name)
+                  val cubes = askPieces(sp.pieces, 3, ARVNCubes,  Some("Removing ARVN cubes to replace with base"))
+                  removeToAvailable(name, cubes)
+                  ensurePieceTypeAvailable(ARVNBase, 1)
+                  placePieces(name, Pieces().set(1, ARVNBase))
               }
             }
 
@@ -2498,7 +2552,8 @@ object Human {
       val guerrillas    = if (faction == NVA) NVAGuerrillas else VCGuerrillas
       val underground   = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
       val active        = if (faction == NVA) NVAGuerrillas_A else VCGuerrillas_A
-      val base          = if (faction == NVA) NVABase else VCBase
+      val baseType      = if (faction == NVA) NVABase else VCBase
+      val guerrillaType = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
       val canPlaceBase  = sp.totalBases < 2 && sp.pieces.totalOf(guerrillas) >= 2
       val canHide       = faction == VC && sp.pieces.hasBase(VC) && sp.pieces.has(VCGuerrillas_A)
       val maxGuerrillas = if (sp.pieces.hasBase(faction))
@@ -2506,7 +2561,6 @@ object Human {
           case NVA => sp.pieces.totalNVABases + game.trail
           case _   => sp.pieces.totalVCBases + sp.population
         }
-
       else
         1
 
@@ -2524,19 +2578,20 @@ object Human {
 
       askMenu(choices, s"\nRallying in $name:").head match {
         case "place-one" =>
-          val toPlace = askPiecesToPlace(name, underground::Nil, maxToPlace = 1)
-          placePieces(name, toPlace)
+          ensurePieceTypeAvailable(guerrillaType, 1)
+          placePieces(name, Pieces().set(1, guerrillaType))
 
         case "place-many" =>
-          val toPlace = askPiecesToPlace(name, underground::Nil, maxToPlace = maxGuerrillas)
-          placePieces(name, toPlace)
+          val num = askInt("\nPlace how many guerrillas", 0, maxGuerrillas)
+          ensurePieceTypeAvailable(guerrillaType, num)
+          placePieces(name, Pieces().set(num, guerrillaType))
 
         case "place-base" =>
           val toRemove = askPieces(sp.pieces, 2, guerrillas,  Some("Removing two guerrillas"))
-          val toPlace = askToPlaceBase(name, base)
+          ensurePieceTypeAvailable(baseType, 1)
           loggingControlChanges {
             removeToAvailable(name, toRemove)
-            placePieces(name, toPlace)
+            placePieces(name, Pieces().set(1, baseType))
           }
 
         case "hide" =>

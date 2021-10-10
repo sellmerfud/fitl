@@ -2522,7 +2522,7 @@ object FireInTheLake {
     
     log()
     for (desc <- hidden.descriptions)
-      log(s"In $spaceName, flip $desc to ACTIVE")
+      log(s"Flip $desc in $spaceName to ACTIVE")
   }
   
   //  Hide guerrillas/rangers/irregulars in a space
@@ -2542,7 +2542,7 @@ object FireInTheLake {
 
     log()
     for (desc <- visible.descriptions)
-      log(s"In $spaceName, flip $desc to UNDERGROUND")
+      log(s"Flip $desc in $spaceName to UNDERGROUND")
   }
   
   

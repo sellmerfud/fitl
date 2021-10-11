@@ -1209,7 +1209,8 @@ object FireInTheLake {
 
   val scenarios = ListMap[String, Scenario](
     scenarioEntry(new ShortScenario),
-    scenarioEntry(new MediumScenario)
+    scenarioEntry(new MediumScenario),
+    scenarioEntry(new FullScenario)
   )
   val scenarioChoices = scenarios.toList map { case (key, scenario) => key -> scenario.name }
 
@@ -1786,7 +1787,7 @@ object FireInTheLake {
             }
           }
           val scenario = scenarios(scenarioName)
-          val usePeriodEvents = askYorN("\nAre you using period events? (y/n) ")
+          val usePeriodEvents = scenario.periodCapabilities.nonEmpty && askYorN("\nAre you using period events? (y/n) ")
           val humanFactions: Set[Faction] = {
             val num = askInt("How many factions will be played by human players", 0, 4, Some(1), allowAbort = false)
             def nextHuman(humans: Set[Faction]): Set[Faction] = {

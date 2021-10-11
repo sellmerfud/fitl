@@ -2407,7 +2407,7 @@ object Human {
     def pieces      = game.getSpace(name).pieces  // Always get fresh instance
     val baseFirst   = remove1BaseFirst && pieces.has(InsurgentNonTunnels)
     val underground = remove1Underground && pieces.has(UndergroundGuerrillas)
-    val totalLosses = sp.assaultLosses(faction) + (if (params.assaultRemovesTwoExtra) 2 else 0)
+    val totalLosses = sp.assaultFirepower(faction) + (if (params.assaultRemovesTwoExtra) 2 else 0)
     var killedPieces = Pieces()
     def remaining   = totalLosses - killedPieces.total
 

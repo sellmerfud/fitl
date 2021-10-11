@@ -50,13 +50,7 @@ class MediumScenario extends Scenario {
   val usPolicy            = USPolicy_LBJ
   val rvnLeadersInPlay    = List(RVN_Leader_NguyenCaoKy, RVN_Leader_YoungTurks, RVN_Leader_NguyenKhanh, RVN_Leader_DuongVanMinh)
   val outOfPlay           = Pieces(usTroops = 5, arvnTroops = 10, rangers_U = 3)
-  val periodCapabilities  = List(
-    Capability(Cap_AAA,              shaded = true),
-    Capability(Cap_MainForceBns,     shaded = true),
-    Capability(Cap_SA2s,             shaded = true),
-    Capability(Cap_SearchAndDestroy, shaded = true),
-    Capability(Cap_ArcLight,         shaded = false),
-    Capability(Cap_M48Patton,        shaded = false))
+  val periodCapabilities  = List(AAA_Shaded, MainForceBns_Shaded, SA2s_Shaded, SearchAndDestroy_Shaded, ArcLight_Unshaded, M48Patton_Unshaded)
 
   val spaces = List(
     Default_Hue.copy(support = PassiveSupport).addPieces(Pieces(

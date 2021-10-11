@@ -901,7 +901,7 @@ object FireInTheLake {
       case _                        => 1.0/2.0
     }
 
-    def assaultLosses(faction: Faction): Int = (assaultCubes(faction) * assaultMultiplier(faction)).toInt
+    def assaultFirepower(faction: Faction): Int = (assaultCubes(faction) * assaultMultiplier(faction)).toInt
     
     def sweepActivations(faction: Faction): Int = {
       if (isJungle)
@@ -1061,61 +1061,100 @@ object FireInTheLake {
   val Cap_Cadres             = "#116 Cadres"                 // affects VC terror and agitate / VC rally agitate
 
 
-  val AllCapabilityNames = List(
-    Cap_TopGun, Cap_ArcLight, Cap_Abrams, Cap_Cobras, Cap_M48Patton,
-    Cap_CombActionPlatoons, Cap_CORDS, Cap_LaserGuidedBombs, Cap_SearchAndDestroy,
-    Cap_AAA, Cap_LongRangeGuns, Cap_MiGs, Cap_SA2s, Cap_PT76, Cap_ArmoredCavalry,
-    Cap_MandateOfHeaven, Cap_BoobyTraps, Cap_MainForceBns, Cap_Cadres
-  )
-
   //  Records a capability that is currently in play
-  case class Capability(name: String, shaded: Boolean) {
+  //  Faction is used by the Bots when makeing event decisions
+  case class Capability(name: String, shaded: Boolean, faction: Faction) {
     lazy val flavor = if (shaded) "shaded" else "unshaded"
     override def toString() = s"$name ($flavor)"
   }
 
-  def shadedCapability(name: String)   = Capability(name, true)
-  def unshadedCapability(name: String) = Capability(name, false)
+  def shadedCapability(name: String, faction: Faction)   = Capability(name, true, faction)
+  def unshadedCapability(name: String, faction: Faction) = Capability(name, false, faction)
 
-  val TopGun_Unshaded             = unshadedCapability(Cap_TopGun)
-  val ArcLight_Unshaded           = unshadedCapability(Cap_ArcLight)
-  val Abrams_Unshaded             = unshadedCapability(Cap_Abrams)
-  val Cobras_Unshaded             = unshadedCapability(Cap_Cobras)
-  val M48Patton_Unshaded          = unshadedCapability(Cap_M48Patton)
-  val CombActionPlatoons_Unshaded = unshadedCapability(Cap_CombActionPlatoons)
-  val CORDS_Unshaded              = unshadedCapability(Cap_CORDS)
-  val LaserGuidedBombs_Unshaded   = unshadedCapability(Cap_LaserGuidedBombs)
-  val SearchAndDestroy_Unshaded   = unshadedCapability(Cap_SearchAndDestroy)
-  val AAA_Unshaded                = unshadedCapability(Cap_AAA)
-  val LongRangeGuns_Unshaded      = unshadedCapability(Cap_LongRangeGuns)
-  val MiGs_Unshaded               = unshadedCapability(Cap_MiGs)
-  val SA2s_Unshaded               = unshadedCapability(Cap_SA2s)
-  val PT76_Unshaded               = unshadedCapability(Cap_PT76)
-  val ArmoredCavalry_Unshaded     = unshadedCapability(Cap_ArmoredCavalry)
-  val MandateOfHeaven_Unshaded    = unshadedCapability(Cap_MandateOfHeaven)
-  val BoobyTraps_Unshaded         = unshadedCapability(Cap_BoobyTraps)
-  val MainForceBns_Unshaded       = unshadedCapability(Cap_MainForceBns)
-  val Cadres_Unshaded             = unshadedCapability(Cap_Cadres)
+  val TopGun_Unshaded             = unshadedCapability(Cap_TopGun, US)
+  val ArcLight_Unshaded           = unshadedCapability(Cap_ArcLight, US)
+  val Abrams_Unshaded             = unshadedCapability(Cap_Abrams, US)
+  val Cobras_Unshaded             = unshadedCapability(Cap_Cobras, US)
+  val M48Patton_Unshaded          = unshadedCapability(Cap_M48Patton, US)
+  val CombActionPlatoons_Unshaded = unshadedCapability(Cap_CombActionPlatoons, US)
+  val CORDS_Unshaded              = unshadedCapability(Cap_CORDS, US)
+  val LaserGuidedBombs_Unshaded   = unshadedCapability(Cap_LaserGuidedBombs, US)
+  val SearchAndDestroy_Unshaded   = unshadedCapability(Cap_SearchAndDestroy, US)
+  val AAA_Unshaded                = unshadedCapability(Cap_AAA, NVA)
+  val LongRangeGuns_Unshaded      = unshadedCapability(Cap_LongRangeGuns, NVA)
+  val MiGs_Unshaded               = unshadedCapability(Cap_MiGs, NVA)
+  val SA2s_Unshaded               = unshadedCapability(Cap_SA2s, NVA)
+  val PT76_Unshaded               = unshadedCapability(Cap_PT76, NVA)
+  val ArmoredCavalry_Unshaded     = unshadedCapability(Cap_ArmoredCavalry, ARVN)
+  val MandateOfHeaven_Unshaded    = unshadedCapability(Cap_MandateOfHeaven, ARVN)
+  val BoobyTraps_Unshaded         = unshadedCapability(Cap_BoobyTraps, VC)
+  val MainForceBns_Unshaded       = unshadedCapability(Cap_MainForceBns, VC)
+  val Cadres_Unshaded             = unshadedCapability(Cap_Cadres, VC)
 
-  val TopGun_Shaded               = shadedCapability(Cap_TopGun)
-  val ArcLight_Shaded             = shadedCapability(Cap_ArcLight)
-  val Abrams_Shaded               = shadedCapability(Cap_Abrams)
-  val Cobras_Shaded               = shadedCapability(Cap_Cobras)
-  val M48Patton_Shaded            = shadedCapability(Cap_M48Patton)
-  val CombActionPlatoons_Shaded   = shadedCapability(Cap_CombActionPlatoons)
-  val CORDS_Shaded                = shadedCapability(Cap_CORDS)
-  val LaserGuidedBombs_Shaded     = shadedCapability(Cap_LaserGuidedBombs)
-  val SearchAndDestroy_Shaded     = shadedCapability(Cap_SearchAndDestroy)
-  val AAA_Shaded                  = shadedCapability(Cap_AAA)
-  val LongRangeGuns_Shaded        = shadedCapability(Cap_LongRangeGuns)
-  val MiGs_Shaded                 = shadedCapability(Cap_MiGs)
-  val SA2s_Shaded                 = shadedCapability(Cap_SA2s)
-  val PT76_Shaded                 = shadedCapability(Cap_PT76)
-  val ArmoredCavalry_Shaded       = shadedCapability(Cap_ArmoredCavalry)
-  val MandateOfHeaven_Shaded      = shadedCapability(Cap_MandateOfHeaven)
-  val BoobyTraps_Shaded           = shadedCapability(Cap_BoobyTraps)
-  val MainForceBns_Shaded         = shadedCapability(Cap_MainForceBns)
-  val Cadres_Shaded               = shadedCapability(Cap_Cadres)
+  val AllUnshadedCaps = List(
+    TopGun_Unshaded,
+    ArcLight_Unshaded,
+    Abrams_Unshaded,
+    Cobras_Unshaded,
+    M48Patton_Unshaded,
+    CombActionPlatoons_Unshaded,
+    CORDS_Unshaded,
+    LaserGuidedBombs_Unshaded,
+    SearchAndDestroy_Unshaded,
+    AAA_Unshaded,
+    LongRangeGuns_Unshaded,
+    MiGs_Unshaded,
+    SA2s_Unshaded,
+    PT76_Unshaded,
+    ArmoredCavalry_Unshaded,
+    MandateOfHeaven_Unshaded,
+    BoobyTraps_Unshaded,
+    MainForceBns_Unshaded,
+    Cadres_Unshaded
+  )
+
+
+  val TopGun_Shaded               = shadedCapability(Cap_TopGun, US)
+  val ArcLight_Shaded             = shadedCapability(Cap_ArcLight, US)
+  val Abrams_Shaded               = shadedCapability(Cap_Abrams, US)
+  val Cobras_Shaded               = shadedCapability(Cap_Cobras, US)
+  val M48Patton_Shaded            = shadedCapability(Cap_M48Patton, US)
+  val CombActionPlatoons_Shaded   = shadedCapability(Cap_CombActionPlatoons, US)
+  val CORDS_Shaded                = shadedCapability(Cap_CORDS, US)
+  val LaserGuidedBombs_Shaded     = shadedCapability(Cap_LaserGuidedBombs, US)
+  val SearchAndDestroy_Shaded     = shadedCapability(Cap_SearchAndDestroy, US)
+  val AAA_Shaded                  = shadedCapability(Cap_AAA, NVA)
+  val LongRangeGuns_Shaded        = shadedCapability(Cap_LongRangeGuns, NVA)
+  val MiGs_Shaded                 = shadedCapability(Cap_MiGs, NVA)
+  val SA2s_Shaded                 = shadedCapability(Cap_SA2s, NVA)
+  val PT76_Shaded                 = shadedCapability(Cap_PT76, NVA)
+  val ArmoredCavalry_Shaded       = shadedCapability(Cap_ArmoredCavalry, ARVN)
+  val MandateOfHeaven_Shaded      = shadedCapability(Cap_MandateOfHeaven, ARVN)
+  val BoobyTraps_Shaded           = shadedCapability(Cap_BoobyTraps, VC)
+  val MainForceBns_Shaded         = shadedCapability(Cap_MainForceBns, VC)
+  val Cadres_Shaded               = shadedCapability(Cap_Cadres, VC)
+
+  val AllShadedCaps = List(
+    TopGun_Shaded,
+    ArcLight_Shaded,
+    Abrams_Shaded,
+    Cobras_Shaded,
+    M48Patton_Shaded,
+    CombActionPlatoons_Shaded,
+    CORDS_Shaded,
+    LaserGuidedBombs_Shaded,
+    SearchAndDestroy_Shaded,
+    AAA_Shaded,
+    LongRangeGuns_Shaded,
+    MiGs_Shaded,
+    SA2s_Shaded,
+    PT76_Shaded,
+    ArmoredCavalry_Shaded,
+    MandateOfHeaven_Shaded,
+    BoobyTraps_Shaded,
+    MainForceBns_Shaded,
+    Cadres_Shaded
+  )
 
 
   val Medevac_prefix = "#15 Medevac"
@@ -3679,11 +3718,11 @@ object FireInTheLake {
   }
 
   def adjustCapabilities(): Unit = {
-
-    def askCapability(shaded: Boolean, names: List[String]): Option[Capability] = {
-        val capChoices: List[(Option[Capability], String)] = names map { name =>
-          val cap = Capability(name, shaded)
-          Some(cap) -> s"Add ${cap}"
+    val AllCapNames = AllUnshadedCaps map (_.name)
+    val RemoveCap = """remove-(.*)""".r
+    def askCapability(candidates: List[Capability]): Option[Capability] = {
+        val capChoices: List[(Option[Capability], String)] = candidates map { cap =>
+          Some(cap) -> s"Add $cap"
         }
         val choices = capChoices :+ (None -> "Do not add a capability")
         askMenu(choices, "\nChoose one:", allowAbort = false).head
@@ -3691,33 +3730,45 @@ object FireInTheLake {
 
     def nextAdjustment(): Unit = {
       val included = game.capabilities map (_.name)
-      val excluded = AllCapabilityNames filterNot included.contains
+      val excluded = AllCapNames filterNot included.contains
 
       val addChoices = List(
-        choice(excluded.nonEmpty, unshadedCapability("add"), "Add unshaded capability"),
-        choice(excluded.nonEmpty, shadedCapability("add"),   "Add shaded capability")
+        choice(excluded.nonEmpty, "add-unshaded", "Add unshaded capability"),
+        choice(excluded.nonEmpty, "add-shaded",   "Add shaded capability")
       ).flatten
 
-      val removeChoices = game.capabilities map (cap => cap -> s"Remove ${cap}")
-      val choices = addChoices ::: removeChoices ::: List(shadedCapability("finished") -> "Finished adjusting capabilities")
+      val removeChoices = game.capabilities map (cap => s"remove-${cap.name}" -> s"Remove ${cap}")
+      val choices = addChoices ::: removeChoices ::: List("finished" -> "Finished adjusting capabilities")
 
       println("\nCapabilities in play")
       println(separator())
       wrap("", game.capabilities map (_.toString)) foreach println
       askMenu(choices, "\nChoose one:", allowAbort = false).head match {
-        case Capability("finished", _) =>
 
-        case Capability("add", shaded) =>
-          askCapability(shaded, excluded) foreach { cap =>
+        case "add-unshaded" =>
+          val caps = excluded flatMap (name => AllUnshadedCaps find (_.name == name))
+          askCapability(caps) foreach { cap =>
+            game = game.copy(capabilities = cap :: game.capabilities)
+            log(s"Adjusted capabilities: [added ${cap}]")
+          }
+          nextAdjustment()
+          
+        case "add-shaded" =>
+          val caps = excluded flatMap (name => AllShadedCaps find (_.name == name))
+          askCapability(caps) foreach { cap =>
             game = game.copy(capabilities = cap :: game.capabilities)
             log(s"Adjusted capabilities: [added ${cap}]")
           }
           nextAdjustment()
 
-        case cap =>
-          game = game.copy(capabilities = game.capabilities filterNot (_ == cap))
-          log(s"Adjusted capabilities: [removed ${cap}]")
+        case RemoveCap(name) =>
+          game.capabilities find (_.name == name) foreach { cap =>
+            game = game.copy(capabilities = game.capabilities filterNot (_ == cap))
+            log(s"Adjusted capabilities: [removed ${cap}]")
+          }
           nextAdjustment()
+          
+        case _ =>
       }
     }
 

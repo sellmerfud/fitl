@@ -50,7 +50,7 @@ class ShortScenario extends Scenario {
   val usPolicy            = USPolicy_LBJ
   val rvnLeadersInPlay    = List(RVN_Leader_YoungTurks, RVN_Leader_NguyenKhanh, RVN_Leader_DuongVanMinh)
   val outOfPlay           = Pieces(usTroops = 6, arvnTroops = 10, rangers_U = 3)
-  val periodCapabilities  = List(Capability(Cap_AAA, shaded = true))
+  val periodCapabilities  = List(AAA_Shaded)
 
   val spaces = List(
     Default_Hue.addPieces(Pieces(arvnPolice = 2)),

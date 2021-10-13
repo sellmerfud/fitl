@@ -2394,21 +2394,32 @@ object FireInTheLake {
     game = game.copy(usAid = (game.usAid - amount) max 0)
     log(s"Decrease US Aid by -$amount to ${game.usAid}")
   }
+  
+  def setEconValue(amount: Int): Unit = if (game.useEcon) {
+    game = game.copy(econ = amount)
+    log(s"Set Econ marker to ${game.econ}")
+  }
+  
+  def setUSPolicy(policy: String): Unit = if (game.isBot(US)) {
+    game = game.copy(usPolicy = policy)
+    log(s"Set US Policy to ${game.usPolicy}")
+  }
 
   // If VC is a Bot, the we store the agitate total in vcResources
-  def setAgitateTotal(amount: Int): Unit = if (amount > 0) {
+  def setAgitateTotal(amount: Int): Unit = if (game.isBot(VC)) {
     game = game.copy(vcResources = amount)
     log(s"Set Agitate Total to ${game.vcResources}")
   }
 
   // If VC is a Bot, the we store the agitate total in vcResources
-  def increaseAgitateTotal(amount: Int): Unit = if (amount > 0) {
+  def increaseAgitateTotal(amount: Int): Unit = if (game.isBot(VC) && amount > 0) {
     game = game.copy(vcResources = (game.vcResources + amount) min EdgeTrackMax)
+    
     log(s"Increase Agitate Total by +$amount to ${game.vcResources}")
   }
 
   // If VC is a Bot, the we store the agitate total in vcResources
-  def decreaseAgitateTotal(faction: Faction, amount: Int): Unit = if (amount > 0) {
+  def decreaseAgitateTotal(faction: Faction, amount: Int): Unit = if (game.isBot(VC) && amount > 0) {
     game = game.copy(vcResources = (game.vcResources - amount) max 0)
     log(s"Decrease Agitate Total by -$amount to ${game.vcResources}")
   }

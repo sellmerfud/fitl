@@ -1451,8 +1451,13 @@ object FireInTheLake {
     def isHuman(faction: Faction) = humanFactions(faction)
     def isBot(faction: Faction) = !isHuman(faction)
 
-    lazy val useArvnResources = isHuman(US) || isHuman(ARVN)
-    lazy val useEcon          = useArvnResources
+    def trackResources(faction: Faction) = faction match {
+      case US    => throw new IllegalArgumentException("trackResources() does not accept US faction as argument")
+      case ARVN  => isHuman(US) || isHuman(ARVN)
+      case other => isHuman(other)      
+    }
+    
+    lazy val useEcon = trackResources(ARVN)
 
     // Return next eligible faction or None
     def nextUp: Option[Faction] = if (sequence.numActors < 2)
@@ -1601,7 +1606,7 @@ object FireInTheLake {
     b += s"Total Opp. + VC Bases    : ${score(NVA)}"
 
     b += separator()
-    if (game.useArvnResources)
+    if (game.trackResources(ARVN))
       b += f"ARVN resources : ${game.arvnResources}%2d"
     if (game.isHuman(NVA))
       b += f"NVA resources  : ${game.nvaResources}%2d"
@@ -2283,7 +2288,8 @@ object FireInTheLake {
   // Will not increase resrouces if faction is NP bot.
   def increaseResources(faction: Faction, amount: Int): Unit = if (amount > 0) {
     faction match {
-      case US | ARVN if game.useArvnResources =>
+        
+      case ARVN if game.trackResources(ARVN) =>
         game = game.copy(arvnResources = (game.arvnResources + amount) min EdgeTrackMax)
         log(s"Increase $ARVN resources by +$amount to ${game.arvnResources}")
 
@@ -2302,7 +2308,10 @@ object FireInTheLake {
   // Will not decrease resrouces if faction is NP bot.
   def decreaseResources(faction: Faction, amount: Int): Unit = if (amount > 0) {
     faction match {
-      case US | ARVN if game.useArvnResources =>
+      case US =>
+        throw new IllegalArgumentException("decreaseResources passed US faction")
+        
+      case ARVN if game.trackResources(ARVN) =>
         game = game.copy(arvnResources = (game.arvnResources - amount) max 0)
         log(s"Decrease $ARVN resources by -$amount to ${game.arvnResources}")
 

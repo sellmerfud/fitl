@@ -107,40 +107,38 @@ object FireInTheLake {
     def others(faction: Faction): Set[Faction] = ALL - faction
   }
 
-  type BotEventPriority = Int
-  val NotExecuted: BotEventPriority = 0
-  val Critical:    BotEventPriority = 1<<0
-  val Performed:   BotEventPriority = 1<<1
-  val PlaceHolder: BotEventPriority = 1<<2 // Remove once we know the actual values from the table
+  sealed trait BotEventPriority
+  case object NotExecuted extends BotEventPriority
+  case object Critical extends    BotEventPriority
+  case object Performed extends   BotEventPriority
 
 
   sealed trait EventSelection
-  case object NoEvent  extends EventSelection
   case object Unshaded extends EventSelection
   case object Shaded   extends EventSelection
 
-  type BotEventSelector = Faction => EventSelection  // Used to see if Bot will execute the event.
-  type CardEvent        = Faction => Unit
+  type EventEffective = Faction => Boolean  // Used to see if event would be effective for Bot
+  type EventExecution = Faction => Unit     // Execute the event for Human and Bot
 
   // For cards that have only one event:
   //  dual == false and the event condtions and execution use the `unshaded` fields
   class Card(
     val number: Int,
     val name: String,
-    val factions: ListMap[Faction, BotEventPriority],  // Nil for Coup cards
     val dual: Boolean,
-    val unshadedSelection: BotEventSelector,
-    val executeUnshaded: CardEvent,
-    val shadedSelection: BotEventSelector,
-    val executeShaded: CardEvent) {
+    val factionOrder: List[Faction],
+    val botPriority: ListMap[Faction, (BotEventPriority, EventSelection)],  // Empty
+    val unshadedEffective: EventEffective,
+    val shadedEffective: EventEffective,
+    val executeUnshaded: EventExecution,
+    val executeShaded: EventExecution) {
 
 
-    val isCoup = factions.isEmpty
+    val isCoup = factionOrder.isEmpty
 
     def numAndName = s"#$number - $name"
     override def toString() = numAndName
 
-    def factionOrder = factions.keys.toList
     def orderString  = factionOrder map (_.name) mkString ", "
     def fullString = if (isCoup) s"$numAndName (Coup)" else s"$numAndName ($orderString)"
   }

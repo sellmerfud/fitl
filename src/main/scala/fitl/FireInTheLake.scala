@@ -44,6 +44,7 @@ import Ordering.Implicits._
 import scala.language.implicitConversions
 import FUtil.Pathname
 import scenarios._
+import Bot.{ TrungCard, TrungDeck }
 
 object FireInTheLake {
 
@@ -122,7 +123,7 @@ object FireInTheLake {
 
   // For cards that have only one event:
   //  dual == false and the event condtions and execution use the `unshaded` fields
-  class Card(
+  class EventCard(
     val number: Int,
     val name: String,
     val dual: Boolean,
@@ -157,8 +158,8 @@ object FireInTheLake {
   }
 
   // Sort by card number
-  implicit val CardOrdering = new Ordering[Card] {
-    def compare(x: Card, y: Card) = x.number compare y.number
+  implicit val CardOrdering = new Ordering[EventCard] {
+    def compare(x: EventCard, y: EventCard) = x.number compare y.number
   }
 
   val RVN_Leader_DuongVanMinh   = "Duong Van Minh"     // Printed on map
@@ -192,11 +193,11 @@ object FireInTheLake {
 
     def isValidNumber(num: Int) = deckMap contains num
     def isPivotalCard(num: Int) = PivotalCards contains num
-    def apply(num: Int): Card   = deckMap(num)
-    def cards: List[Card]       = deckMap.valuesIterator.toList.sorted
-  }
-
-
+    
+    def apply(num: Int): EventCard = deckMap(num)
+    def cards: List[EventCard]     = deckMap.valuesIterator.toList.sorted
+  }  
+  
   // Cities
   val Hue     = "Hue"
   val DaNang  = "Da Nang"
@@ -1419,6 +1420,7 @@ object FireInTheLake {
     pivotCardsAvailable: Set[Faction] = Set.empty,
     capabilities: List[Capability]    = Nil,
     rvnLeaders: List[String]          = List(RVN_Leader_DuongVanMinh),  // Head of list is current leader
+    trungDeck: List[TrungCard]        = Nil,  // The head of the list is the top of the deck
     momentum: List[String]            = Nil,
     sequence: SequenceOfPlay          = SequenceOfPlay(),
     cardsDrawn: Int                   = 0,
@@ -1873,7 +1875,9 @@ object FireInTheLake {
 
 
   def initialGameState(scenario: Scenario, humanFactions: Set[Faction], usePeriodCapabilities: Boolean) = {
-    var spaces = DefaultSpaces
+    val trungDeck = shuffle(TrungDeck filterNot (card => humanFactions(card.faction)))
+    var spaces    = DefaultSpaces
+    
     // Apply scenario overrides to countries.
     for (sp <- scenario.spaces)
       spaces = sp :: (spaces filterNot (_.name == sp.name))
@@ -1896,7 +1900,9 @@ object FireInTheLake {
       scenario.outOfPlay,
       scenario.pivotCardsAvailable,
       if (usePeriodCapabilities) scenario.periodCapabilities else Nil,
-      scenario.rvnLeadersInPlay)
+      scenario.rvnLeadersInPlay,
+      trungDeck
+    )
   }
 
 
@@ -2290,6 +2296,24 @@ object FireInTheLake {
     // }
   }
 
+  //  Draw the next Trung Card for the given faction.
+  //  The game state is updated and the topmost card
+  //  is returned.
+  def drawTrungCard(faction: Faction): TrungCard = {
+
+    var deck = game.trungDeck
+        
+    // First the topmost card is place on the bottom
+    // Then continue drawing until we get a card for the 
+    // given faction.
+    
+    do {
+      deck = deck.tail :+ deck.head  
+    } while (deck.head.faction != faction)
+    
+    game = game.copy(trungDeck = deck)
+    deck.head
+  }
 
   def factionPasses(faction: Faction): Unit = {
     game = game.copy(sequence = game.sequence.addActor(faction, Pass))

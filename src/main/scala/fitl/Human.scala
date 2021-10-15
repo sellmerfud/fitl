@@ -503,34 +503,26 @@ object Human {
 
   // A human player has opted to take an action on the current card.
   def act(): Unit = {
-    object Pass extends Exception
-    val faction = game.nextUp.get
+    val faction = game.actingFaction.get
+    val action = if (game.executingPivotalEvent)
+      Event
+    else {
+      val choices: List[(Action, String)] =
+        game.sequence.availableActions map (a => a -> a.toString)
 
-    try {
-      val action = if (game.executingPivotalEvent)
-        Event
-      else {
-        val choices: List[(Option[Action], String)] =
-          (game.sequence.availableActions map (a => Some(a) -> a.toString)) :+ (None -> "Pass")
-
-        askMenu(choices, "\nChoose one:").head getOrElse { throw Pass }
-      }
-
-      game = game.copy(sequence = game.sequence.addActor(faction, action))
-      log()
-      log(s"Move the $faction cylinder to the $action box")
-
-      action match {
-        case Event         => executeEvent(faction)
-        case OpPlusSpecial => executeOp(faction, Params(includeSpecial = true))
-        case OpOnly        => executeOp(faction)
-        case LimitedOp     => executeOp(faction, Params(maxSpaces = Some(1)))
-      }
-
+      askMenu(choices, "\nChoose one:").head
     }
-    catch {
-      case Pass =>
-        factionPasses(faction)
+
+    game = game.copy(sequence = game.sequence.addActor(faction, action))
+    log()
+    log(s"Move the $faction cylinder to the $action box")
+
+    action match {
+      case Event         => executeEvent(faction)
+      case OpPlusSpecial => executeOp(faction, Params(includeSpecial = true))
+      case OpOnly        => executeOp(faction)
+      case LimitedOp     => executeOp(faction, Params(maxSpaces = Some(1)))
+      case Pass          => factionPasses(faction)
     }
   }
 

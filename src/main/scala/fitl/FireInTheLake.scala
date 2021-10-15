@@ -113,9 +113,9 @@ object FireInTheLake {
   case object Performed extends   BotEventPriority
 
 
-  sealed trait EventSelection
-  case object Unshaded extends EventSelection
-  case object Shaded   extends EventSelection
+  sealed trait EventType
+  case object Unshaded extends EventType
+  case object Shaded   extends EventType
 
   type EventEffective = Faction => Boolean  // Used to see if event would be effective for Bot
   type EventExecution = Faction => Unit     // Execute the event for Human and Bot
@@ -127,7 +127,7 @@ object FireInTheLake {
     val name: String,
     val dual: Boolean,
     val factionOrder: List[Faction],
-    val botPriority: ListMap[Faction, (BotEventPriority, EventSelection)],  // Empty
+    val eventData: ListMap[Faction, (BotEventPriority, EventType)],  // Empty
     val unshadedEffective: EventEffective,
     val shadedEffective: EventEffective,
     val executeUnshaded: EventExecution,
@@ -138,9 +138,22 @@ object FireInTheLake {
 
     def numAndName = s"#$number - $name"
     override def toString() = numAndName
+    
+    def eventPriority(faction: Faction) = eventData(faction)._1
+    def eventType(faction: Faction)     = eventData(faction)._2
 
     def orderString  = factionOrder map (_.name) mkString ", "
     def fullString = if (isCoup) s"$numAndName (Coup)" else s"$numAndName ($orderString)"
+    
+    def eventEffective(faction: Faction) = eventType(faction) match {
+      case Unshaded => unshadedEffective(faction)
+      case Shaded   => shadedEffective(faction)
+    }
+
+    def executeEvent(faction: Faction) = eventType(faction) match {
+      case Unshaded => executeUnshaded(faction)
+      case Shaded   => executeShaded(faction)
+    }
   }
 
   // Sort by card number
@@ -1245,10 +1258,11 @@ object FireInTheLake {
     val name: String
     override def toString() = name
   }
-  case object  Event         extends Action { val name = "Event"                    }
+  case object  Event         extends Action { val name = "Event"               }
   case object  OpPlusSpecial extends Action { val name = "Op/Special Activity" }
   case object  OpOnly        extends Action { val name = "Op Only"             }
   case object  LimitedOp     extends Action { val name = "Limited Op"          }
+  case object  Pass          extends Action { val name = "Pass"                }
 
   case class Actor(faction: Faction, action: Action)
 
@@ -1312,25 +1326,31 @@ object FireInTheLake {
 
     def availableActions: List[Action] = {
       actors match {
-        case Nil        => List(Event, OpOnly, OpPlusSpecial)
+        case Nil        => List(Event, OpOnly, OpPlusSpecial, Pass)
         case first::Nil => first.action match {
-          case OpOnly        => List(LimitedOp)
-          case OpPlusSpecial => List(Event, LimitedOp)
-          case Event         => List(OpPlusSpecial)
+          case OpOnly        => List(LimitedOp, Pass)
+          case OpPlusSpecial => List(Event, LimitedOp, Pass)
+          case Event         => List(OpPlusSpecial, Pass)
           case _ => throw new IllegalStateException("availableActions illegal first action detected")
         }
         case _ => throw new IllegalStateException("availableActions called after two actions taken")
       }
     }
 
-    def addActor(faction: Faction, action: Action): SequenceOfPlay =
-      if (actors.size < 2)
-        copy(actors = actors :+ Actor(faction, action), eligibleThisTurn = eligibleThisTurn - faction)
+    def canDo(action: Action) = availableActions contains action
+    
+    def addActor(faction: Faction, action: Action): SequenceOfPlay = {
+      if (actors.size < 2) {
+        action match {
+          case Pass => 
+            copy(passed = passed + faction, eligibleThisTurn = eligibleThisTurn - faction)
+          case _ =>
+            copy(actors = actors :+ Actor(faction, action), eligibleThisTurn = eligibleThisTurn - faction)
+        }
+      }
       else
-        throw new IllegalStateException("addActor(): Two actors have aready been added")
-
-    def addPasser(faction: Faction): SequenceOfPlay =
-      copy(passed = passed + faction, eligibleThisTurn = eligibleThisTurn - faction)
+        throw new IllegalStateException("addActor(): Two actors have aready been added")      
+    }
 
     def remainEligible(faction: Faction): SequenceOfPlay =
       copy(eligibleNextTurn = eligibleNextTurn + faction, ineligibleNextTurn = ineligibleNextTurn - faction)
@@ -1403,11 +1423,11 @@ object FireInTheLake {
     sequence: SequenceOfPlay          = SequenceOfPlay(),
     cardsDrawn: Int                   = 0,
     currentCard: Int                  = 0,
-    onDeckCard: Option[Int]           = None,
+    onDeckCard: Int                   = 0,
     prevCardWasCoup: Boolean          = false,
     coupCardsPlayed: Int              = 0,  // Number of Coup cards played/ignored thus far
     turn: Int                         = 0,  // turn zero indicates the start of the game
-    botDebug: Boolean                 = false,
+    botLogging: Boolean               = false,
     history: Vector[GameSegment]      = Vector.empty,
     log: Vector[String]               = Vector.empty) {  // Log of the cuurent game segment
 
@@ -1438,7 +1458,7 @@ object FireInTheLake {
           b.append(s"${sequence.numActors} acted")
           if (sequence.numPassed > 0)
             b.append(s", ${sequence.numPassed} passed")
-          nextUp map (_.name) foreach { up =>
+          actingFaction map (_.name) foreach { up =>
             b.append(s", $up is up")
           }
         }
@@ -1457,16 +1477,26 @@ object FireInTheLake {
     
     lazy val useEcon = trackResources(ARVN)
 
-    // Return next eligible faction or None
-    def nextUp: Option[Faction] = if (sequence.numActors < 2)
+    // Return faction that is currently the next available or None
+    def actingFaction: Option[Faction] = if (sequence.numActors < 2)
       deck(currentCard).factionOrder find sequence.eligibleThisTurn
     else
       None
+    
+    // Return faction that would be following the acting faction 
+    // on the current card.
+    def followingFaction: Option[Faction] = actingFaction match {
+      case Some(active) if (sequence.numActors == 0) =>
+        deck(currentCard).factionOrder filter (_ != active) find sequence.eligibleThisTurn
+      case _ => None
+    }
+    
+    
     def executingPivotalEvent = deck.isPivotalCard(currentCard) && sequence.numActors == 0
 
     def isFinalCampaign = coupCardsPlayed == (totalCoupCards - 1)
     def isCoupRound = cardsDrawn > 0 && deck(currentCard).isCoup
-    def onDeckIsCoup = onDeckCard map (deck(_).isCoup) getOrElse false
+    def onDeckIsCoup = onDeckCard > 0 &&  deck(onDeckCard).isCoup
     def inMonsoon = !isCoupRound && onDeckIsCoup
     def resources(faction: Faction) = faction match {
       case US   => throw new IllegalArgumentException("resources called for US faction!")
@@ -1569,7 +1599,7 @@ object FireInTheLake {
         val chance = if (coupCardShowing) 0.0 else 1.0 / cardsRemaining
         (chance, cardsRemaining)
       }
-      else if (game.onDeckCard.isEmpty)
+      else if (game.onDeckCard == 0)
           (1.0 / game.cardsPerCampaign, game.cardsPerCampaign)
       else {
         val cardsRemaining = game.cardsPerCampaign - 1
@@ -1622,8 +1652,8 @@ object FireInTheLake {
     b += s"RVN Leader     : ${game.currentRvnLeader}"
     if (game.cardsDrawn > 0) {
       b += s"Current card   : ${deck(game.currentCard).fullString}"
-      game.onDeckCard foreach { num =>
-        b += s"On deck card   : ${deck(num).fullString}"
+      if (game.onDeckCard > 0) {
+        b += s"On deck card   : ${deck(game.onDeckCard).fullString}"
       }
     }
 
@@ -1892,11 +1922,6 @@ object FireInTheLake {
     val desc = "Take an action on the current card"
   }
 
-  object PassCmd extends Command {
-    val name = "pass"
-    val desc = "Pass on the current card and remain eligible"
-  }
-
   object BotCmd extends Command {
     val name = "bot"
     val desc = s"The Bot acts on the current card"
@@ -2007,17 +2032,17 @@ object FireInTheLake {
     if (game.cardsDrawn == 0) {
       val card1 = paramValue(param) getOrElse askCardNumber("Enter the # of the first event card: ")
       val card2 = askCardNumber("\nEnter the # of the second event card: ")
-      game = game.copy(currentCard = card1, onDeckCard = Some(card2), cardsDrawn = 2)
+      game = game.copy(currentCard = card1, onDeckCard = card2, cardsDrawn = 2)
     }
     else {
       val nextCard = paramValue(param) getOrElse askCardNumber("Enter the # of the next event card: ")
-      game = game.copy(onDeckCard      = Some(nextCard),
+      game = game.copy(onDeckCard      = nextCard,
                        cardsDrawn      = game.cardsDrawn + 1)
     }
 
     log()
     log(s"Current card: ${deck(game.currentCard).fullString}")
-    log(s"On deck card: ${deck(game.onDeckCard.get).fullString}")
+    log(s"On deck card: ${deck(game.onDeckCard).fullString}")
   }
 
 
@@ -2124,7 +2149,7 @@ object FireInTheLake {
   // eligible factions, adjust the sequence of play and draw the next card.
   def resolveNextActor(): Unit = {
     val promptLines = new ListBuffer[String]
-    val next = game.nextUp map (f => s"  ($f is up next)") getOrElse ""
+    val next = game.actingFaction map (f => s"  ($f is up next)") getOrElse ""
     promptLines += ""
     promptLines += s">>> Turn ${game.turn}${next}"
     promptLines += separator()
@@ -2145,7 +2170,7 @@ object FireInTheLake {
             adjustFactionEligibility()
             game.copy(
               prevCardWasCoup = deck(game.currentCard).isCoup,
-              currentCard     = game.onDeckCard.get)
+              currentCard     = game.onDeckCard)
 
             saveGameState(game.description)
           case _ =>
@@ -2157,13 +2182,16 @@ object FireInTheLake {
       nextEndCommand()
     }
     else {
-      val faction   = game.nextUp.get
+      val faction   = game.actingFaction.get
+      
+      // TODO:  We must check to see if nay faction wishes to play it's pivotal event.
+      //        If so we replace the current card with the approprate event card.
+      // ....
+      
       val actorCmds = if (game.isBot(faction))
         List(BotCmd)
-      else if (game.executingPivotalEvent)
-        List(ActCmd) // 1st Faction cannot pass on pivotal event
       else
-        List(ActCmd, PassCmd)
+        List(ActCmd)
 
       val opts = orList((actorCmds map (_.name)) :+ "?")
 
@@ -2174,10 +2202,6 @@ object FireInTheLake {
       @tailrec def nextActorCommand(): Unit = {
         val (cmd, param) = askCommand(prompt.toString, actorCmds ::: CommonCmds)
         cmd match {
-          case PassCmd =>
-            factionPasses(faction)
-            saveGameState(game.description)
-            resolveNextActor()
           case ActCmd  =>
             val savedState = game
             try {
@@ -2194,13 +2218,7 @@ object FireInTheLake {
             }
             resolveNextActor()
           case BotCmd  =>
-            val action = shuffle(game.sequence.availableActions).head
-
-            game = game.copy(sequence = game.sequence.addActor(faction, action))
-            log()
-            log(s"Move the $faction cylinder to the $action box")
-
-            // Bot.act()
+            Bot.act()
             log(s"\nFinished with $faction turn")
             saveGameState(game.description)
             resolveNextActor()
@@ -2274,12 +2292,11 @@ object FireInTheLake {
 
 
   def factionPasses(faction: Faction): Unit = {
-    game = game.copy(sequence = game.sequence.addPasser(faction))
+    game = game.copy(sequence = game.sequence.addActor(faction, Pass))
     val amount = if (faction == US || faction == ARVN) 3 else 1
     log()
     log(s"$faction faction passes")
     log(separator())
-    log(s"Move the $faction cylinder to the pass box")
     increaseResources(faction, amount)
   }
 
@@ -3444,7 +3461,7 @@ object FireInTheLake {
     val agitate = if (game.isBot(VC)) List("agitate") else Nil
     val options = (
       List("resources", "aid", "patronage", "econ", "trail", "uspolicy", "casualties", "out of play",
-      "capabilities", "momentum", "rvnLeaders", "pivotal", "bot debug") ::: agitate
+      "capabilities", "momentum", "rvnLeaders", "pivotal", "bot log") ::: agitate
     ).sorted ::: SpaceNames
 
     val choice = askOneOf("[Adjust] (? for list): ", options, param, allowNone = true, allowAbort = false)
@@ -3462,7 +3479,7 @@ object FireInTheLake {
       case "momentum"     => adjustMomentum()
       case "rvnLeaders"   => adjustRvnLeaders()
       case "pivotal"      => adjustPivotalCards()
-      case "bot debug"    => adjustBotDebug()
+      case "bot log"      => adjustBotDebug()
       case name           => adjustSpace(name)
     }
   }
@@ -3886,9 +3903,9 @@ object FireInTheLake {
   }
 
   def adjustBotDebug(): Unit = {
-    val newValue = !game.botDebug
-    val desc = adjustmentDesc("Bot debug", game.botDebug, newValue)
-    game = game.copy(botDebug = newValue)
+    val newValue = !game.botLogging
+    val desc = adjustmentDesc("Bot log", game.botLogging, newValue)
+    game = game.copy(botLogging = newValue)
     log(desc)
     saveGameState(desc)
   }

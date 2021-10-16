@@ -631,7 +631,7 @@ object FireInTheLake {
 
     override def toString() = if (isEmpty) "none" else descriptions.mkString(", ")
 
-    def totalOf(pieceTypes: Seq[PieceType]) = pieceTypes.foldLeft(0) { (num, piece) => num + numOf(piece) }
+    def totalOf(pieceTypes: TraversableOnce[PieceType]) = pieceTypes.foldLeft(0) { (num, piece) => num + numOf(piece) }
 
     // Return true of this Pieces instance contains at least all of the specified pieces.
     def contains(query: Pieces): Boolean = AllPieceTypes forall (t => numOf(t) >= query.numOf(t))
@@ -640,7 +640,7 @@ object FireInTheLake {
     def has(pt: PieceType): Boolean = numOf(pt) > 0
 
     // Return true if this Pieces instance has at least one of any of the given piece types
-    def has(pts: Seq[PieceType]): Boolean = totalOf(pts) > 0
+    def has(pts: TraversableOnce[PieceType]): Boolean = totalOf(pts) > 0
 
     def numOf(pieceType: PieceType): Int = pieceType match {
       case USTroops        => usTroops
@@ -726,12 +726,12 @@ object FireInTheLake {
       case VCTunnel        => copy(vcTunnels       = (vcTunnels - num) max 0)
     }
 
-    def only(pieceTypes: Seq[PieceType]): Pieces =
+    def only(pieceTypes: TraversableOnce[PieceType]): Pieces =
       pieceTypes.foldLeft(Pieces()) { (pieces, t) => pieces.add(numOf(t), t) }
 
     def only(pieceType: PieceType): Pieces = Pieces().add(numOf(pieceType), pieceType)
 
-    def except(pieceTypes: Seq[PieceType]): Pieces =
+    def except(pieceTypes: TraversableOnce[PieceType]): Pieces =
       pieceTypes.foldLeft(this) { (pieces, t) => pieces.set(0, t) }
 
     def except(pieceType: PieceType): Pieces = except(Seq(pieceType))
@@ -787,7 +787,7 @@ object FireInTheLake {
   }
 
   object Pieces {
-    def fromTypes(collection: Seq[PieceType]) =
+    def fromTypes(collection: TraversableOnce[PieceType]) =
       collection.foldLeft(Pieces()) { (pieces, t) => pieces.add(1, t) }
   }
 
@@ -1244,9 +1244,15 @@ object FireInTheLake {
     val name: String
     override def toString() = name
   }
+  
+  // This trait is shared by all Ops and Special Activities
+  // that can move pieces and is used by the Bot Movement 
+  // priorities. 
+  sealed trait MoveType
+  
   case object  Train   extends CoinOp { val name = "Train"   }
-  case object  Patrol  extends CoinOp { val name = "Patrol"  }
-  case object  Sweep   extends CoinOp { val name = "Sweep"   }
+  case object  Patrol  extends CoinOp with MoveType { val name = "Patrol"  }
+  case object  Sweep   extends CoinOp with MoveType { val name = "Sweep"   }
   case object  Assault extends CoinOp { val name = "Assault" }
 
   object CoinOp {
@@ -1258,7 +1264,7 @@ object FireInTheLake {
     override def toString() = name
   }
   case object  Rally  extends InsurgentOp { val name = "Rally"   }
-  case object  March  extends InsurgentOp { val name = "March"  }
+  case object  March  extends InsurgentOp with MoveType { val name = "March"  }
   case object  Attack extends InsurgentOp { val name = "Attack"   }
   case object  Terror extends InsurgentOp { val name = "Terror" }
 
@@ -1283,10 +1289,10 @@ object FireInTheLake {
     override def toString() = name
   }
   case object Advise     extends SpecialActivity { val name = "Advise" }
-  case object AirLift    extends SpecialActivity { val name = "Air Lift" }
+  case object AirLift    extends SpecialActivity with MoveType { val name = "Air Lift" }
   case object AirStrike  extends SpecialActivity { val name = "Air Strike" }
   case object Govern     extends SpecialActivity { val name = "Govern" }
-  case object Transport  extends SpecialActivity { val name = "Transport" }
+  case object Transport  extends SpecialActivity with MoveType { val name = "Transport" }
   case object Raid       extends SpecialActivity { val name = "Raid" }
   case object Infiltrate extends SpecialActivity { val name = "Infiltrate" }
   case object Bombard    extends SpecialActivity { val name = "Bombard" }
@@ -1682,7 +1688,7 @@ object FireInTheLake {
     val b = new ListBuffer[String]
     val avail = game.availablePieces
 
-    def addPieces(types: Seq[PieceType]): Unit = {
+    def addPieces(types: TraversableOnce[PieceType]): Unit = {
       for (t <- types; name = t.genericPlural; count = avail.numOf(t))
         b += f"${name}%-15s: ${count}%2d"
     }
@@ -1702,7 +1708,7 @@ object FireInTheLake {
   def casualtiesSummary: Seq[String] = {
     val b = new ListBuffer[String]
 
-    def addPieces(types: Seq[PieceType]): Unit = {
+    def addPieces(types: TraversableOnce[PieceType]): Unit = {
       for (t <- types; name = t.genericPlural; count = game.casualties.numOf(t) if count > 0)
         b += f"${name}%-15s: ${count}%2d"
     }
@@ -1718,7 +1724,7 @@ object FireInTheLake {
   def outOfPlaySummary: Seq[String] = {
     val b = new ListBuffer[String]
 
-    def addPieces(types: Seq[PieceType]): Unit = {
+    def addPieces(types: TraversableOnce[PieceType]): Unit = {
       for (t <- types; name = t.genericPlural; count = game.outOfPlay.numOf(t) if count > 0)
         b += f"${name}%-15s: ${count}%2d"
     }
@@ -2733,7 +2739,7 @@ object FireInTheLake {
           wrap("  ", available.descriptions) foreach println
           println()
 
-          def nextType(types: Seq[PieceType]): Unit = {
+          def nextType(types: TraversableOnce[PieceType]): Unit = {
             val numRemaining = numPieces - selected.total
             if (numRemaining != 0) {
               // If we have to include all remainig pieces, don't bother asking

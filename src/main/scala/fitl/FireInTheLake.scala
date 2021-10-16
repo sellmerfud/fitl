@@ -254,6 +254,9 @@ object FireInTheLake {
   val OutsideSouth =  List(NorthVietnam, CentralLaos, SouthernLaos, NortheastCambodia,
                            TheFishhook, TheParrotsBeak, Sihanoukville)
   
+  val LaosCambodia =  List(CentralLaos, SouthernLaos, NortheastCambodia,
+                           TheFishhook, TheParrotsBeak, Sihanoukville)
+  
   val LocLastOrdering = new Ordering[String] {
     def compare(x: String, y: String) = {
       (x startsWith "LOC", y startsWith "LOC") match {
@@ -358,7 +361,7 @@ object FireInTheLake {
     LOC_CanTho_BacLieu          -> Set(CanTho, KienGiang_AnXuyen, BaXuyen),
     LOC_CanTho_LongPhu          -> Set(CanTho, BaXuyen, KienHoa_VinhBinh)
   )
-
+  
   def getAdjacent(name: String): Set[String] = adjacencyMap(name)
   def areAdjacent(name1: String, name2: String): Boolean = getAdjacent(name1) contains name2
   def getAdjacentLOCs(name: String): Set[String] = getAdjacent(name) filter { x => game.getSpace(x).isLOC }
@@ -366,10 +369,10 @@ object FireInTheLake {
   def getAdjacentProvinces(name: String): Set[String] = getAdjacent(name) filter { x => game.getSpace(x).isProvince }
   def getAdjacentLOCsAndCities(name: String): Set[String] = getAdjacentLOCs(name) ++ getAdjacentCities(name)
   def getAdjacentNonLOCs(name: String): Set[String] = getAdjacentProvinces(name) ++ getAdjacentCities(name)
-  //  All spaces in Laos and Cambodia
-  val LaosCambodia = List(CentralLaos, SouthernLaos, NortheastCambodia, TheFishhook, TheParrotsBeak, Sihanoukville)
   
   def isInLaosCambodia(name: String) = LaosCambodia contains name
+  def isOutsideSouth(name: String)   = OutsideSouth contains name
+  def isInSouthVietnam(name: String) = !isOutsideSouth(name)
   
   //  Return a sequence of all spaces that can be reached from the given space by patrolling cubes.
   //  A cube can move onto adjacent LOCs/Cities and keep moving via adjacent LOCs/Cities until
@@ -507,6 +510,7 @@ object FireInTheLake {
   val ActiveGuerrillas    = List(NVAGuerrillas_A, VCGuerrillas_A)
   val UndergroundGuerrillas = List(NVAGuerrillas_U, VCGuerrillas_U)
   val CoinForces          = List(USTroops, Irregulars_A, Irregulars_U, ARVNTroops, ARVNPolice, Rangers_A, Rangers_U)
+  val CoinCubes           = List(USTroops, ARVNTroops, ARVNPolice)
   val InsurgentForces     = List(NVATroops, NVAGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_A, VCGuerrillas_U)
 
   val factionPieces: Map[Faction, List[PieceType]] = Map(
@@ -875,16 +879,23 @@ object FireInTheLake {
                   else if (!isLOC && nvaControlled)  NvaControl
                   else                               Uncontrolled
 
-    def supportValue: Int = support match {
-      case PassiveSupport => population
-      case ActiveSupport  => 2 * population
-      case _              => 0
-    }
-    def oppositionValue: Int = support match {
-      case PassiveOpposition => population
-      case ActiveOpposition  => 2 * population
-      case _                 => 0
-    }
+    def supportValue: Int = if (isLOC)
+      0
+    else 
+      support match {
+        case PassiveSupport => population
+        case ActiveSupport  => 2 * population
+        case _              => 0
+      }
+      
+    def oppositionValue: Int = if (isLOC)
+      0
+    else
+      support match {
+        case PassiveOpposition => population
+        case ActiveOpposition  => 2 * population
+        case _                 => 0
+      }
 
     def coinControlValue: Int = if (!isLOC && coinControlled) population else 0
     def nvaControlValue: Int  = if (!isLOC && nvaControlled)  population else 0

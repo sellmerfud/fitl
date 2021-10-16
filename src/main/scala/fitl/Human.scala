@@ -48,7 +48,7 @@ import FireInTheLake._
 object Human {
 
   private var pt76_shaded_used = false  // NVA attack in one space
-
+  
   case class Params(
     includeSpecial: Boolean         = false,
     maxSpaces: Option[Int]          = None,
@@ -637,7 +637,7 @@ object Human {
       }
     }
 
-    log("\nUS chooses the Advise special activity")
+    log("\nUS chooses Advise special activity")
     log(separator())
 
     nextAdviseSpace();
@@ -756,7 +756,7 @@ object Human {
 
     // Start of Air Lift Special Activity
     // ------------------------------------
-    log("\nUS chooses the Air Lift special activity")
+    log("\nUS chooses Air Lift special activity")
     log(separator())
     if (game.inMonsoon)
       log("May only choose 2 spaces in Monsoon")
@@ -2397,7 +2397,7 @@ object Human {
 
     val sp          = game.getSpace(name)
     def pieces      = game.getSpace(name).pieces  // Always get fresh instance
-    val baseFirst   = remove1BaseFirst && pieces.has(InsurgentNonTunnels)
+    val baseFirst   = remove1BaseFirst && pieces.has(InsurgentNonTunnels) && !pieces.has(UndergroundGuerrillas)
     val underground = remove1Underground && pieces.has(UndergroundGuerrillas)
     val totalLosses = sp.assaultFirepower(faction) + (if (params.assaultRemovesTwoExtra) 2 else 0)
     var killedPieces = Pieces()
@@ -2426,16 +2426,28 @@ object Human {
       }
 
       // Search and Destory unshaded
-      if (remaining > 0 && underground) {
+      // Even if the remaining hits is zero, we will remove an underground
+      // guerilla.  But if there are hits remainin, the it counts toward
+      // those hits.
+      val killedUnderground = if (underground) {
         val prompt = s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]"
         val removed = askPieces(pieces, 1, UndergroundGuerrillas, Some(prompt))
         removeToAvailable(name, removed)
-        killedPieces = killedPieces + removed
+        if (remaining > 0) {
+          killedPieces = killedPieces + removed  // Counts against total hits
+          Pieces()
+        }
+        else
+          removed  // Will be added to killedPieces later
       }
+      else
+        Pieces()
 
       // Remove exposed insurgent pieces
       killedPieces = killedPieces + killExposedInsurgents(name, remaining, canRevealTunnel = true)
-
+      // Add any removed underground guerrilla that did NOT count toward remaining hits above
+      killedPieces = killedPieces + killedUnderground
+      
       // Body Count momentum
       if (momentumInPlay(Mo_BodyCount) && killedPieces.totalOf(Guerrillas) > 0) {
         log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]")

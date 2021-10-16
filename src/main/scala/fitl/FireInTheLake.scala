@@ -63,37 +63,14 @@ object FireInTheLake {
   val USPolicy_LBJ   = "LBJ"
   val USPolicy_Nixon = "Nixon"
 
-  sealed trait Faction {
-    val name: String
-    val sortOrder: Int
-    val pivotCard: Int
+  sealed abstract class Faction(val name: String, val sortOrder: Int, val pivotCard: Int) {
     override def toString() = name
   }
 
-  case object US extends Faction {
-    val name = "US"
-    val isBarbarian = false
-    val sortOrder = 1
-    val pivotCard = PivotalUS
-  }
-
-  case object ARVN extends Faction {
-    val name = "ARVN"
-    val sortOrder = 2
-    val pivotCard = PivotalARVN
-  }
-
-  case object VC  extends Faction {
-    val name = "VC"
-    val sortOrder = 3
-    val pivotCard = PivotalVC
-  }
-
-  case object NVA  extends Faction {
-    val name = "NVA"
-    val sortOrder = 4
-    val pivotCard = PivotalNVA
-  }
+  case object US   extends Faction("US",   1, PivotalUS)
+  case object ARVN extends Faction("ARVN", 2, PivotalARVN)
+  case object VC   extends Faction("VC",   3, PivotalVC)
+  case object NVA  extends Faction("NVA",  4, PivotalNVA)
 
   object Faction {
     val ALL       = Set[Faction](US, ARVN, VC, NVA)
@@ -110,8 +87,8 @@ object FireInTheLake {
 
   sealed trait BotEventPriority
   case object NotExecuted extends BotEventPriority
-  case object Critical extends    BotEventPriority
-  case object Performed extends   BotEventPriority
+  case object Critical    extends BotEventPriority
+  case object Performed   extends BotEventPriority
 
 
   sealed trait EventType
@@ -453,9 +430,7 @@ object FireInTheLake {
     areAdjacent(srcName, destName) || (getAdjacentLOCs(srcName) exists locAccess)
   }
 
-  sealed trait PieceType {
-    val name: String
-
+  sealed abstract class PieceType(val name: String) {
     def singular        = name
     def plural          = s"${name}s"
     def genericSingular = singular
@@ -464,29 +439,27 @@ object FireInTheLake {
     override def toString() = plural
   }
 
-  type PieceTypeSet = Set[PieceType]
+  case object USTroops       extends PieceType("US Troop")
+  case object Irregulars_U   extends PieceType("US Underground Irregular") { override def genericSingular = "US Irregular" }
+  case object Irregulars_A   extends PieceType("US Active Irregular") { override def genericSingular = "US Irregular" }
+  case object USBase         extends PieceType("US Base")
 
-  case object USTroops       extends PieceType { val name = "US Troop" }
-  case object Irregulars_U   extends PieceType { val name = "US Underground Irregular"; override def genericSingular = "US Irregular" }
-  case object Irregulars_A   extends PieceType { val name = "US Active Irregular"; override def genericSingular = "US Irregular" }
-  case object USBase         extends PieceType { val name = "US Base" }
+  case object ARVNTroops     extends PieceType("ARVN Troop")
+  case object ARVNPolice     extends PieceType("ARVN Police") { override def plural = name; override def genericPlural = name }
+  case object Rangers_U      extends PieceType("ARVN Underground Ranger") { override def genericSingular = "ARVN Ranger" }
+  case object Rangers_A      extends PieceType("ARVN Active Ranger") { override def genericSingular = "ARVN Ranger" }
+  case object ARVNBase       extends PieceType("ARVN Base")
 
-  case object ARVNTroops     extends PieceType { val name = "ARVN Troop" }
-  case object ARVNPolice     extends PieceType { val name = "ARVN Police"; override def plural = name; override def genericPlural = name }
-  case object Rangers_U      extends PieceType { val name = "ARVN Underground Ranger"; override def genericSingular = "ARVN Ranger" }
-  case object Rangers_A      extends PieceType { val name = "ARVN Active Ranger"; override def genericSingular = "ARVN Ranger" }
-  case object ARVNBase       extends PieceType { val name = "ARVN Base" }
+  case object NVATroops       extends PieceType("NVA Troop")
+  case object NVAGuerrillas_U extends PieceType("NVA Underground Guerrilla") { override def genericSingular = "NVA Guerrilla" }
+  case object NVAGuerrillas_A extends PieceType("NVA Active Guerrilla") { override def genericSingular = "NVA Guerrilla" }
+  case object NVABase         extends PieceType("NVA Base")
+  case object NVATunnel       extends PieceType("NVA Tunneled Base")
 
-  case object NVATroops       extends PieceType { val name = "NVA Troop" }
-  case object NVAGuerrillas_U extends PieceType { val name = "NVA Underground Guerrilla"; override def genericSingular = "NVA Guerrilla" }
-  case object NVAGuerrillas_A extends PieceType { val name = "NVA Active Guerrilla"; override def genericSingular = "NVA Guerrilla" }
-  case object NVABase         extends PieceType { val name = "NVA Base" }
-  case object NVATunnel       extends PieceType { val name = "NVA Tunneled Base" }
-
-  case object VCGuerrillas_U  extends PieceType { val name = "VC Underground Guerrilla"; override def genericSingular = "VC Guerrilla" }
-  case object VCGuerrillas_A  extends PieceType { val name = "VC Active Guerrilla"; override def genericSingular = "VC Guerrilla" }
-  case object VCBase          extends PieceType { val name = "VC Base" }
-  case object VCTunnel        extends PieceType { val name = "VC Tunneled Base" }
+  case object VCGuerrillas_U  extends PieceType("VC Underground Guerrilla") { override def genericSingular = "VC Guerrilla" }
+  case object VCGuerrillas_A  extends PieceType("VC Active Guerrilla") { override def genericSingular = "VC Guerrilla" }
+  case object VCBase          extends PieceType("VC Base")
+  case object VCTunnel        extends PieceType("VC Tunneled Base")
 
   val USPieces            = List(USTroops, Irregulars_U, Irregulars_A, USBase)
   val ARVNPieces          = List(ARVNTroops, ARVNPolice, Rangers_U, Rangers_A, ARVNBase)
@@ -795,17 +768,15 @@ object FireInTheLake {
   // Allows us to use `space.usTroops` in place of `space.pieces.usTroops`
   // implicit def spacePieces(sp: Space): Pieces = sp.pieces
 
-  sealed trait SpaceType
-  {
-    val name: String
+  sealed abstract class SpaceType(val name: String) {
     override def toString() = name
   }
 
-  case object City             extends SpaceType { val name = "City"}
-  case object HighlandProvince extends SpaceType { val name = "Highland Province"}
-  case object LowlandProvince  extends SpaceType { val name = "Lowland Province"}
-  case object JungleProvince   extends SpaceType { val name = "Jungle Province"}
-  case object LOC              extends SpaceType { val name = "LOC"}
+  case object City             extends SpaceType("City")
+  case object HighlandProvince extends SpaceType("Highland Province")
+  case object LowlandProvince  extends SpaceType("Lowland Province")
+  case object JungleProvince   extends SpaceType("Jungle Province")
+  case object LOC              extends SpaceType("LOC")
 
   object SpaceType {
     val ALL       = Set[SpaceType](City, HighlandProvince, LowlandProvince, JungleProvince, LOC)
@@ -814,18 +785,15 @@ object FireInTheLake {
     }
   }
 
-  sealed trait SupportType extends Ordered[SupportType] {
-    val name: String
-    val value: Int
+  sealed abstract class SupportType(val name: String, val value: Int) extends Ordered[SupportType] {
     def compare(that: SupportType) = this.value - that.value
-
     override def toString() = name
   }
-  case object ActiveSupport     extends SupportType { val name = "Active Support" ;    val value = 4 }
-  case object PassiveSupport    extends SupportType { val name = "Passive Support";    val value = 3 }
-  case object Neutral           extends SupportType { val name = "Neutral";            val value = 2 }
-  case object PassiveOpposition extends SupportType { val name = "Passive Opposition"; val value = 1 }
-  case object ActiveOpposition  extends SupportType { val name = "Active Opposition";  val value = 0 }
+  case object ActiveSupport     extends SupportType("Active Support",     4)
+  case object PassiveSupport    extends SupportType("Passive Support",    3)
+  case object Neutral           extends SupportType("Neutral",            2)
+  case object PassiveOpposition extends SupportType("Passive Opposition", 1)
+  case object ActiveOpposition  extends SupportType("Active Opposition",  0)
 
   object SupportType {
     val ALL = Set[SupportType](Neutral, PassiveSupport, ActiveSupport, PassiveOpposition, ActiveOpposition)
@@ -838,14 +806,12 @@ object FireInTheLake {
     }
   }
 
-  sealed trait Control {
-    val name: String
-
+  sealed abstract class Control(val name: String) {
     override def toString() = name
   }
-  case object Uncontrolled extends Control { val name = "Uncontrolled"    }
-  case object CoinControl  extends Control { val name = "COIN Control" }
-  case object NvaControl   extends Control { val name = "NVA Control"  }
+  case object Uncontrolled extends Control("Uncontrolled")
+  case object CoinControl  extends Control("COIN Control")
+  case object NvaControl   extends Control("NVA Control")
 
   //  Definition of a map space: City, Province, LOC
 
@@ -1240,8 +1206,7 @@ object FireInTheLake {
   // Case sensitive
   def isValidScenario(name: String) = scenarios contains name
 
-  sealed trait CoinOp {
-    val name: String
+  sealed abstract class CoinOp(val name: String) {
     override def toString() = name
   }
   
@@ -1250,55 +1215,52 @@ object FireInTheLake {
   // priorities. 
   sealed trait MoveType
   
-  case object  Train   extends CoinOp { val name = "Train"   }
-  case object  Patrol  extends CoinOp with MoveType { val name = "Patrol"  }
-  case object  Sweep   extends CoinOp with MoveType { val name = "Sweep"   }
-  case object  Assault extends CoinOp { val name = "Assault" }
+  case object  Train   extends CoinOp("Train")
+  case object  Patrol  extends CoinOp("Patrol") with MoveType
+  case object  Sweep   extends CoinOp("Sweep")  with MoveType
+  case object  Assault extends CoinOp("Assault")
 
   object CoinOp {
     val ALL = List(Train, Patrol, Sweep, Assault)
   }
 
-  sealed trait InsurgentOp {
-    val name: String
+  sealed abstract class InsurgentOp(val name: String) {
     override def toString() = name
   }
-  case object  Rally  extends InsurgentOp { val name = "Rally"   }
-  case object  March  extends InsurgentOp with MoveType { val name = "March"  }
-  case object  Attack extends InsurgentOp { val name = "Attack"   }
-  case object  Terror extends InsurgentOp { val name = "Terror" }
+  case object  Rally  extends InsurgentOp("Rally")
+  case object  March  extends InsurgentOp("March") with MoveType
+  case object  Attack extends InsurgentOp("Attack")
+  case object  Terror extends InsurgentOp("Terror")
 
   object InsurgentOp {
     val ALL = List(Rally, March, Attack, Terror)
   }
 
-  sealed trait Action {
-    val name: String
+  sealed abstract class Action(val name: String) {
     override def toString() = name
   }
-  case object  Event         extends Action { val name = "Event"               }
-  case object  OpPlusSpecial extends Action { val name = "Op/Special Activity" }
-  case object  OpOnly        extends Action { val name = "Op Only"             }
-  case object  LimitedOp     extends Action { val name = "Limited Op"          }
-  case object  Pass          extends Action { val name = "Pass"                }
+  case object  Event         extends Action("Event")
+  case object  OpPlusSpecial extends Action("Op/Special Activity")
+  case object  OpOnly        extends Action("Op Only")
+  case object  LimitedOp     extends Action("Limited Op")
+  case object  Pass          extends Action("Pass")
 
   case class Actor(faction: Faction, action: Action)
 
-  sealed trait SpecialActivity {
-    val name: String
+  sealed abstract class SpecialActivity(val name: String) {
     override def toString() = name
   }
-  case object Advise     extends SpecialActivity { val name = "Advise" }
-  case object AirLift    extends SpecialActivity with MoveType { val name = "Air Lift" }
-  case object AirStrike  extends SpecialActivity { val name = "Air Strike" }
-  case object Govern     extends SpecialActivity { val name = "Govern" }
-  case object Transport  extends SpecialActivity with MoveType { val name = "Transport" }
-  case object Raid       extends SpecialActivity { val name = "Raid" }
-  case object Infiltrate extends SpecialActivity { val name = "Infiltrate" }
-  case object Bombard    extends SpecialActivity { val name = "Bombard" }
-  case object Ambush     extends SpecialActivity { val name = "Ambush" }
-  case object Tax        extends SpecialActivity { val name = "Tax" }
-  case object Subvert    extends SpecialActivity { val name = "Subvert" }
+  case object Advise     extends SpecialActivity("Advise")
+  case object AirLift    extends SpecialActivity("Air Lift") with MoveType
+  case object AirStrike  extends SpecialActivity("Air Strike")
+  case object Govern     extends SpecialActivity("Govern")
+  case object Transport  extends SpecialActivity("Transport") with MoveType
+  case object Raid       extends SpecialActivity("Raid")
+  case object Infiltrate extends SpecialActivity("Infiltrate")
+  case object Bombard    extends SpecialActivity("Bombard")
+  case object Ambush     extends SpecialActivity("Ambush")
+  case object Tax        extends SpecialActivity("Tax")
+  case object Subvert    extends SpecialActivity("Subvert")
 
 
   // The following momentum events prohibit special activities

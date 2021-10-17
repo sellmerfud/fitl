@@ -1,3 +1,8 @@
 target/
 games/
 NOTES.txt
+project/project/
+project/metals.sbt
+.metals/
+.bsp/
+.bloop/

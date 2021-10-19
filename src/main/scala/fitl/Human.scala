@@ -47,6 +47,7 @@ import FireInTheLake._
 // Functions to handle human commands/special activities
 object Human {
 
+  private val NO_LIMIT = 1000;          // When space selection is unlimited.
   private var pt76_shaded_used = false  // NVA attack in one space
   
   case class Params(
@@ -868,7 +869,7 @@ object Human {
 
           if (num > 0) {
             val sp = game.getSpace(name)
-            val numShift = if (sp.isLOC || sp.population == 0 || sp.support == ActiveOpposition)
+            val numShift = if (sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition)
               0
             else if (num > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
               log(s"\n$ArcLight_Shaded triggers")
@@ -986,7 +987,7 @@ object Human {
     // Allow zero pop spaces if Young Turks is leader because
     // player may want the +2 Patronage
     def isCandidate(sp: Space) = {
-        !sp.isLOC         &&
+        !sp.isLoC         &&
         sp.coinControlled &&
         sp.name != Saigon &&
         (sp.population > 0 || young_turks) &&
@@ -1497,14 +1498,14 @@ object Human {
     var taxSpaces = Set.empty[String]
     val maxSpaces = if (kate) 1 else 4
     
-    val isCandidate = (sp: Space) => if (sp.isLOC)
+    val isCandidate = (sp: Space) => if (sp.isLoC)
       sp.printedEconValue > 0 && sp.pieces.has(VCGuerrillas_U)
     else
       sp.population > 0 && sp.pieces.has(VCGuerrillas_U) && !sp.coinControlled
     
     def taxSpace(name: String): Unit = {
       val sp  = game.getSpace(name)
-      val num = if (sp.isLOC) sp.printedEconValue else 2 * sp.population
+      val num = if (sp.isLoC) sp.printedEconValue else 2 * sp.population
       log(s"\nVC Taxes in $name")
       log(separator())
       revealPieces(name, Pieces(vcGuerrillas_U = 1))
@@ -1804,7 +1805,7 @@ object Human {
       Govern::Transport::Nil
     val canPlaceExtraPolice = faction == US && capabilityInPlay(CombActionPlatoons_Unshaded)
     var placedExtraPolice   = false // only if CombActionPlatoons_Unshaded in play
-    val maxTrainSpaces      = params.maxSpaces getOrElse 1000
+    val maxTrainSpaces      = params.maxSpaces getOrElse NO_LIMIT
     val maxPacifySpaces     = if (faction == US && capabilityInPlay(CORDS_Unshaded)) (2 min maxTrainSpaces) else 1
     val maxPacifyLevel      = if (faction == US && capabilityInPlay(CORDS_Shaded)) PassiveSupport else ActiveSupport
     var selectedSpaces      = List.empty[String]
@@ -1812,8 +1813,8 @@ object Human {
     var pacifySpaces        = List.empty[String]
     val nguyenCaoKy         = isRVNLeader(RVN_Leader_NguyenCaoKy)
     val isCandidate = (sp: Space) => {
-      val valid = if (faction == ARVN) !sp.isLOC && !sp.nvaControlled
-                  else                 !sp.isLOC && sp.pieces.has(USPieces)
+      val valid = if (faction == ARVN) !sp.isLoC && !sp.nvaControlled
+                  else                 !sp.isLoC && sp.pieces.has(USPieces)
 
       valid &&                                   // Valid for faction
       !sp.isNorthVietnam &&                      // Never North Vietnam
@@ -2053,7 +2054,7 @@ object Human {
     //  If a limited Op, then the cubes must be able to reach the one selected destination.
     val isPatrolSource = (sp: Space) => {
       lazy val reachesLimOpDest = limOpDest map getPatrolDestinations(sp.name).contains getOrElse true
-      val onNetwork = sp.isLOC || sp.isCity || getAdjacentLOCs(sp.name).nonEmpty || getAdjacentCities(sp.name).nonEmpty
+      val onNetwork = sp.isLoC || sp.isCity || getAdjacentLOCs(sp.name).nonEmpty || getAdjacentCities(sp.name).nonEmpty
       onNetwork && patrolCubes(sp).nonEmpty && reachesLimOpDest
     }
 
@@ -2244,7 +2245,7 @@ object Human {
     val platoonsShaded  = faction == US && !params.limOpOnly && capabilityInPlay(CombActionPlatoons_Shaded)
     val cobrasUnshaded  = capabilityInPlay(Cobras_Unshaded)
     val boobyTraps      = capabilityInPlay(BoobyTraps_Shaded)
-    val defaultMax      = if (platoonsShaded) 2 else 1000
+    val defaultMax      = if (platoonsShaded) 2 else NO_LIMIT
     val maxSpaces       = params.maxSpaces getOrElse defaultMax
 
     def canSpecial = Special.allowed
@@ -2777,7 +2778,7 @@ object Human {
     else
       Tax::Subvert::Ambush::Nil
     val moveableTypes   = if (faction == NVA) NVATroops::NVAGuerrillas else VCGuerrillas
-    val maxDestinations = params.maxSpaces getOrElse 1000
+    val maxDestinations = params.maxSpaces getOrElse NO_LIMIT
     var destinations    = Set.empty[String]
     val mainForceBins   = capabilityInPlay(MainForceBns_Unshaded)
     val claymores       = momentumInPlay(Mo_Claymores)
@@ -2807,7 +2808,7 @@ object Human {
           val dest        = game.getSpace(destName)
           val canContinue = !params.limOpOnly && faction == NVA && game.trail > TrailMin && isInLaosCambodia(destName)
           val trailMove   = faction == NVA && game.trail == TrailMax && (isInLaosCambodia(srcName) || isInLaosCambodia(destName))
-          val free        = params.free || dest.isLOC || trailMove || movedInto(destName).nonEmpty
+          val free        = params.free || dest.isLoC || trailMove || movedInto(destName).nonEmpty
           val moveable    = src.pieces.only(moveableTypes)
           val notYetMoved = moveable - movedInto(srcName)
           val numCoin     = dest.pieces.totalOf(CoinForces)
@@ -2833,7 +2834,7 @@ object Human {
             movePieces(movers, srcName, destName)
 
             val activateNum = if (mainForceBins) 1 else 3
-            val activate    = (dest.isLOC || dest.support > Neutral) && (numCoin + movers.total) > activateNum
+            val activate    = (dest.isLoC || dest.support > Neutral) && (numCoin + movers.total) > activateNum
             if (activate) {
               val activeType = if (faction == NVA) NVAGuerrillas_A else VCGuerrillas_A
               val hidden     = movers.only(UndergroundGuerrillas)
@@ -2957,7 +2958,7 @@ object Human {
     val pt76_unshaded      = faction == NVA && capabilityInPlay(PT76_Unshaded)
     val pt76_shaded        = faction == NVA && capabilityInPlay(PT76_Shaded)
 
-    val maxAttacks   = params.maxSpaces getOrElse 1000
+    val maxAttacks   = params.maxSpaces getOrElse NO_LIMIT
     var attackSpaces = Set.empty[String]
     val guerrillas   = if (faction == NVA) NVAGuerrillas else VCGuerrillas
     def canSpecial   = Special.allowed
@@ -3042,7 +3043,7 @@ object Human {
       Tax::Subvert::Nil
     val cadres         = faction == VC && capabilityInPlay(Cadres_Unshaded)
     var selectedSpaces = List.empty[String]
-    val maxSpaces      = params.maxSpaces getOrElse 1000
+    val maxSpaces      = params.maxSpaces getOrElse NO_LIMIT
     val underground    = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
     def canSpecial     = Special.allowed
 
@@ -3050,7 +3051,7 @@ object Human {
     def nextTerrorAction(): Unit = {
       val hasTheCash   = params.free || game.resources(faction) > 0
       var canTerrorize = (sp: Space) => {
-        val canPay   = sp.isLOC || hasTheCash
+        val canPay   = sp.isLoC || hasTheCash
         val hasPiece = faction match {
           case VC if cadres => sp.pieces.has(VCGuerrillas_U) && sp.pieces.totalOf(VCGuerrillas) > 1
           case VC           => sp.pieces.has(VCGuerrillas_U)
@@ -3084,7 +3085,7 @@ object Human {
 
             log(s"\n$faction selects $name for Terror")
             log(separator())
-            if (!params.free && !sp.isLOC)
+            if (!params.free && !sp.isLoC)
               decreaseResources(faction, 1)
             revealPieces(name, toReveal)
             if (cadres) {
@@ -3096,9 +3097,9 @@ object Human {
               addTerror(name, 1) // Terror/Sabotage marker
 
             faction match {
-              case NVA if !sp.isLOC && sp.support > Neutral           => decreaseSupport(name, 1)
-              case NVA if !sp.isLOC && sp.support < Neutral           => increaseSupport(name, 1)
-              case VC  if !sp.isLOC && sp.support != ActiveOpposition => decreaseSupport(name, 1)
+              case NVA if !sp.isLoC && sp.support > Neutral           => decreaseSupport(name, 1)
+              case NVA if !sp.isLoC && sp.support < Neutral           => increaseSupport(name, 1)
+              case VC  if !sp.isLoC && sp.support != ActiveOpposition => decreaseSupport(name, 1)
               case _ => // No effect
             }
             selectedSpaces = selectedSpaces :+ name

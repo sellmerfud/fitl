@@ -341,7 +341,7 @@ object FireInTheLake {
   
   def getAdjacent(name: String): Set[String] = adjacencyMap(name)
   def areAdjacent(name1: String, name2: String): Boolean = getAdjacent(name1) contains name2
-  def getAdjacentLOCs(name: String): Set[String] = getAdjacent(name) filter { x => game.getSpace(x).isLOC }
+  def getAdjacentLOCs(name: String): Set[String] = getAdjacent(name) filter { x => game.getSpace(x).isLoC }
   def getAdjacentCities(name: String): Set[String] = getAdjacent(name) filter { x => game.getSpace(x).isCity }
   def getAdjacentProvinces(name: String): Set[String] = getAdjacent(name) filter { x => game.getSpace(x).isProvince }
   def getAdjacentLOCsAndCities(name: String): Set[String] = getAdjacentLOCs(name) ++ getAdjacentCities(name)
@@ -362,7 +362,7 @@ object FireInTheLake {
       else {
         val name      = candidates.head
         val sp        = game.getSpace(name)
-        val isDest    = name != srcName && (sp.isLOC || sp.isCity)
+        val isDest    = name != srcName && (sp.isLoC || sp.isCity)
         val endOfPath = name != srcName && sp.pieces.has(InsurgentPieces)
         val adjacent  = if (endOfPath) Set.empty[String] else (getAdjacentLOCsAndCities(name) - srcName)
         val newDests  = if (isDest) destinations + name else destinations
@@ -483,7 +483,10 @@ object FireInTheLake {
   val ActiveGuerrillas    = List(NVAGuerrillas_A, VCGuerrillas_A)
   val UndergroundGuerrillas = List(NVAGuerrillas_U, VCGuerrillas_U)
   val CoinForces          = List(USTroops, Irregulars_A, Irregulars_U, ARVNTroops, ARVNPolice, Rangers_A, Rangers_U)
+  val USForces            = List(USTroops, Irregulars_A, Irregulars_U)
+  val ARVNForces          = List(ARVNTroops, ARVNPolice, Rangers_A, Rangers_U)
   val CoinCubes           = List(USTroops, ARVNTroops, ARVNPolice)
+  val NVAForces           = List(NVATroops, NVAGuerrillas_A, NVAGuerrillas_U)
   val InsurgentForces     = List(NVATroops, NVAGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_A, VCGuerrillas_U)
 
   val factionPieces: Map[Faction, List[PieceType]] = Map(
@@ -501,6 +504,12 @@ object FireInTheLake {
   def isForce(pieceType: PieceType)       = Forces contains pieceType
   def isFlippable(pieceType: PieceType)   = FlippablePieces contains pieceType
 
+  val factionBases: Map[Faction, List[PieceType]] = Map(
+    US   -> List(USBase),
+    ARVN -> List(ARVNBase),
+    NVA  -> List(NVABase, NVATunnel),
+    VC   -> List(VCBase, VCTunnel))
+  
   //  Normalize active types to their undeground counterparts,
   //  and tunneled bases to their non-tunnel counterparts
   def normalizedType(pieceType: PieceType): PieceType = pieceType match {
@@ -776,10 +785,10 @@ object FireInTheLake {
   case object HighlandProvince extends SpaceType("Highland Province")
   case object LowlandProvince  extends SpaceType("Lowland Province")
   case object JungleProvince   extends SpaceType("Jungle Province")
-  case object LOC              extends SpaceType("LOC")
+  case object LoC              extends SpaceType("LOC")
 
   object SpaceType {
-    val ALL       = Set[SpaceType](City, HighlandProvince, LowlandProvince, JungleProvince, LOC)
+    val ALL       = Set[SpaceType](City, HighlandProvince, LowlandProvince, JungleProvince, LoC)
     def apply(name: String): SpaceType = ALL find (_.name.toLowerCase == name.toLowerCase) getOrElse {
       throw new IllegalArgumentException(s"Invalid SpaceType name: $name")
     }
@@ -827,11 +836,11 @@ object FireInTheLake {
     override def toString() = name
 
     def printedEconValue = population  // overloaded field
-    def currentEconValue = if (isLOC && terror == 0) printedEconValue else 0
+    def currentEconValue = if (isLoC && terror == 0) printedEconValue else 0
     
     def isCity     = spaceType == City
     def isProvince = spaceType == HighlandProvince || spaceType == LowlandProvince || spaceType == JungleProvince
-    def isLOC      = spaceType == LOC
+    def isLoC      = spaceType == LoC
 
     def isHighland = spaceType == HighlandProvince
     def isLowland  = spaceType == LowlandProvince
@@ -841,11 +850,11 @@ object FireInTheLake {
 
     def coinControlled: Boolean = pieces.totalOf(CoinPieces) > pieces.totalOf(InsurgentPieces)
     def nvaControlled: Boolean  = pieces.totalOf(NVAPieces) > pieces.totalOf(NonNVAPieces)
-    def control = if      (!isLOC && coinControlled) CoinControl
-                  else if (!isLOC && nvaControlled)  NvaControl
+    def control = if      (!isLoC && coinControlled) CoinControl
+                  else if (!isLoC && nvaControlled)  NvaControl
                   else                               Uncontrolled
 
-    def supportValue: Int = if (isLOC)
+    def supportValue: Int = if (isLoC)
       0
     else 
       support match {
@@ -854,7 +863,7 @@ object FireInTheLake {
         case _              => 0
       }
       
-    def oppositionValue: Int = if (isLOC)
+    def oppositionValue: Int = if (isLoC)
       0
     else
       support match {
@@ -863,8 +872,8 @@ object FireInTheLake {
         case _                 => 0
       }
 
-    def coinControlValue: Int = if (!isLOC && coinControlled) population else 0
-    def nvaControlValue: Int  = if (!isLOC && nvaControlled)  population else 0
+    def coinControlValue: Int = if (!isLoC && coinControlled) population else 0
+    def nvaControlValue: Int  = if (!isLoC && nvaControlled)  population else 0
 
     def totalBases = pieces.totalOf(BasePieces)
     def addPieces(newPieces: Pieces): Space = copy(pieces = pieces + newPieces)
@@ -873,7 +882,7 @@ object FireInTheLake {
 
     def assaultCubes(faction: Faction): Int = faction match {
       case US                   => pieces.numOf(USTroops)
-      case _ if isCity || isLOC => pieces.totalOf(ARVNCubes)
+      case _ if isCity || isLoC => pieces.totalOf(ARVNCubes)
       case _                    => pieces.numOf(ARVNTroops)
     }
     
@@ -909,7 +918,7 @@ object FireInTheLake {
   implicit object SpaceOrdering extends Ordering[Space] {
     private def categoryValue(sp: Space) = sp.spaceType match {
       case City => 0
-      case LOC  => 2
+      case LoC  => 2
       case _    => 1  // All provinces
     }
 
@@ -956,23 +965,23 @@ object FireInTheLake {
   val Default_BaXuyen            = Space(BaXuyen,            LowlandProvince,  1, coastal = true)
   val Default_KienGiang_AnXuyen  = Space(KienGiang_AnXuyen,  LowlandProvince,  2, coastal = true)
 
-  val Default_LOC_Hue_KheSanh             = Space(LOC_Hue_KheSanh,             LOC, 1, coastal = true)
-  val Default_LOC_Hue_DaNang              = Space(LOC_Hue_DaNang,              LOC, 1, coastal = true)
-  val Default_LOC_DaNang_DakTo            = Space(LOC_DaNang_DakTo,            LOC, 0)
-  val Default_LOC_DaNang_QuiNhon          = Space(LOC_DaNang_QuiNhon,          LOC, 1, coastal = true)
-  val Default_LOC_Kontum_DakTo            = Space(LOC_Kontum_DakTo,            LOC, 1)
-  val Default_LOC_Kontum_QuiNhon          = Space(LOC_Kontum_QuiNhon,          LOC, 1)
-  val Default_LOC_Kontum_BanMeThuot       = Space(LOC_Kontum_BanMeThuot,       LOC, 1)
-  val Default_LOC_QuiNhon_CamRanh         = Space(LOC_QuiNhon_CamRanh,         LOC, 1, coastal = true)
-  val Default_LOC_CamRanh_DaLat           = Space(LOC_CamRanh_DaLat,           LOC, 1)
-  val Default_LOC_BanMeThuot_DaLat        = Space(LOC_BanMeThuot_DaLat,        LOC, 0)
-  val Default_LOC_Saigon_CamRanh          = Space(LOC_Saigon_CamRanh,          LOC, 1, coastal = true)
-  val Default_LOC_Saigon_DaLat            = Space(LOC_Saigon_DaLat,            LOC, 1)
-  val Default_LOC_Saigon_AnLoc_BanMeThuot = Space(LOC_Saigon_AnLoc_BanMeThuot, LOC, 1)
-  val Default_LOC_Saigon_CanTho           = Space(LOC_Saigon_CanTho,           LOC, 2)
-  val Default_LOC_CanTho_ChauDoc          = Space(LOC_CanTho_ChauDoc,          LOC, 1)
-  val Default_LOC_CanTho_BacLieu          = Space(LOC_CanTho_BacLieu,          LOC, 0, coastal = true)
-  val Default_LOC_CanTho_LongPhu          = Space(LOC_CanTho_LongPhu,          LOC, 1, coastal = true)
+  val Default_LOC_Hue_KheSanh             = Space(LOC_Hue_KheSanh,             LoC, 1, coastal = true)
+  val Default_LOC_Hue_DaNang              = Space(LOC_Hue_DaNang,              LoC, 1, coastal = true)
+  val Default_LOC_DaNang_DakTo            = Space(LOC_DaNang_DakTo,            LoC, 0)
+  val Default_LOC_DaNang_QuiNhon          = Space(LOC_DaNang_QuiNhon,          LoC, 1, coastal = true)
+  val Default_LOC_Kontum_DakTo            = Space(LOC_Kontum_DakTo,            LoC, 1)
+  val Default_LOC_Kontum_QuiNhon          = Space(LOC_Kontum_QuiNhon,          LoC, 1)
+  val Default_LOC_Kontum_BanMeThuot       = Space(LOC_Kontum_BanMeThuot,       LoC, 1)
+  val Default_LOC_QuiNhon_CamRanh         = Space(LOC_QuiNhon_CamRanh,         LoC, 1, coastal = true)
+  val Default_LOC_CamRanh_DaLat           = Space(LOC_CamRanh_DaLat,           LoC, 1)
+  val Default_LOC_BanMeThuot_DaLat        = Space(LOC_BanMeThuot_DaLat,        LoC, 0)
+  val Default_LOC_Saigon_CamRanh          = Space(LOC_Saigon_CamRanh,          LoC, 1, coastal = true)
+  val Default_LOC_Saigon_DaLat            = Space(LOC_Saigon_DaLat,            LoC, 1)
+  val Default_LOC_Saigon_AnLoc_BanMeThuot = Space(LOC_Saigon_AnLoc_BanMeThuot, LoC, 1)
+  val Default_LOC_Saigon_CanTho           = Space(LOC_Saigon_CanTho,           LoC, 2)
+  val Default_LOC_CanTho_ChauDoc          = Space(LOC_CanTho_ChauDoc,          LoC, 1)
+  val Default_LOC_CanTho_BacLieu          = Space(LOC_CanTho_BacLieu,          LoC, 0, coastal = true)
+  val Default_LOC_CanTho_LongPhu          = Space(LOC_CanTho_LongPhu,          LoC, 1, coastal = true)
 
   val DefaultSpaces = List(
     Default_Hue,
@@ -1213,11 +1222,11 @@ object FireInTheLake {
   // This trait is shared by all Ops and Special Activities
   // that can move pieces and is used by the Bot Movement 
   // priorities. 
-  sealed trait MoveType
+  sealed trait MoveAction
   
   case object  Train   extends CoinOp("Train")
-  case object  Patrol  extends CoinOp("Patrol") with MoveType
-  case object  Sweep   extends CoinOp("Sweep")  with MoveType
+  case object  Patrol  extends CoinOp("Patrol") with MoveAction
+  case object  Sweep   extends CoinOp("Sweep")  with MoveAction
   case object  Assault extends CoinOp("Assault")
 
   object CoinOp {
@@ -1228,7 +1237,7 @@ object FireInTheLake {
     override def toString() = name
   }
   case object  Rally  extends InsurgentOp("Rally")
-  case object  March  extends InsurgentOp("March") with MoveType
+  case object  March  extends InsurgentOp("March") with MoveAction
   case object  Attack extends InsurgentOp("Attack")
   case object  Terror extends InsurgentOp("Terror")
 
@@ -1251,10 +1260,10 @@ object FireInTheLake {
     override def toString() = name
   }
   case object Advise     extends SpecialActivity("Advise")
-  case object AirLift    extends SpecialActivity("Air Lift") with MoveType
+  case object AirLift    extends SpecialActivity("Air Lift") with MoveAction
   case object AirStrike  extends SpecialActivity("Air Strike")
   case object Govern     extends SpecialActivity("Govern")
-  case object Transport  extends SpecialActivity("Transport") with MoveType
+  case object Transport  extends SpecialActivity("Transport") with MoveAction
   case object Raid       extends SpecialActivity("Raid")
   case object Infiltrate extends SpecialActivity("Infiltrate")
   case object Bombard    extends SpecialActivity("Bombard")
@@ -1419,8 +1428,8 @@ object FireInTheLake {
     // Does not include US troops or bases
     lazy val piecesToPlace = (allPiecesOnMap.normalized + availablePieces).except(USTroops::USBase::Nil)
     lazy val currentRvnLeader = rvnLeaders.head
-    lazy val locSpaces = spaces filter (_.isLOC)
-    lazy val nonLocSpaces = spaces filterNot (_.isLOC)
+    lazy val locSpaces = spaces filter (_.isLoC)
+    lazy val nonLocSpaces = spaces filterNot (_.isLoC)
 
     // Create a one line turn description for the current game state.
     // This is used to mark the current game segment, etc.
@@ -1756,7 +1765,7 @@ object FireInTheLake {
     b += ""
     b += s"${prefix}${sp.name} (${sp.spaceType})"
     b += separator()
-    if (sp.isLOC)
+    if (sp.isLoC)
       b += s"Sabotage  : ${sp.terror}"
     else {
       b += s"Population: ${sp.population}"
@@ -2203,7 +2212,8 @@ object FireInTheLake {
             }
             resolveNextActor()
           case BotCmd  =>
-            Bot.act()
+            Bot.testMove()
+            // Bot.act()
             log(s"\nFinished with $faction turn")
             saveGameState(game.description)
             resolveNextActor()
@@ -2373,7 +2383,7 @@ object FireInTheLake {
     val sp = game.getSpace(name)
     assert(game.terrorMarkersAvailable >= num, s"addTerror($name): not enough available markers")
     game = game.updateSpace(sp.copy(terror = sp.terror + num))
-    if (sp.isLOC)
+    if (sp.isLoC)
       log(s"Add ${amountOf(num, "sabotage marker")} to $name")
     else
       log(s"Add ${amountOf(num, "terror marker")} to $name")
@@ -2383,7 +2393,7 @@ object FireInTheLake {
     val sp = game.getSpace(name)
     assert(sp.terror >= num, s"removeTerror($name): not enough markers in space")
     game = game.updateSpace(sp.copy(terror = sp.terror - num))
-    if (sp.isLOC)
+    if (sp.isLoC)
       log(s"Remove ${amountOf(num, "sabotage marker")} from $name")
     else
       log(s"Remove ${amountOf(num, "terror marker")} from $name")
@@ -2637,7 +2647,6 @@ object FireInTheLake {
     loggingControlChanges {
       game = game.updateSpace(updatedSrc).updateSpace(updatedDst)
       
-      log()
       for (desc <- pieces.descriptions)
         log(s"Move $desc from $source to $dest")      
     }
@@ -2671,7 +2680,7 @@ object FireInTheLake {
     val ambushSpace = game.getSpace(name)
     
     val inPlace = if (ambushSpace.pieces.has(CoinPieces)) Some(name) else None
-    val adjacent = if (ambushSpace.isLOC)
+    val adjacent = if (ambushSpace.isLoC)
       getAdjacent(name).toList filter (adj => game.getSpace(adj).pieces.has(CoinPieces))
     else
       Nil
@@ -2975,7 +2984,7 @@ object FireInTheLake {
           val changed = for {
             space <- game.spaces.sortBy(_.name)
             orig = savedGame.getSpace(space.name)
-            if !orig.isLOC && orig.control != space.control
+            if !orig.isLoC && orig.control != space.control
           } yield (space.name, orig.control, space.control)
 
           if (changed.nonEmpty) {
@@ -3928,7 +3937,7 @@ object FireInTheLake {
     def nextAction(): Unit = {
       val sp        = game.getSpace(name)
       val adjPieces = game.availablePieces.nonEmpty || sp.pieces.nonEmpty
-      val marker    = if (sp.isLOC) "Sabotage" else "Terror"
+      val marker    = if (sp.isLoC) "Sabotage" else "Terror"
       val choices   = List(
         choice(true,      "support", "Support level"),
         choice(true,      "terror",  s"Number of $marker markers"),
@@ -3966,7 +3975,7 @@ object FireInTheLake {
 
   def adjustTerror(name: String): Unit = {
     val sp     = game.getSpace(name)
-    val marker = if (sp.isLOC) "Sabotage" else "Terror"
+    val marker = if (sp.isLoC) "Sabotage" else "Terror"
     val maxVal = game.terrorMarkersAvailable + sp.terror
     println()
     adjustInt(s"Number of $marker markers", sp.terror, 0 to maxVal) foreach { value =>
@@ -3980,7 +3989,7 @@ object FireInTheLake {
 
     def nextAdjustment(): Unit = {
       val sp        = game.getSpace(name)
-      val forbidden = if (sp.isLOC) CoinBases:::InsurgentBases else Nil
+      val forbidden = if (sp.isLoC) CoinBases:::InsurgentBases else Nil
       val pieces    = sp.pieces.except(forbidden)
       val available = game.availablePieces.except(forbidden)
       val pieceChoices: List[(Option[PieceType], String)] = AllPieceTypes flatMap { t =>

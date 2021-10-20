@@ -65,6 +65,19 @@ object Human {
 
   }
 
+  def logOpChoice(faction: Faction, op: Operation, notes: TraversableOnce[String] = Nil): Unit = {
+    log(s"\n$faction chooses $op operation")
+    log(separator())
+    for (note <- notes)
+      log(note)
+  }
+
+  def logSAChoice(faction: Faction, sa: SpecialActivity, notes: TraversableOnce[String] = Nil): Unit = {
+    log(s"\n$faction chooses $sa special activity")
+    log(separator())
+    for (note <- notes)
+      log(note)
+  }
 
   // Aid in keeping track of when a special activity can be taken
   object Special {
@@ -638,8 +651,7 @@ object Human {
       }
     }
 
-    log("\nUS chooses Advise special activity")
-    log(separator())
+    logSAChoice(US, Advise)
 
     nextAdviseSpace();
     if (askYorN("\nDo you wish to add +6 Aid? (y/n) "))
@@ -757,10 +769,7 @@ object Human {
 
     // Start of Air Lift Special Activity
     // ------------------------------------
-    log("\nUS chooses Air Lift special activity")
-    log(separator())
-    if (game.inMonsoon)
-      log("May only choose 2 spaces in Monsoon")
+    logSAChoice(US, AirLift, List("May only choose 2 spaces in Monsoon"))
 
     nextAirLiftAction()
   }
@@ -959,10 +968,7 @@ object Human {
 
     // Start of Air Lift Special Activity
     // ------------------------------------
-    log("\nUS chooses Air Strike special activity")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logSAChoice(US, AirStrike, notes)
 
     log("\nRolling a die to determine the number of hits")
     log(separator())
@@ -1079,10 +1085,7 @@ object Human {
 
     // Start of Govern Special Activity
     // ------------------------------------
-    log("\nARVN chooses Govern special activity")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logSAChoice(ARVN, Govern, notes)
 
     nextGovernAction()
   }
@@ -1110,11 +1113,7 @@ object Human {
     // Start of Transport Special Activity
     // ------------------------------------
 
-    log("\nARVN chooses Transport special activity")
-    log(separator())
-    for (note <- notes)
-      log(note)
-
+    logSAChoice(ARVN, Transport, notes)
 
     val srcName        = askCandidate(srcPrompt, srcCandidates)
     val eligible       = game.getSpace(srcName).pieces.only(pieceTypes)
@@ -1247,12 +1246,7 @@ object Human {
       noteIf(kate, s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]")
     ).flatten
 
-    
-
-    log("\nARVN chooses Raid special activity")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logSAChoice(ARVN, Raid, notes)
 
     nextSelectAction()
     nextRaidAction(Set.empty)
@@ -1376,11 +1370,7 @@ object Human {
       noteIf(transportGrp, s"Infiltrate is max 1 space [Momentum: $Mo_559TransportGrp]")
     ).flatten
 
-
-    log("\nNVA chooses Infiltrate special activity")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logSAChoice(NVA, Infiltrate, notes)
 
     nextInfiltrateAction()
   }
@@ -1453,11 +1443,7 @@ object Human {
       noteIf(longRange_shaded,   s"NVA Bombard is max 3 space [$LongRangeGuns_Unshaded]")
     ).flatten
 
-
-    log("\nNVA chooses Bombard special activity")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logSAChoice(NVA, Bombard, notes)
       
     nextBombardAction()
   }
@@ -1472,8 +1458,7 @@ object Human {
   // Mo_Claymores prohibits ambush
   // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
   def doAmbush(faction: Faction, params: Params): Unit = {
-    log(s"\n$faction chooses the Ambush special activity")
-    log(separator())
+    logSAChoice(faction, Ambush)
 
     val notes = List(
       noteIf(momentumInPlay(Mo_TyphoonKate),s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
@@ -1545,11 +1530,7 @@ object Human {
       noteIf(kate, s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]")
     ).flatten
 
-
-    log("\nVC chooses Tax special activity")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logSAChoice(VC, Tax, notes)
       
     nextTaxAction()
   }
@@ -1636,11 +1617,7 @@ object Human {
       noteIf(kate, s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]")
     ).flatten
 
-
-    log("\nVC chooses Subvert special activity")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logSAChoice(VC, Subvert, notes)
       
     nextSubvertAction()
 
@@ -2008,10 +1985,7 @@ object Human {
       noteIf(maxPacifyLevel == PassiveSupport, s"May not Pacify to Active Support [$CORDS_Shaded]")
     ).flatten
 
-    log(s"\n$faction chooses Train operation")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logOpChoice(faction, Train, notes)
 
     selectTrainSpace()
     if (selectedSpaces.nonEmpty)
@@ -2187,8 +2161,8 @@ object Human {
       noteIf(pattonShaded,  s"After Patrol NVA removes up to 2 cubes that moved [$M48Patton_Shaded]")
     ).flatten
 
-    log(s"\n$faction chooses Patrol operation")
-    log(separator())
+    logOpChoice(faction, Patrol, notes)
+
     if (hasTheCash) {
       if (faction == ARVN && !params.free) {
         if (momentumInPlay(Mo_BodyCount))
@@ -2371,10 +2345,7 @@ object Human {
       noteIf(boobyTraps,     s"Each space, VC afterward remove 1 troop on die roll 1-3 [$BoobyTraps_Shaded]")
     ).flatten
 
-    log(s"\n$faction chooses Sweep operation")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logOpChoice(faction, Sweep, notes)
 
     selectSweepSpace()
     moveTroops()
@@ -2606,10 +2577,7 @@ object Human {
       noteIf(bodyCount,      s"Cost is 0 and +3 Aid per guerrilla removed [Momentum: $Mo_BodyCount]")
     ).flatten
 
-    log(s"\n$faction chooses Assault operation")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logOpChoice(faction, Assault, notes)
 
     selectAssaultSpace()
 
@@ -2746,10 +2714,7 @@ object Human {
       noteIf(cadres,   s"May Agitate in one space with an existing base [$Cadres_Shaded]")
     ).flatten
 
-    log(s"\n$faction chooses Rally operation")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logOpChoice(faction, Rally, notes)
 
     selectRallySpace()
 
@@ -2936,10 +2901,7 @@ object Human {
       noteIf(claymores,     s"Remove 1 guerrilla in each marching group that activates [$Mo_Claymores]")
     ).flatten
 
-    log(s"\n$faction chooses March operation")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logOpChoice(faction, March, notes)
 
     nextMarchAction()
 
@@ -3023,10 +2985,7 @@ object Human {
       noteIf(pt76_shaded,   s"In 1 NVA attack space, remove 1 enemy per Troop [$PT76_Shaded]")
     ).flatten
 
-    log(s"\n$faction chooses Attack operation")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logOpChoice(faction, Attack, notes)
 
     nextAttackAction()
 
@@ -3119,10 +3078,7 @@ object Human {
       noteIf(cadres, s"$faction must remove 2 guerrillas in each terror space [$Cadres_Unshaded]")
     ).flatten
 
-    log(s"\n$faction chooses Terror operation")
-    log(separator())
-    for (note <- notes)
-      log(note)
+    logOpChoice(faction, Terror, notes)
 
     nextTerrorAction()
 

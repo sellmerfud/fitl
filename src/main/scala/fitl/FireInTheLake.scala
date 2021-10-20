@@ -52,6 +52,7 @@ object FireInTheLake {
 
   def d6 = nextInt(6) + 1
   def d3 = nextInt(3) + 1
+  def rollDice(numDice: Int) = List.fill(numDice)(d6).sum
 
   val EdgeTrackMax = 75
   val TrailMin     = 0
@@ -881,22 +882,25 @@ object FireInTheLake {
     def setPieces(newPieces: Pieces): Space = copy(pieces = newPieces)
 
     def assaultCubes(faction: Faction): Int = faction match {
-      case US                   => pieces.numOf(USTroops)
-      case _ if isCity || isLoC => pieces.totalOf(ARVNCubes)
-      case _                    => pieces.numOf(ARVNTroops)
+      case US                      => pieces.numOf(USTroops)
+      case ARVN if isCity || isLoC => pieces.totalOf(ARVNCubes)
+      case ARVN                    => pieces.numOf(ARVNTroops)
+      case _                       => 0
     }
     
-    def sweepForces(faction: Faction): Int = if (faction == US)
-      pieces.totalOf(USTroops::Irregulars_U::Irregulars_A::Nil)
-    else
-      pieces.totalOf(ARVNTroops::ARVNPolice::Rangers_U::Rangers_A::Nil)
+    def sweepForces(faction: Faction): Int = faction match {
+      case US   => pieces.totalOf(USTroops::Irregulars_U::Irregulars_A::Nil)
+      case ARVN => pieces.totalOf(ARVNTroops::ARVNPolice::Rangers_U::Rangers_A::Nil)
+      case _    => 0
+    }
 
     def assaultMultiplier(faction: Faction): Double = faction match {
       case US if pieces.has(USBase) => 2.0
       case US if isHighland         => 1.0/2.0
       case US                       => 1.0
-      case _ if isHighland          => 1.0/3.0
-      case _                        => 1.0/2.0
+      case ARVN if isHighland       => 1.0/3.0
+      case ARVN                     => 1.0/2.0
+      case _                        => 0.0
     }
 
     def assaultFirepower(faction: Faction): Int = (assaultCubes(faction) * assaultMultiplier(faction)).toInt
@@ -1215,7 +1219,9 @@ object FireInTheLake {
   // Case sensitive
   def isValidScenario(name: String) = scenarios contains name
 
-  sealed abstract class CoinOp(val name: String) {
+  sealed trait Operation
+
+  sealed abstract class CoinOp(val name: String) extends Operation {
     override def toString() = name
   }
   
@@ -1228,12 +1234,13 @@ object FireInTheLake {
   case object  Patrol  extends CoinOp("Patrol") with MoveAction
   case object  Sweep   extends CoinOp("Sweep")  with MoveAction
   case object  Assault extends CoinOp("Assault")
+  
 
   object CoinOp {
     val ALL = List(Train, Patrol, Sweep, Assault)
   }
 
-  sealed abstract class InsurgentOp(val name: String) {
+  sealed abstract class InsurgentOp(val name: String) extends Operation {
     override def toString() = name
   }
   case object  Rally  extends InsurgentOp("Rally")
@@ -2212,8 +2219,8 @@ object FireInTheLake {
             }
             resolveNextActor()
           case BotCmd  =>
-            Bot.testMove()
-            // Bot.act()
+            // Bot.testMove()
+            Bot.act()
             log(s"\nFinished with $faction turn")
             saveGameState(game.description)
             resolveNextActor()

@@ -94,7 +94,7 @@ object Bot {
   // Possible results when attempting to execute the instructions
   // on a Trung Card
   sealed trait TrungResult
-  case object TrungComplete extends TrungResult
+  case class  TrungComplete(specialActivity: Boolean) extends TrungResult
   case object TrungDraw     extends TrungResult
   case object TrungFlip     extends TrungResult
   case object TrungNoOp     extends TrungResult
@@ -129,10 +129,32 @@ object Bot {
     success
   }
 
+  def logOpChoice(faction: Faction, op: Operation): Unit = {
+    log(s"\n$faction chooses $op operation")
+    log(separator())
+  }
+
+  def logIfNop(faction: Faction, op: Operation, noOp: Boolean): Unit = {
+    if (noOp)
+      log(s"\nNo spaces found for $faction $op")
+  }
+
+  def logSAChoice(faction: Faction, sa: SpecialActivity): Unit = {
+  log(s"\n$faction chooses $sa special activity")
+  log(separator())
+}
+
   // Convenience method
   def checkActivation(faction: Faction, needRoll: Boolean, activationNumber: Int): Boolean = {
     needRoll == false || makeActivationRoll(faction, activationNumber)
   }
+
+  def sweepEffective(faction: Faction, name: String): Boolean = {
+    val sp = game.getSpace(name)
+    sp.sweepActivations(faction) > 0 && sp.pieces.totalOf(UndergroundGuerrillas) > 0
+  }
+
+
   // Type used for checking conditions in the
   // space selection and move priorities tables
   trait PriorityFilter[T] {
@@ -1631,18 +1653,11 @@ object Bot {
   }
 
 
-  // Type of function supplied to the movePiecesToDestinations() function that
-  // is called when a new destination space is needed.
-  // The first parameter is true if an activation roll is required
-  // The second paramter is the set of space names that cannot be used
-  // (because they have already been used)
-  type MoveDestGetter = (Boolean, Set[String]) => Option[String]
-
 
   def testMove(): Unit = {
 
-    val faction: Faction = ARVN
-    val action: MoveAction = Sweep
+    val faction: Faction = VC
+    val action: MoveAction = March
 
     initTurnVariables()
 
@@ -1674,21 +1689,16 @@ object Bot {
 
       case NVA =>
         // 1 LoC adjacent to US without NVA
-        log("\nNVA selects March operation")
-        movePiecesToDestinations(NVA, March, NVAForces.toSet, maxDestinations = 1) {
-          (_, _) => {
-            val candidates = spaceNames(game.locSpaces filter { sp =>
-              !sp.pieces.has(NVAPieces) && (spaces(getAdjacent(sp.name)) exists (_.pieces.has(USPieces)))
-            })
-            shuffle(candidates).headOption
-          }
-        }
-    
-        // Spaces using March Destinations column of Space Selection
+        // Then spaces using March Priorities 
         movePiecesToDestinations(NVA, March, NVAForces.toSet) {
-          (needActivationRoll, prohibited) => {
-            val candidates = game.spaces filterNot (sp => prohibited.contains(sp.name))
-            if (candidates.nonEmpty && checkActivation(NVA, needActivationRoll, 2))
+          (needActivation, prohibited) => {
+            val locQualifies = (sp: Space) => !prohibited(sp.name) && !sp.pieces.has(NVAPieces) && numAdjacentPieces(sp, USPieces) > 0
+            lazy val locCandidates = game.locSpaces filter locQualifies
+            lazy val candidates = game.spaces filterNot (sp => prohibited.contains(sp.name))
+
+            if (moveDestinations.size < 1 && locCandidates.nonEmpty)
+              shuffle(locCandidates).headOption map (_.name)
+            else if (candidates.nonEmpty && checkActivation(NVA, needActivation, 2))
               Some(NVA_Bot.pickSpaceMarchDest(candidates).name)
             else
               None
@@ -1696,38 +1706,40 @@ object Bot {
         }
         
         case VC =>
-          // 2 LoCs adjacent most underground VC guerrillas          
-          movePiecesToDestinations(VC, March, VCGuerrillas.toSet, maxDestinations = 2) {
-            (_, prohibited) => {
-              val qualifies = (sp: Space) => !prohibited(sp.name) && numAdjacentPieces(sp, Set(VCGuerrillas_U)) > 0
-              val candidates = game.locSpaces filter qualifies
+          // 2 LoCs adjacent most underground VC guerrillas
+          // Then spaces using March Priorities 
+          movePiecesToDestinations(VC, March, VCGuerrillas.toSet) {
+            (needActivation, prohibited) => {
+              val locQualifies = (sp: Space) => !prohibited(sp.name) && numAdjacentPieces(sp, Set(VCGuerrillas_U)) > 0
+              lazy val locCandidates = game.locSpaces filter locQualifies
+              lazy val candidates = game.spaces filterNot (sp => prohibited.contains(sp.name))
 
               // No need to check activation since these are LoCs
-              if (candidates.nonEmpty) {
+              if (moveDestinations.size < 2 && locCandidates.nonEmpty) {
                 val priorities = List(
                   new HighestScore[Space]("Most Underground VC Guerrillas", sp => numAdjacentPieces(sp, Set(VCGuerrillas_U)))
                 )
-                Some(bestCandidate(candidates, priorities).name)
+                Some(bestCandidate(locCandidates, priorities).name)
+              }
+              else if (candidates.nonEmpty && checkActivation(VC, needActivation, 2)) {
+                // Spaces using March Destinations column of Space Selection
+                Some(VC_Bot.pickSpaceMarchDest(candidates).name)
               }
               else
                 None
             }
           }
-      
-          // Spaces using March Destinations column of Space Selection
-          movePiecesToDestinations(VC, March, VCGuerrillas.toSet) {
-            (needActivationRoll, prohibited) => {
-              val candidates = game.spaces filterNot (sp => prohibited.contains(sp.name))
-              if (candidates.nonEmpty && checkActivation(VC, needActivationRoll, 2))
-                Some(VC_Bot.pickSpaceMarchDest(candidates).name)
-              else
-                None
-            }
-          }
     }
-
   }
 
+  // Type of function supplied to the movePiecesToDestinations() function that
+  // is called when a new destination space is needed.
+  //  (needActivation: Boolean, prohibited: Set[String]) => Option[String]
+  // The first parameter is true if an activation roll is required
+  // The second paramter is the set of space names that cannot be used
+  // (because they have already been selected or were considered but
+  //  not pieces were able to move there)
+  type MoveDestGetter = (Boolean, Set[String]) => Option[String]
 
 
   //  This function implements a move operation for the given faction.
@@ -1738,8 +1750,9 @@ object Bot {
     faction: Faction,
     action: MoveAction,
     moveTypes: Set[PieceType],
-    maxDestinations: Int = NO_LIMIT)(getNextDestination: MoveDestGetter): Unit = {
+    maxDestinations: Option[Int] = None)(getNextDestination: MoveDestGetter): Unit = {
 
+    val maxDest = maxDestinations getOrElse NO_LIMIT
     // ----------------------------------------
     def tryOrigin(destName: String, previousOrigins: Set[String]): Unit = {
       selectMoveOrigin(faction, destName, action, moveTypes, previousOrigins) match {
@@ -1772,7 +1785,7 @@ object Bot {
 
     // ----------------------------------------
     def tryDestination(activationRoll: Boolean, notReachable: Set[String]): Unit = {
-      if (moveDestinations.size < maxDestinations) {
+      if (moveDestinations.size < maxDest) {
         getNextDestination(activationRoll, moveDestinations ++ notReachable) match {
           case None => // No more destinations
 
@@ -1782,9 +1795,7 @@ object Bot {
             // pause()
             val dest = game.getSpace(destName)
 
-            if (action == Sweep && 
-               !moveDestinations(destName) &&
-               dest.sweepActivations(faction) > 0) {
+            if (action == Sweep && !moveDestinations(destName) && sweepEffective(faction, destName)) {
               // If this is a sweep operation and no cubes were
               // able to move into the destination, but there are
               // sufficient existing cubes in the destination to
@@ -2329,6 +2340,55 @@ object Bot {
       bestCandidate(candidates, priorities)
     }
 
+    //  -------------------------------------------------------------
+    //  Implement the Rally Instructions from the VC Trung cards.
+    //
+    //  Return true if we succesfully Rally in at least one space.
+    //  -------------------------------------------------------------
+    def rallyOp(params: Params): Boolean = {
+
+      false
+    }
+
+    //  -------------------------------------------------------------
+    //  Implement the March Instructions from the VC Trung cards.
+    //    March using Move Priorities
+    //    1. Select 2 LoCs adjacent to most underground VC guerrillas
+    //    2. Select spaces using March Destinations
+    //
+    //  Return true if we succesfully March to at least one space.
+    //  -------------------------------------------------------------
+    def marchOp(params: Params): Boolean = {
+      val LocPriorities = List(
+        new HighestScore[Space](
+          "Most Adjacent Underground VC Guerrillas",
+          sp => numAdjacentPieces(sp, Set(VCGuerrillas_U))
+        )
+      )
+
+      logOpChoice(VC, March)
+      movePiecesToDestinations(VC, March, VCGuerrillas.toSet, params.maxSpaces) {
+        (needActivation, prohibited) => {
+          val locQualifies = (sp: Space) => !prohibited(sp.name) &&
+                                            numAdjacentPieces(sp, Set(VCGuerrillas_U)) > 0
+          lazy val locCandidates = game.locSpaces filter locQualifies
+          lazy val candidates    = game.spaces filterNot (sp => prohibited.contains(sp.name))
+
+          // No need to check activation since these are LoCs
+          if (moveDestinations.size < 2 && locCandidates.nonEmpty) {
+            Some(bestCandidate(locCandidates, LocPriorities).name)
+          }
+          else if (candidates.nonEmpty && checkActivation(VC, needActivation, 2)) {
+            // Spaces using March Destinations column of Space Selection
+            Some(VC_Bot.pickSpaceMarchDest(candidates).name)
+          }
+          else
+            None
+        }
+      }
+      logIfNop(VC, March, moveDestinations.isEmpty)
+      moveDestinations.nonEmpty
+    }
   }
 
 
@@ -2406,40 +2466,25 @@ object Bot {
   //  next row of the table.
   //  Note: The logic for determing if the Bot will choose its Pivotal Event
   //        is assumed to have already been done.
-  def chooseAction(faction: Faction, prevEntry: Option[ActionEntry]): Option[ActionEntry] = {
+  def chooseAction(faction: Faction): Option[ActionEntry] = {
     val isFirstEligible = game.sequence.numActors == 0
 
     botLog {
       val which = if (isFirstEligible) "1st" else "2nd"
-      if (prevEntry.isEmpty)
-        s"\nChoose Action using NP Eligiblity Table ($which eligible)"
-      else
-        s"\nChoose Action using NP Eligiblity Table ($which eligible) after ${prevEntry.get.action} was not possible"
+      s"\n$faction Choosing Action using NP Eligiblity Table ($which eligible)"
     }
     botLog(separator())
 
-    val table = {
-      val t = if (isFirstEligible)
-        firstEligibileTable
-      else
-        secondEligibileTable
-
-      prevEntry match {
-        case None       => t
-        case Some(prev) => t drop (t.indexOf(prev) + 1)
-      }
-    }
-
-    //  In case we previously used the last entry in the table and it was
-    //  not possible to carry it out.
-    if (table.isEmpty)
-      None
+    val table = if (isFirstEligible)
+      firstEligibileTable
     else
-      table find { entry =>
-        val result = entry.test(faction)
-        botLog(msgResult(entry.desc, result))
-        result
-      }
+      secondEligibileTable
+
+    table find { entry =>
+      val result = entry.test(faction)
+      botLog(msgResult(entry.desc, result))
+      result
+    }
   }
 
 
@@ -2459,45 +2504,53 @@ object Bot {
 
     initTurnVariables()
 
-
     if (game.executingPivotalEvent) {
       //  The Pivotal events are single events which are always in the executeUnshaded() function.
       card.executeEvent(faction)
     }
     else {
+      chooseAction(faction) match {
+        case None =>  // Could not carry out an action so Pass
+          factionPasses(faction)
 
+        case Some(ActionEntry(Pass, _, _)) => // Table resolve to Pass
+          factionPasses(faction)
 
-      def selectAction(prevEntry: Option[ActionEntry]): Unit = {
-        chooseAction(faction, prevEntry) match {
-          case None =>  // Could not carry out an action so Pass
+        case Some(ActionEntry(Event, _, _)) =>
+          card.executeEvent(faction)
+
+        case entry @ Some(ActionEntry(action, _, _)) =>
+          // LimitedOp, OpOnly, or OpPlusSpecial
+          val first = game.sequence.numActors == 0
+          val sa    = action == OpPlusSpecial
+          val maxsp = if (action == LimitedOp) Some(1) else None
+          val params = Params(includeSpecial = sa, maxSpaces = maxsp)
+          
+          // If the first eligible was allowd to do a special
+          // activity but was not able to do so then switch
+          // it action to OpOnly
+          // If the Bot could not do any operation at all then pass
+          val actualAction = executeOp(faction, params) match {
+            case ER_NoOp                  => Pass    // Could not do any action!
+            case ER_OpOnly if first && sa => OpOnly  // First eligible could not do special activity
+            case _                        => action
+          }
+
+          if (actualAction == Pass)
             factionPasses(faction)
-
-          case Some(ActionEntry(Pass, _, _)) => // TAble resolve to Pass
-            factionPasses(faction)
-
-            case Some(ActionEntry(Event, _, _)) =>
-              card.executeEvent(faction)
-
-            case entry @ Some(ActionEntry(action, _, _)) =>  // LimitedOp, OpOnly, or OpPlusSpecial
-              val sa    = action == OpPlusSpecial
-              val maxsp = if (action == LimitedOp) Some(1) else None
-              val params = Params(includeSpecial = sa, maxSpaces = maxsp)
-
-              if (executeOp(faction, params)) {
-                game = game.copy(sequence = game.sequence.addActor(faction, action))
-                log()
-                log(s"Move the $faction cylinder to the $action box")
-              }
-              else
-                selectAction(entry)  // The operation could not be carried out so try again
-        }
+          else {
+            game = game.copy(sequence = game.sequence.addActor(faction, actualAction))
+            log()
+            log(s"Move the $faction cylinder to the $actualAction box")
+          }
       }
-
-      selectAction(None)
-
     }
   }
 
+  sealed trait ExecuteResult
+  case object ER_OpPlusSpecial extends ExecuteResult
+  case object ER_OpOnly        extends ExecuteResult
+  case object ER_NoOp          extends ExecuteResult
 
   // Return TRUE if the operation was carried out
   // It may not be able to be done if:
@@ -2507,27 +2560,28 @@ object Bot {
   // off chance that we cycle through all of them and cannot perform
   // and operation.  Probably won't happend but this will prevent and
   // endless loop.
-  def executeOp(faction: Faction, params: Params): Boolean = {
+  def executeOp(faction: Faction, params: Params): ExecuteResult = {
     val firstCard = drawTrungCard(faction)
 
-    def executeCard(trungCard: TrungCard): Boolean = {
-       trungCard.execute(faction, params) match {
-         case  TrungComplete =>
-           true
+    def executeCard(trungCard: TrungCard): ExecuteResult = {
+      log(s"\n$faction Bot drew $trungCard")
+      trungCard.execute(faction, params) match {
+        case  TrungComplete(true)  => ER_OpPlusSpecial
+        case  TrungComplete(false) => ER_OpOnly
 
-         case  TrungDraw =>
-           val nextCard = drawTrungCard(faction)
-           if (nextCard == firstCard)
-             false
-           else
-             executeCard(nextCard)
+        case  TrungDraw =>
+          val nextCard = drawTrungCard(faction)
+          if (nextCard == firstCard)
+            ER_NoOp
+          else
+            executeCard(nextCard)
 
-         case  TrungFlip =>
-           executeCard(trungCard.flipSide)
+        case  TrungFlip =>
+          executeCard(trungCard.flipSide)
 
-         case  TrungNoOp =>
-           false
-       }
+        case  TrungNoOp =>
+          ER_NoOp
+      }
     }
 
     executeCard(firstCard)
@@ -2556,7 +2610,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2567,7 +2622,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2578,7 +2634,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2589,7 +2646,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2600,7 +2658,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2611,7 +2670,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2622,7 +2682,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2633,7 +2694,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2644,7 +2706,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2655,7 +2718,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2666,7 +2730,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2677,7 +2742,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2693,7 +2759,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2704,7 +2771,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2715,7 +2783,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2726,7 +2795,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2737,7 +2807,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2748,7 +2819,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2759,7 +2831,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2770,7 +2843,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2781,7 +2855,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2792,7 +2867,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2803,7 +2879,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2814,7 +2891,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2830,7 +2908,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2841,7 +2920,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2852,7 +2932,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2863,7 +2944,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2874,7 +2956,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2885,7 +2968,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2896,7 +2980,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2907,7 +2992,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2918,7 +3004,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2929,7 +3016,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2940,7 +3028,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2951,7 +3040,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2967,7 +3057,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -2978,7 +3069,31 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+
+      def doSpecialActivity(): Boolean = {
+        false
+      }
+
+      def doRally(): TrungResult = {
+        TrungComplete(params.includeSpecial)
+      }  
+
+      def doMarch(): TrungResult = {
+        TrungComplete(params.includeSpecial)
+      }  
+
+      val dice = rollDice(3)
+      val effective = if (dice <= game.availablePieces.totalOf(VCPieces)) 
+        VC_Bot.rallyOp(params)
+      else
+        VC_Bot.marchOp(params)
+
+      val didSpecial = effective && params.includeSpecial && doSpecialActivity()
+
+      if (effective)
+        TrungComplete(didSpecial)
+      else
+        TrungNoOp
     }
   }
 
@@ -2989,7 +3104,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -3000,7 +3116,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -3011,7 +3128,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -3022,7 +3140,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -3033,7 +3152,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -3044,7 +3164,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -3055,7 +3176,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -3066,7 +3188,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -3077,7 +3200,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 
@@ -3088,7 +3212,8 @@ object Bot {
 
 
     def execute(faction: Faction, params: Params): TrungResult = {
-      TrungComplete
+      log(s"\n$this not yet implemented!")
+      TrungNoOp
     }
   }
 }

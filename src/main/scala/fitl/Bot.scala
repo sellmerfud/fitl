@@ -104,15 +104,11 @@ object Bot {
   // The front and back of each card are treated a seperate
   // entities internally.
 
-  trait TrungCard {
-    val faction: Faction
-    val id: String
+  abstract class TrungCard(val faction: Faction, val id: String, val activationNumber: Int) {
     val flipSide: TrungCard
 
     def isFront = id.length == 1
-
     override def toString() = s"Trung: $faction - $id"
-    
     def execute(faction: Faction, params: Params): TrungResult
   }
 
@@ -134,7 +130,7 @@ object Bot {
     log(separator())
   }
 
-  def logIfNop(faction: Faction, op: Operation, noOp: Boolean): Unit = {
+  def logIfNoOp(faction: Faction, op: Operation, noOp: Boolean): Unit = {
     if (noOp)
       log(s"\nNo spaces found for $faction $op")
   }
@@ -2345,7 +2341,7 @@ object Bot {
     //
     //  Return true if we succesfully Rally in at least one space.
     //  -------------------------------------------------------------
-    def rallyOp(params: Params): Boolean = {
+    def rallyOp(params: Params, activationNumber: Int): Boolean = {
 
       false
     }
@@ -2358,7 +2354,7 @@ object Bot {
     //
     //  Return true if we succesfully March to at least one space.
     //  -------------------------------------------------------------
-    def marchOp(params: Params): Boolean = {
+    def marchOp(params: Params, activationNumber: Int): Boolean = {
       val LocPriorities = List(
         new HighestScore[Space](
           "Most Adjacent Underground VC Guerrillas",
@@ -2378,7 +2374,7 @@ object Bot {
           if (moveDestinations.size < 2 && locCandidates.nonEmpty) {
             Some(bestCandidate(locCandidates, LocPriorities).name)
           }
-          else if (candidates.nonEmpty && checkActivation(VC, needActivation, 2)) {
+          else if (candidates.nonEmpty && checkActivation(VC, needActivation, activationNumber)) {
             // Spaces using March Destinations column of Space Selection
             Some(VC_Bot.pickSpaceMarchDest(candidates).name)
           }
@@ -2386,7 +2382,7 @@ object Bot {
             None
         }
       }
-      logIfNop(VC, March, moveDestinations.isEmpty)
+      logIfNoOp(VC, March, moveDestinations.isEmpty)
       moveDestinations.nonEmpty
     }
   }
@@ -2603,143 +2599,107 @@ object Bot {
   // US Trung Cards
   // ================================================================
 
-  object Trung_US_A extends TrungCard {
-    val faction = US
-    val id = "A"
+  object Trung_US_A extends TrungCard(US, "A", 3) {
     lazy val flipSide = Trung_US_AA
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_US_AA extends TrungCard {
-    val faction = US
-    val id = "AA"
+  object Trung_US_AA extends TrungCard(US, "AA", 3) {
     lazy val flipSide = Trung_US_A
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_US_B extends TrungCard {
-    val faction = US
-    val id = "B"
+  object Trung_US_B extends TrungCard(US, "B", 3) {
     lazy val flipSide = Trung_US_BB
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_US_BB extends TrungCard {
-    val faction = US
-    val id = "BB"
+  object Trung_US_BB extends TrungCard(US, "BB", 3) {
     lazy val flipSide = Trung_US_B
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_US_C extends TrungCard {
-    val faction = US
-    val id = "C"
+  object Trung_US_C extends TrungCard(US, "C", 3) {
     lazy val flipSide = Trung_US_CC
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_US_CC extends TrungCard {
-    val faction = US
-    val id = "CC"
+  object Trung_US_CC extends TrungCard(US, "CC", 3) {
     lazy val flipSide = Trung_US_C
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_US_D extends TrungCard {
-    val faction = US
-    val id = "D"
+  object Trung_US_D extends TrungCard(US, "D", 3) {
     lazy val flipSide = Trung_US_DD
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_US_DD extends TrungCard {
-    val faction = US
-    val id = "DD"
+  object Trung_US_DD extends TrungCard(US, "DD", 3) {
     lazy val flipSide = Trung_US_D
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_US_E extends TrungCard {
-    val faction = US
-    val id = "E"
+  object Trung_US_E extends TrungCard(US, "E", 3) {
     lazy val flipSide = Trung_US_EE
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_US_EE extends TrungCard {
-    val faction = US
-    val id = "EE"
+  object Trung_US_EE extends TrungCard(US, "EE", 3) {
     lazy val flipSide = Trung_US_E
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_US_F extends TrungCard {
-    val faction = US
-    val id = "F"
+  object Trung_US_F extends TrungCard(US, "F", 3) {
     lazy val flipSide = Trung_US_FF
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_US_FF extends TrungCard {
-    val faction = US
-    val id = "FF"
+  object Trung_US_FF extends TrungCard(US, "FF", 3) {
     lazy val flipSide = Trung_US_F
-
 
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
@@ -2752,143 +2712,107 @@ object Bot {
   // ARVN Trung Cards
   // ================================================================
 
-  object Trung_ARVN_G extends TrungCard {
-    val faction = ARVN
-    val id = "G"
+  object Trung_ARVN_G extends TrungCard(ARVN, "G", 3) {
     lazy val flipSide = Trung_ARVN_GG
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_ARVN_GG extends TrungCard {
-    val faction = ARVN
-    val id = "GG"
+  object Trung_ARVN_GG extends TrungCard(ARVN, "GG", 3) {
     lazy val flipSide = Trung_ARVN_G
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_ARVN_H extends TrungCard {
-    val faction = ARVN
-    val id = "H"
+  object Trung_ARVN_H extends TrungCard(ARVN, "H", 3) {
     lazy val flipSide = Trung_ARVN_HH
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_ARVN_HH extends TrungCard {
-    val faction = ARVN
-    val id = "HH"
+  object Trung_ARVN_HH extends TrungCard(ARVN, "HH", 3) {
     lazy val flipSide = Trung_ARVN_H
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_ARVN_J extends TrungCard {
-    val faction = ARVN
-    val id = "J"
+  object Trung_ARVN_J extends TrungCard(ARVN, "J", 3) {
     lazy val flipSide = Trung_ARVN_JJ
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_ARVN_JJ extends TrungCard {
-    val faction = ARVN
-    val id = "JJ"
+  object Trung_ARVN_JJ extends TrungCard(ARVN, "JJ", 3) {
     lazy val flipSide = Trung_ARVN_J
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_ARVN_K extends TrungCard {
-    val faction = ARVN
-    val id = "K"
+  object Trung_ARVN_K extends TrungCard(ARVN, "K", 3) {
     lazy val flipSide = Trung_ARVN_KK
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_ARVN_KK extends TrungCard {
-    val faction = ARVN
-    val id = "KK"
+  object Trung_ARVN_KK extends TrungCard(ARVN, "KK", 3) {
     lazy val flipSide = Trung_ARVN_K
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_ARVN_L extends TrungCard {
-    val faction = ARVN
-    val id = "L"
+  object Trung_ARVN_L extends TrungCard(ARVN, "L", 3) {
     lazy val flipSide = Trung_ARVN_LL
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_ARVN_LL extends TrungCard {
-    val faction = ARVN
-    val id = "LL"
+  object Trung_ARVN_LL extends TrungCard(ARVN, "LL", 3) {
     lazy val flipSide = Trung_ARVN_L
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_ARVN_M extends TrungCard {
-    val faction = ARVN
-    val id = "M"
+  object Trung_ARVN_M extends TrungCard(ARVN, "M", 3) {
     lazy val flipSide = Trung_ARVN_MM
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_ARVN_MM extends TrungCard {
-    val faction = ARVN
-    val id = "MM"
+  object Trung_ARVN_MM extends TrungCard(ARVN, "MM", 3) {
     lazy val flipSide = Trung_ARVN_M
-
 
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
@@ -2901,143 +2825,107 @@ object Bot {
   // NVA Trung Cards
   // ================================================================
 
-  object Trung_NVA_N extends TrungCard {
-    val faction = NVA
-    val id = "N"
+  object Trung_NVA_N extends TrungCard(NVA, "N", 2) {
     lazy val flipSide = Trung_NVA_NN
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_NVA_NN extends TrungCard {
-    val faction = NVA
-    val id = "NN"
+  object Trung_NVA_NN extends TrungCard(NVA, "NN", 2) {
     lazy val flipSide = Trung_NVA_N
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_NVA_P extends TrungCard {
-    val faction = NVA
-    val id = "P"
+  object Trung_NVA_P extends TrungCard(NVA, "P", 2) {
     lazy val flipSide = Trung_NVA_PP
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_NVA_PP extends TrungCard {
-    val faction = NVA
-    val id = "PP"
+  object Trung_NVA_PP extends TrungCard(NVA, "PP", 2) {
     lazy val flipSide = Trung_NVA_P
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_NVA_Q   extends TrungCard {
-    val faction = NVA
-    val id = "Q"
+  object Trung_NVA_Q extends TrungCard(NVA, "Q", 2) {
     lazy val flipSide = Trung_NVA_QQ
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_NVA_QQ   extends TrungCard {
-    val faction = NVA
-    val id = "QQ"
+  object Trung_NVA_QQ extends TrungCard(NVA, "QQ", 2) {
     lazy val flipSide = Trung_NVA_Q
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_NVA_R   extends TrungCard {
-    val faction = NVA
-    val id = "R"
+  object Trung_NVA_R extends TrungCard(NVA, "R", 2) {
     lazy val flipSide = Trung_NVA_RR
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_NVA_RR   extends TrungCard {
-    val faction = NVA
-    val id = "RR"
+  object Trung_NVA_RR extends TrungCard(NVA, "RR", 2) {
     lazy val flipSide = Trung_NVA_R
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_NVA_S   extends TrungCard {
-    val faction = NVA
-    val id = "S"
+  object Trung_NVA_S extends TrungCard(NVA, "S", 2) {
     lazy val flipSide = Trung_NVA_SS
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_NVA_SS   extends TrungCard {
-    val faction = NVA
-    val id = "SS"
+  object Trung_NVA_SS extends TrungCard(NVA, "SS", 2) {
     lazy val flipSide = Trung_NVA_S
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_NVA_T   extends TrungCard {
-    val faction = NVA
-    val id = "T"
+  object Trung_NVA_T extends TrungCard(NVA, "T", 2) {
     lazy val flipSide = Trung_NVA_TT
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_NVA_TT   extends TrungCard {
-    val faction = NVA
-    val id = "TT"
+  object Trung_NVA_TT extends TrungCard(NVA, "TT", 2) {
     lazy val flipSide = Trung_NVA_T
-
 
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
@@ -3050,11 +2938,8 @@ object Bot {
   // VC Trung Cards
   // ================================================================
 
-  object Trung_VC_U extends TrungCard {
-    val faction = VC
-    val id = "U"
+  object Trung_VC_U extends TrungCard(VC, "U", 2) {
     lazy val flipSide = Trung_VC_UU
-
 
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
@@ -3062,11 +2947,8 @@ object Bot {
     }
   }
 
-  object Trung_VC_UU extends TrungCard {
-    val faction = VC
-    val id = "UU"
+  object Trung_VC_UU extends TrungCard(VC, "UU", 2) {
     lazy val flipSide = Trung_VC_U
-
 
     def execute(faction: Faction, params: Params): TrungResult = {
 
@@ -3084,9 +2966,9 @@ object Bot {
 
       val dice = rollDice(3)
       val effective = if (dice <= game.availablePieces.totalOf(VCPieces)) 
-        VC_Bot.rallyOp(params)
+        VC_Bot.rallyOp(params, activationNumber)
       else
-        VC_Bot.marchOp(params)
+        VC_Bot.marchOp(params, activationNumber)
 
       val didSpecial = effective && params.includeSpecial && doSpecialActivity()
 
@@ -3097,119 +2979,89 @@ object Bot {
     }
   }
 
-  object Trung_VC_V extends TrungCard {
-    val faction = VC
-    val id = "V"
+  object Trung_VC_V extends TrungCard(VC, "V", 2) {
     lazy val flipSide = Trung_VC_VV
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_VC_VV extends TrungCard {
-    val faction = VC
-    val id = "VV"
+  object Trung_VC_VV extends TrungCard(VC, "VV", 2) {
     lazy val flipSide = Trung_VC_V
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_VC_W extends TrungCard {
-    val faction = VC
-    val id = "W"
+  object Trung_VC_W extends TrungCard(VC, "W", 2) {
     lazy val flipSide = Trung_VC_WW
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_VC_WW extends TrungCard {
-    val faction = VC
-    val id = "WW"
+  object Trung_VC_WW extends TrungCard(VC, "WW", 2) {
     lazy val flipSide = Trung_VC_W
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_VC_X extends TrungCard {
-    val faction = VC
-    val id = "X"
+  object Trung_VC_X extends TrungCard(VC, "X", 2) {
     lazy val flipSide = Trung_VC_XX
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_VC_XX extends TrungCard {
-    val faction = VC
-    val id = "XX"
+  object Trung_VC_XX extends TrungCard(VC, "XX", 2) {
     lazy val flipSide = Trung_VC_X
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_VC_Y extends TrungCard {
-    val faction = VC
-    val id = "Y"
+  object Trung_VC_Y extends TrungCard(VC, "Y", 2) {
     lazy val flipSide = Trung_VC_YY
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_VC_YY extends TrungCard {
-    val faction = VC
-    val id = "YY"
+  object Trung_VC_YY extends TrungCard(VC, "YY", 2) {
     lazy val flipSide = Trung_VC_Y
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_VC_Z extends TrungCard {
-    val faction = VC
-    val id = "Z"
+  object Trung_VC_Z extends TrungCard(VC, "Z", 2) {
     lazy val flipSide = Trung_VC_ZZ
 
-
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
   }
 
-  object Trung_VC_ZZ extends TrungCard {
-    val faction = VC
-    val id = "ZZ"
+  object Trung_VC_ZZ extends TrungCard(VC, "ZZ", 2) {
     lazy val flipSide = Trung_VC_Z
-
 
     def execute(faction: Faction, params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")

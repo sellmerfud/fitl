@@ -57,7 +57,7 @@ object Bot {
   private val NO_SCORE  = -1000
 
   def botLog(msg: => String) = if (game.botLogging) log(msg)
-  def msgResult(msg: String, result: Any): String = {
+  def msgResult(result: Any, msg: String): String = {
     val resultStr = result match {
       case true  => "yes"
       case false => "no"
@@ -67,6 +67,22 @@ object Bot {
     s"$msg $resultStr"
   }
 
+  //  We log each choice in the list stopping after we reach the
+  //  first condition that is true.
+  def botLogChoices(choices: => List[(Boolean, String)]): Unit = {
+
+    def logNext(remaining: List[(Boolean, String)]): Unit = remaining match {
+      case Nil =>
+      case (cond, msg)::xs if cond =>
+        log(msgResult(cond, msg))
+      case (cond, msg)::xs =>
+        log(msgResult(cond, msg))
+        logNext(xs)
+    }
+
+    if (game.botLogging)
+      logNext(choices)
+  }
 
   case class Params(
     includeSpecial: Boolean         = false,
@@ -104,10 +120,9 @@ object Bot {
   // selected as a move destination.
   private var moveDestinations = Set.empty[String]
 
-  // Used to implement M48Patton_Shaded
-  // US/ARVN must remove two of the cubes that moved
-  private var patrolCubes = new MovingGroups()
-
+  // Keeps track of all pieces that actually moved
+  // during March/Sweep/Patrol/Transport/Air Lift..
+  private var movedPieces      = new MovingGroups()
 
   // Used to implement the Eligibility Tables
   case class ActionEntry(val action: Action, desc: String, test: (Faction) => Boolean)
@@ -169,6 +184,91 @@ object Bot {
     val sp = game.getSpace(name)
     sp.sweepActivations(faction) > 0 && sp.pieces.totalOf(UndergroundGuerrillas) > 0
   }
+
+    // Determine if the given faction can effectively Ambush
+  // from the given space
+  def canAmbushFrom(faction: Faction)(sp: Space): Boolean = {
+    val GType = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
+
+    sp.pieces.has(GType) && 
+    (sp.pieces.has(CoinPieces) || 
+     sp.isLoC && numAdjacentPieces(sp: Space, CoinPieces) > 0)      
+  }
+
+  //  -------------------------------------------------------------
+  //  NVA and VC Ambush Activity
+  //  This function should be called with a list of all spaces that
+  //  can perform an ambush.
+  //  It will select up to two spaces.
+  //  For march, this is called after all marching has been completed so
+  //  there is no need to make activation rolls.
+  //  For Attack, this is called as part of the Attack and thus an activation
+  //  roll may be necesasry.
+  //  
+  //  Mo_Claymores          - Prohibits Ambush
+  //  Mo_TyphoonKate        - All SA's are limited to 1 space
+  //  MainForceBns_Shaded   - 1 VC Ambush space may remove 2 enemy pieces
+  //  BoobyTraps_Unshaded   - Ambush is max one space
+  //  PT76_Unshaded         - If Attack, then NVA must first remove 1 Troop (if one is present)
+  //  -------------------------------------------------------------
+  def ambushActivity(faction: Faction, ambushCandidates: List[String], op: Operation, activationNumber: Option[Int]): Unit = {
+    var ambushSpaces     = Set.empty[String]
+    var mainForceBnsUsed = false
+    val limited          = momentumInPlay(Mo_TyphoonKate) || capabilityInPlay(BoobyTraps_Unshaded)
+    val maxAmbush = if (limited) 1 else 2
+
+    def canAmbush = ambushSpaces.isEmpty || 
+                    checkActivation(faction, activationNumber.nonEmpty, activationNumber getOrElse 1)
+    def nextAmbush(candidates: List[String]): Unit = {
+      // Re-verify that we can ambush in the spaces because
+      // a previous ambush may have removed a target piece
+      val validSpaces = spaces(candidates) filter canAmbushFrom(faction)
+      if (validSpaces.nonEmpty && ambushSpaces.size < maxAmbush && canAmbush) {
+        val (sp, target) = if (faction == NVA)
+          NVA_Bot.pickSpaceAndTargetForAmbush(validSpaces)
+        else
+          VC_Bot.pickSpaceAndTargetForAmbush(validSpaces)
+        val coinPieces = target.pieces.only(CoinPieces)
+        val maxNum     = if (faction == VC && capabilityInPlay(MainForceBns_Shaded) && !mainForceBnsUsed) 2 else 1
+        val num        = coinPieces.total min maxNum
+        // Bases only removed if no other Coin forces (of either faction)
+        val targetPieces = if (coinPieces.totalOf(CoinForces) >= num)
+          coinPieces.only(CoinForces)
+        else
+          coinPieces
+        val deadPieces = selectEnemyRemovePlaceActivate(targetPieces, num)
+
+        if (ambushSpaces.isEmpty)
+          logSAChoice(faction, Ambush)
+
+        if (sp.name == target.name)
+          log(s"\n$faction Ambushes in ${sp.name}")
+        else
+          log(s"\n$faction Ambushes in ${sp.name}, targeting ${target.name}")
+        log(separator())
+
+        if (deadPieces.total == 2) {
+          log(s"$faction elects to remove 2 enemy pieces [$MainForceBns_Shaded]")
+          mainForceBnsUsed = true
+        }
+
+        if (faction == NVA && op == Attack && capabilityInPlay(PT76_Unshaded) && sp.pieces.has(NVATroops))
+          removeToAvailable(sp.name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
+
+        revealPieces(sp.name, Pieces(vcGuerrillas_U = 1))
+        removePieces(target.name, deadPieces)
+        ambushSpaces = ambushSpaces + sp.name
+        nextAmbush(validSpaces map (_.name) filterNot (_ == sp.name))
+      }
+    }
+
+    // ambushSpaces
+    if (momentumInPlay(Mo_Claymores) || ambushSpaces.size == maxAmbush)
+      false
+    else
+      nextAmbush(ambushCandidates)
+  }
+
 
 
   // Type used for checking conditions in the
@@ -1784,8 +1884,7 @@ object Bot {
               log(separator())
             }
             movePieces(toMove, originName, destName)
-            if (action == Patrol)
-              patrolCubes.add(destName, toMove)
+            movedPieces.add(destName, toMove)
 
             // Marching Guerrillas may have to activate
             if (action == March) {
@@ -2156,6 +2255,13 @@ object Bot {
     else
       getAdjacent(name)
 
+    val MostUndergroundGuerrillas = List(
+      new HighestScore[Space](
+        "Most Underground NVA Guerrillas",
+        sp => sp.pieces.numOf(NVAGuerrillas_U)
+      )
+    )
+
 
     // NVA Spaces Priorities: Place Bases or Tunnels
     def pickSpacePlaceBases(candidates: List[Space]): Space = {
@@ -2263,6 +2369,22 @@ object Bot {
       bestCandidate(candidates, priorities)
     }
 
+        //  Returns the space selected for Ambush and the space being targeted by the Ambush
+    //  The targeted space can be the same as the ambushing space or of the ambush space
+    //  is a LoC the targeted space can be an adjacent space.
+    def pickSpaceAndTargetForAmbush(candidates: List[Space]): (Space, Space) = {
+      // First find all possible target spaces and pick the best one.
+      val targetCandidates = spaces(candidates flatMap (sp => ambushTargets(sp.name)))
+      val targetSpace      = pickSpaceRemoveReplace(targetCandidates)
+      
+      // Now find all of the original candidate spaces that can target the 
+      // target space and pick the one with the must Undeground Guerrillas.
+      val reachableCandidates = candidates filter (sp => ambushTargets(sp.name) contains targetSpace.name)
+      val ambushSpace = bestCandidate(reachableCandidates, MostUndergroundGuerrillas)
+
+      (ambushSpace, targetSpace)
+    }
+
   }
 
   // ================================================================
@@ -2270,6 +2392,27 @@ object Bot {
   // ================================================================
   object VC_Bot {
     
+    val canSubvertSpace = (sp: Space) => sp.pieces.has(VCGuerrillas_U) && sp.pieces.has(ARVNCubes)
+    val canTaxSpace = (sp: Space) => {
+      // Bot will only tax spaces with a VC Base if at least 2 underground guerrillas
+      val hasG = (sp.pieces.has(VCBase::VCTunnel::Nil) && sp.pieces.numOf(VCGuerrillas_U) > 1) || sp.pieces.has(VCGuerrillas_U)
+      hasG && ((sp.isLoC && sp.printedEconValue > 0) || (!sp.coinControlled && sp.population > 0))
+    }
+
+    val MostUndergroundGuerrillas = List(
+      new HighestScore[Space](
+        "Most Underground VC Guerrillas",
+        sp => sp.pieces.numOf(VCGuerrillas_U)
+      )
+    )
+
+    val MostActiveGuerrillas = List(
+      new HighestScore[Space](
+        "Most Active VC Guerrillas",
+        sp => sp.pieces.numOf(VCGuerrillas_A)
+      )
+    )
+
     // VC Spaces Priorities: Shift Toward Active Opposition
     def pickSpaceTowardActiveSupport(candidates: List[Space]): Space = {
 
@@ -2383,6 +2526,22 @@ object Bot {
       bestCandidate(candidates, priorities)
     }
 
+    //  Returns the space selected for Ambush and the space being targeted by the Ambush
+    //  The targeted space can be the same as the ambushing space or of the ambush space
+    //  is a LoC the targeted space can be an adjacent space.
+    def pickSpaceAndTargetForAmbush(candidates: List[Space]): (Space, Space) = {
+      // First find all possible target spaces and pick the best one.
+      val targetCandidates = spaces(candidates flatMap (sp => ambushTargets(sp.name)))
+      val targetSpace = pickSpaceRemoveReplace(targetCandidates)
+      
+      // Now find all of the original candidate spaces that can target the 
+      // target space and pick the one with the must Undeground Guerrillas.
+      val reachableCandidates = candidates filter (sp => ambushTargets(sp.name) contains targetSpace.name)
+      val ambushSpace = bestCandidate(reachableCandidates, MostUndergroundGuerrillas)
+
+      (ambushSpace, targetSpace)
+    }
+
     //  -------------------------------------------------------------
     //  Implement the VC Rally Instructions from the VC Trung cards.
     //  1. Place Bases where 3+ VC Guerrillas
@@ -2416,12 +2575,6 @@ object Bot {
         sp.pieces.has(VCGuerrillas_A) &&
         !sp.pieces.has(VCGuerrillas_U)
       }
-      val MostActiveGuerrillasPriorities = List(
-        new HighestScore[Space](
-          "Most Active VC Guerrillas",
-          sp => sp.pieces.numOf(VCGuerrillas_A)
-        )
-      )
 
       def tryCadresAgitate(sp: Space): Unit = {
         if (!agitated && cadres && sp.support > ActiveOpposition && game.agitateTotal > 0) {
@@ -2473,7 +2626,7 @@ object Bot {
 
       def rallyToFlipGuerrillas(candidates: List[Space]): Unit = {
         if (candidates.nonEmpty && canRally) {
-          val sp = bestCandidate(candidates, MostActiveGuerrillasPriorities)
+          val sp = bestCandidate(candidates, MostActiveGuerrillas)
 
           log(s"\n$VC selects ${sp.name} for Rally")
           log(separator())
@@ -2529,6 +2682,65 @@ object Bot {
       }
       logIfNoOp(VC, March, moveDestinations.isEmpty)
       if (moveDestinations.nonEmpty) Some(March) else None
+    }
+
+    //  -------------------------------------------------------------
+    //  VC Tax Activity
+    //  -------------------------------------------------------------
+    def taxActivity(): Unit = {
+      val maxTax = if (momentumInPlay(Mo_TyphoonKate)) 1 else d3
+      def nextTax(candidates: List[Space], numTaxed: Int): Unit = {
+        if (candidates.nonEmpty && numTaxed < maxTax) {
+          val sp    = pickSpaceTax(candidates)
+          val num  = if (sp.isLoC) sp.printedEconValue else sp.population
+
+          if (numTaxed == 0)
+            logSAChoice(VC, Tax)
+
+          log(s"\nVC Taxes in ${sp.name}")
+          log(separator())
+          revealPieces(sp.name, Pieces(vcGuerrillas_U = 1))
+          if (!sp.isLoC && sp.support != ActiveSupport)
+            increaseSupport(sp.name, 1)
+          increaseAgitateTotal(num)
+          nextTax(candidates filterNot (_.name == sp.name), numTaxed + 1)
+        }
+      }
+
+      nextTax(game.spaces filter canTaxSpace, 0)
+    }
+
+    //  -------------------------------------------------------------
+    //  VC Subert Activity
+    //  -------------------------------------------------------------
+    def subvertActivity(): Unit = {
+      val maxSubvert = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
+      var totalRemoved = 0
+
+      def nextSubvert(candidates: List[Space], numSubverted: Int): Unit = {
+        if (candidates.nonEmpty && numSubverted < maxSubvert) {
+          val sp       = pickSpaceRemoveReplace(candidates)
+          val cubes    = sp.pieces.only(ARVNCubes)
+          val toRemove = selectEnemyRemovePlaceActivate(cubes, cubes.total min 2)
+  
+          if (numSubverted == 0)
+            logSAChoice(VC, Subvert)
+  
+          log(s"\nVC Subverts in ${sp.name}")
+          log(separator())
+          removeToAvailable(sp.name, toRemove)
+          totalRemoved += toRemove.total
+          if (toRemove.total == 1 && game.availablePieces.has(VCGuerrillas_U))
+            placePieces(sp.name, Pieces(vcGuerrillas_U = 1))
+          nextSubvert(candidates filterNot (_.name == sp.name), numSubverted + 1)
+        }
+      }
+
+      nextSubvert(game.spaces filter VC_Bot.canSubvertSpace, 0)
+      if (totalRemoved / 2 > 0) {
+        log()
+        decreasePatronage(totalRemoved / 2)
+      }
     }
   }
 
@@ -2623,15 +2835,14 @@ object Bot {
 
     table find { entry =>
       val result = entry.test(faction)
-      botLog(msgResult(entry.desc, result))
+      botLog(msgResult(result, entry.desc))
       result
     }
   }
 
-
   def initTurnVariables(): Unit = {
     moveDestinations = Set.empty
-    patrolCubes.reset()
+    movedPieces.reset()
   }
 
   //  A bot is the next eligible faction
@@ -3099,8 +3310,31 @@ object Bot {
     def execute(params: Params): TrungResult = {
 
       def doSpecialActivity(op: InsurgentOp): Boolean = {
-        false
+        val ambushCandidates = spaceNames(spaces(moveDestinations) filter canAmbushFrom(VC))
+        val canAmbush        = op == March && ambushCandidates.nonEmpty
+        val agitateRoll      = rollDice(2)
+        val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
+        val canSubvert       = game.spaces exists VC_Bot.canSubvertSpace
+        
+        botLog("VC will attempt to perform a Special Activity")
+        botLog(separator())
+        botLogChoices(List(
+          (canAmbush  ->  "Ambush: March operation and can Ambush from a March destination"),
+          (canTax     -> s"Tax: 2d6 ($agitateRoll) > Agitate Total (${game.agitateTotal}) and valid spaces"),
+          (canSubvert ->  "Subvert: Any spaces with Underground VC Guerrillas and ARVN Cubes")
+        ))
+
+        if (canAmbush)
+          ambushActivity(VC, ambushCandidates, op, activationNumber = None)
+        else if (canTax)
+          VC_Bot.taxActivity()
+        else if (canSubvert)
+          VC_Bot.subvertActivity()
+
+        // Return true if we did a special Activity
+        (canAmbush || canTax || canSubvert)
       }
+
       val dice = rollDice(3)
       botLog(s"Dice roll: $dice, available VC pieces: ${game.availablePieces.totalOf(VCPieces)}")
 

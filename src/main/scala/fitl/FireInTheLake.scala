@@ -2465,7 +2465,7 @@ object FireInTheLake {
   def increaseSupport(name: String, num: Int): Unit = if (num > 0) {
     loggingPointsChanges {
       val sp = game.getSpace(name)
-      if (sp.population > 0) {
+      if (!sp.isLoC && sp.population > 0) {
         val newSupport = try SupportType(sp.support.value + num)
         catch {
           case _: IllegalArgumentException =>

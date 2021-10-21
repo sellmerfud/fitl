@@ -381,7 +381,7 @@ object Human {
   // Carry out an ambush in the given space
   // MainForceBns_Shaded   - 1 VC Ambush space may remove 2 enemy pieces
   // PT76_Unshaded - Each NVA attack space, first remove 1 NVA troop cube (also ambush)
-  def performAmbush(name: String, faction: Faction, free: Boolean): Boolean = {
+  def performAmbush(name: String, faction: Faction, op: Operation, free: Boolean): Boolean = {
     val sp = game.getSpace(name)
     val ambusher = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
     val candidates = ambushTargets(name)
@@ -410,7 +410,7 @@ object Human {
           log(separator())
           if (!free)
             decreaseResources(faction, 1)
-          if (faction == NVA && capabilityInPlay(PT76_Unshaded) && sp.pieces.has(NVATroops))
+          if (faction == NVA && op == Attack && capabilityInPlay(PT76_Unshaded) && sp.pieces.has(NVATroops))
             removeToAvailable(name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
           revealPieces(name, Pieces().set(1, ambusher))
           removePieces(targetName, deadPieces)
@@ -1495,7 +1495,7 @@ object Human {
       log(separator())
       revealPieces(name, Pieces(vcGuerrillas_U = 1))
       increaseResources(VC, num)
-      if (sp.support != ActiveSupport)
+      if (!sp.isLoC && sp.support != ActiveSupport)
         increaseSupport(name, 1)
     }
     
@@ -2875,7 +2875,7 @@ object Human {
 
 
         case AmbushOpt(name) =>
-          if (performAmbush(name, faction, free = true)) {
+          if (performAmbush(name, faction, March, free = true)) {
             // An uderground member of the the movedInto group was just flipped
             // to active.  We must update the movedInto group to reflect that.
             val (underground, active) = if (faction == NVA)
@@ -2966,8 +2966,8 @@ object Human {
           nextAttackAction()
 
         case "ambush" =>
-          askCandidateOrBlank("\nAmbush which space: ", attackCandidates) foreach { name =>
-            performAmbush(name, faction, free = params.free)
+          askCandidateOrBlank("\nAmbush which space: ", ambushCandidates) foreach { name =>
+            performAmbush(name, faction, Attack, free = params.free)
             attackSpaces = attackSpaces + name
           }
           nextAttackAction()

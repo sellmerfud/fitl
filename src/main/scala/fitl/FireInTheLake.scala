@@ -1438,6 +1438,8 @@ object FireInTheLake {
     lazy val locSpaces = spaces filter (_.isLoC)
     lazy val nonLocSpaces = spaces filterNot (_.isLoC)
 
+    val agitateTotal = vcResources
+
     // Create a one line turn description for the current game state.
     // This is used to mark the current game segment, etc.
     // "#10 Rolling Thunder - 0 acted, US is up"
@@ -2220,7 +2222,8 @@ object FireInTheLake {
             resolveNextActor()
           case BotCmd  =>
             // Bot.testMove()
-            Bot.act()
+            Bot.Trung_VC_UU.execute(Bot.Params())
+            // Bot.act()
             log(s"\nFinished with $faction turn")
             saveGameState(game.description)
             resolveNextActor()
@@ -2449,12 +2452,11 @@ object FireInTheLake {
   // If VC is a Bot, the we store the agitate total in vcResources
   def increaseAgitateTotal(amount: Int): Unit = if (game.isBot(VC) && amount > 0) {
     game = game.copy(vcResources = (game.vcResources + amount) min EdgeTrackMax)
-    
     log(s"Increase Agitate Total by +$amount to ${game.vcResources}")
   }
 
   // If VC is a Bot, the we store the agitate total in vcResources
-  def decreaseAgitateTotal(faction: Faction, amount: Int): Unit = if (game.isBot(VC) && amount > 0) {
+  def decreaseAgitateTotal(amount: Int): Unit = if (game.isBot(VC) && amount > 0) {
     game = game.copy(vcResources = (game.vcResources - amount) max 0)
     log(s"Decrease Agitate Total by -$amount to ${game.vcResources}")
   }
@@ -2527,7 +2529,6 @@ object FireInTheLake {
 
       assert(pieces.totalBases + sp.pieces.totalBases <= 2, s"Cannot place more than 2 bases in $spaceName")
       game = game.updateSpace(sp.copy(pieces = sp.pieces + pieces))
-      log()
       for (desc <- pieces.descriptions)        
         log(s"Place $desc from AVAILABLE into $spaceName")
     }

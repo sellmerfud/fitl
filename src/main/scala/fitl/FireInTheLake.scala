@@ -2616,7 +2616,6 @@ object FireInTheLake {
     val updated = sp.copy(pieces = sp.pieces - hidden + visible)
     game = game.updateSpace(updated)
     
-    log()
     for (desc <- hidden.descriptions)
       log(s"Flip $desc in $spaceName to ACTIVE")
   }
@@ -2636,7 +2635,6 @@ object FireInTheLake {
     val updated = sp.copy(pieces = sp.pieces - visible + hidden)
     game = game.updateSpace(updated)
 
-    log()
     for (desc <- visible.descriptions)
       log(s"Flip $desc in $spaceName to UNDERGROUND")
   }

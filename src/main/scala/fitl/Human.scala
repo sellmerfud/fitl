@@ -2798,8 +2798,8 @@ object Human {
 
             movePieces(movers, srcName, destName)
 
-            val activateNum = if (mainForceBins) 1 else 3
-            val activate    = (dest.isLoC || dest.support > Neutral) && (numCoin + movers.total) > activateNum
+            val tolearance = if (mainForceBins) 1 else 3
+            val activate   = (dest.isLoC || dest.support > Neutral) && (numCoin + movers.total) > tolearance
             if (activate) {
               val activeType = if (faction == NVA) NVAGuerrillas_A else VCGuerrillas_A
               val hidden     = movers.only(UndergroundGuerrillas)

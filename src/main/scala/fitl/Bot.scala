@@ -56,11 +56,6 @@ object Bot {
   // Citys and Provinces.
   private val NO_SCORE  = -1000
 
-  // Used to keep track of moveDestinations during and operation
-  // The Bots will never move pieces out of a space that has been
-  // selected as a move destination.
-  private var moveDestinations = Set.empty[String]
-
   def botLog(msg: => String) = if (game.botLogging) log(msg)
   def msgResult(msg: String, result: Any): String = {
     val resultStr = result match {
@@ -85,8 +80,34 @@ object Bot {
     def spaceAllowed(name: String) = {
       (onlyIn map (allowed =>  allowed.contains(name)) getOrElse true)
     }
-
   }
+
+  class MovingGroups() {
+    // Map Space Name, to Pieces in that space that cannot move.
+    var groups: Map[String, Pieces] = Map.empty.withDefaultValue(Pieces())
+
+    def reset(): Unit = groups = Map.empty.withDefaultValue(Pieces())
+    def apply(name: String): Pieces = groups(name)
+    def add(name: String, pieces: Pieces): Unit = groups += name -> (groups(name) + pieces)
+    def remove(name: String, pieces: Pieces): Unit = groups += name -> (groups(name) - pieces)
+
+    def spaces = groups.keys.toSet
+    def toList = groups.toList.sortBy(_._1)
+    def allPieces = toList.foldLeft(Pieces()) { (all, group) => all + group._2 }
+    def size   = groups.size
+  }
+
+  // Variable Global within the Bot object
+  // ---------------------------------------
+  // Used to keep track of moveDestinations during and operation
+  // The Bots will never move pieces out of a space that has been
+  // selected as a move destination.
+  private var moveDestinations = Set.empty[String]
+
+  // Used to implement M48Patton_Shaded
+  // US/ARVN must remove two of the cubes that moved
+  private var patrolCubes = new MovingGroups()
+
 
   // Used to implement the Eligibility Tables
   case class ActionEntry(val action: Action, desc: String, test: (Faction) => Boolean)
@@ -1763,6 +1784,33 @@ object Bot {
               log(separator())
             }
             movePieces(toMove, originName, destName)
+            if (action == Patrol)
+              patrolCubes.add(destName, toMove)
+
+            // Marching Guerrillas may have to activate
+            if (action == March) {
+              val dest         = game.getSpace(destName)
+              val underground  = toMove.only(UndergroundGuerrillas)
+              val numForces    = dest.pieces.totalOf(CoinForces)
+              val mainForceBns = capabilityInPlay(MainForceBns_Unshaded)
+              val tolerance    = if (mainForceBns) 1 else 3
+              val activate     = underground.nonEmpty &&
+                                 (dest.isLoC || dest.support > Neutral) &&
+                                 (toMove.total + numForces) > tolerance
+
+              if (activate) {
+                val suffix = if (mainForceBns) s" [$MainForceBns_Unshaded]" else ""
+                log(s"\nThe moving Guerrillas must activate$suffix")
+                log(separator())
+                revealPieces(destName, underground)
+
+                if (momentumInPlay(Mo_Claymores)) {
+                  log(s"\nMust remove Guerrilla that activated [Momentum: $Mo_Claymores")
+                  log(separator())
+                  removeToAvailable(destName, Pieces().set(1, underground.getTypes.head))
+                }
+              }
+            }
             //  The dest space can no longer be considered for
             //  a destination or for an origin
             moveDestinations = moveDestinations + destName
@@ -2346,7 +2394,7 @@ object Bot {
     //                  toward Active Opposition up to Agitate Total
     //  Return true if we succesfully Rally in at least one space.
     //  -------------------------------------------------------------
-    def rallyOp(params: Params, activationNumber: Int): Boolean = {
+    def rallyOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
       var rallySpaces  = Set.empty[String]
       var agitated     = false  // Using Cadres
       val cadres       = capabilityInPlay(Cadres_Shaded)
@@ -2378,6 +2426,7 @@ object Bot {
       def tryCadresAgitate(sp: Space): Unit = {
         if (!agitated && cadres && sp.support > ActiveOpposition && game.agitateTotal > 0) {
           log(s"\nVC Agitates in ${sp.name} [$Cadres_Shaded]")
+          log(separator())
           val numTerror = sp.terror min game.agitateTotal
           val numShift  = (sp.support.value - ActiveOpposition.value) min (game.agitateTotal - numTerror) min 2
           removeTerror(sp.name, numTerror)
@@ -2439,7 +2488,7 @@ object Bot {
       rallyToPlaceBase(game.nonLocSpaces filter canRallyBase)
       rallyToPlaceGuerrillas(game.nonLocSpaces filter canRallyGuerrillas)
       rallyToFlipGuerrillas(game.nonLocSpaces filter canFlipGuerrillas)
-      rallied
+      if (rallied) Some(Rally) else None
     }
 
     //  -------------------------------------------------------------
@@ -2450,7 +2499,7 @@ object Bot {
     //
     //  Return true if we succesfully March to at least one space.
     //  -------------------------------------------------------------
-    def marchOp(params: Params, activationNumber: Int): Boolean = {
+    def marchOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
       val LocPriorities = List(
         new HighestScore[Space](
           "Most Adjacent Underground VC Guerrillas",
@@ -2479,7 +2528,7 @@ object Bot {
         }
       }
       logIfNoOp(VC, March, moveDestinations.isEmpty)
-      moveDestinations.nonEmpty
+      if (moveDestinations.nonEmpty) Some(March) else None
     }
   }
 
@@ -2582,6 +2631,7 @@ object Bot {
 
   def initTurnVariables(): Unit = {
     moveDestinations = Set.empty
+    patrolCubes.reset()
   }
 
   //  A bot is the next eligible faction
@@ -3048,22 +3098,22 @@ object Bot {
 
     def execute(params: Params): TrungResult = {
 
-      def doSpecialActivity(): Boolean = {
+      def doSpecialActivity(op: InsurgentOp): Boolean = {
         false
       }
       val dice = rollDice(3)
-      botLog(s"dice roll: $dice, available VC pieces: ${game.availablePieces.totalOf(VCPieces)}")
-      val effective = if (dice <= game.availablePieces.totalOf(VCPieces)) 
+      botLog(s"Dice roll: $dice, available VC pieces: ${game.availablePieces.totalOf(VCPieces)}")
+
+      val operation = if (dice <= game.availablePieces.totalOf(VCPieces))
         VC_Bot.rallyOp(params, activationNumber)
       else
         VC_Bot.marchOp(params, activationNumber)
 
-      val didSpecial = effective && params.includeSpecial && doSpecialActivity()
-
-      if (effective)
-        TrungComplete(didSpecial)
-      else
-        TrungNoOp
+      operation match {
+        case Some(op) if params.includeSpecial && doSpecialActivity(op) => TrungComplete(true)
+        case Some(op) => TrungComplete(false)
+        case None     => TrungNoOp
+      }
     }
   }
 

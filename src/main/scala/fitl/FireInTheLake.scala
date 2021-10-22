@@ -2222,7 +2222,7 @@ object FireInTheLake {
             resolveNextActor()
           case BotCmd  =>
             // Bot.testMove()
-            Bot.Trung_VC_UU.execute(Bot.Params(specialActivity = true))
+            Bot.Trung_VC_U.execute(Bot.Params(specialActivity = true))
             // Bot.act()
             log(s"\nFinished with $faction turn")
             saveGameState(game.description)
@@ -2299,13 +2299,11 @@ object FireInTheLake {
   //  The game state is updated and the topmost card
   //  is returned.
   def drawTrungCard(faction: Faction): TrungCard = {
-
     var deck = game.trungDeck
         
     // First the topmost card is place on the bottom
     // Then continue drawing until we get a card for the 
-    // given faction.
-    
+    // given faction.    
     do {
       deck = deck.tail :+ deck.head  
     } while (deck.head.faction != faction)
@@ -2389,6 +2387,7 @@ object FireInTheLake {
     }
   }
 
+  //  Add terror/sabotage markers
   def addTerror(name: String, num: Int): Unit = if (num > 0) {
     val sp = game.getSpace(name)
     assert(game.terrorMarkersAvailable >= num, s"addTerror($name): not enough available markers")
@@ -2398,15 +2397,16 @@ object FireInTheLake {
     else
       log(s"Add ${amountOf(num, "terror marker")} to $name")
   }
-
+  
+  //  Remove terror/sabotage markers
   def removeTerror(name: String, num: Int): Unit = if (num > 0) {
     val sp = game.getSpace(name)
     assert(sp.terror >= num, s"removeTerror($name): not enough markers in space")
     game = game.updateSpace(sp.copy(terror = sp.terror - num))
     if (sp.isLoC)
       log(s"Remove ${amountOf(num, "sabotage marker")} from $name")
-    else
-      log(s"Remove ${amountOf(num, "terror marker")} from $name")
+      else
+        log(s"Remove ${amountOf(num, "terror marker")} from $name")
   }
 
   def increasePatronage(amount: Int): Unit = if (amount > 0) {

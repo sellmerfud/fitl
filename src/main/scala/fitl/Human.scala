@@ -3041,7 +3041,7 @@ object Human {
       askMenu(choices, "\nTerror:").head match {
         case "select" =>
           askCandidateOrBlank("\nTerrorize which space: ", candidates) foreach { name =>
-            def sp = game.getSpace(name)
+            def sp = game.getSpace(name)  // function so we get fresh copy each time
             // NVA may terror with only troops, in which case no guerrilla is revealed
             val toReveal = if (sp.pieces.has(underground)) Pieces().set(1, underground) else Pieces()
 

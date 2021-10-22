@@ -64,7 +64,7 @@ object Bot {
       case other => result.toString
     }
 
-    s"$msg $resultStr"
+    s"$msg: $resultStr"
   }
 
   //  We log each choice in the list stopping after we reach the
@@ -153,8 +153,7 @@ object Bot {
     log(separator())
   }
 
-  def logIfNoOp(faction: Faction, op: Operation, noOp: Boolean): Unit = {
-    if (noOp)
+  def logNoOp(faction: Faction, op: Operation): Unit = {
       log(s"\nNo spaces found for $faction $op")
   }
 
@@ -169,7 +168,7 @@ object Bot {
     val die     = d6
     val success = die > activationNumber
 
-    log(s"\n$faction Bot makes an activation roll (activation number = $activationNumber)")
+    log(s"\n$faction activation roll against activation number of $activationNumber")
     log(separator())
     log(s"Die roll is $die: ${if (success) "Success" else "Failure"}")
     success
@@ -2404,7 +2403,8 @@ object Bot {
     val canSubvertSpace = (sp: Space) => sp.pieces.has(VCGuerrillas_U) && sp.pieces.has(ARVNCubes)
     val canTaxSpace = (sp: Space) => {
       // Bot will only tax spaces with a VC Base if at least 2 underground guerrillas
-      val hasG = (sp.pieces.has(VCBase::VCTunnel::Nil) && sp.pieces.numOf(VCGuerrillas_U) > 1) || sp.pieces.has(VCGuerrillas_U)
+      val needed = if (sp.pieces.has(VCBase::VCTunnel::Nil)) 2 else 1 
+      val hasG = sp.pieces.numOf(VCGuerrillas_U) >= needed
       hasG && ((sp.isLoC && sp.printedEconValue > 0) || (!sp.coinControlled && sp.population > 0))
     }
 
@@ -2560,7 +2560,6 @@ object Bot {
     //                  may Agitage (even if COIN control)
     //                - Remove Terror then Shift upt to two levels
     //                  toward Active Opposition up to Agitate Total
-    //  Return true if we succesfully Rally in at least one space.
     //  -------------------------------------------------------------
     def rallyOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
       var rallySpaces  = Set.empty[String]
@@ -2647,10 +2646,17 @@ object Bot {
         }
       }
 
+      logOpChoice(VC, Rally)
       rallyToPlaceBase(game.nonLocSpaces filter canRallyBase)
       rallyToPlaceGuerrillas(game.nonLocSpaces filter canRallyGuerrillas)
       rallyToFlipGuerrillas(game.nonLocSpaces filter canFlipGuerrillas)
-      if (rallied) Some(Rally) else None
+
+      if (rallied)
+        Some(Rally)
+      else {
+        logNoOp(VC, Rally)
+        None
+      }
     }
 
     //  -------------------------------------------------------------
@@ -2658,8 +2664,6 @@ object Bot {
     //    March using Move Priorities
     //    1. Select 2 LoCs adjacent to most underground VC guerrillas
     //    2. Select spaces using March Destinations
-    //
-    //  Return true if we succesfully March to at least one space.
     //  -------------------------------------------------------------
     def marchOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
       val LocPriorities = List(
@@ -2689,8 +2693,62 @@ object Bot {
             None
         }
       }
-      logIfNoOp(VC, March, moveDestinations.isEmpty)
-      if (moveDestinations.nonEmpty) Some(March) else None
+
+      if (moveDestinations.nonEmpty)
+        Some(March)
+      else {
+        logNoOp(VC, March)
+        None
+      }
+    }
+
+    //  -------------------------------------------------------------
+    //  Implement the VC Terror Instructions from the VC Trung cards.
+    //    Select spaces using Place Terror
+    //    VC Base - where 2+ Undergound Guerrillas
+    //    Loc     - no activation number roll
+    //  -------------------------------------------------------------
+    def terrorOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
+
+      val isCandidate = (sp: Space) => {
+        val needed = if (sp.pieces.has(VCBase::VCTunnel::Nil)) 2 else 1
+        sp.pieces.numOf(VCGuerrillas_U) >= needed &&
+        ((sp.isLoC && sp.terror == 0 && sp.printedEconValue > 0) ||
+         (!sp.isLoC && sp.population > 0 && (sp.terror == 0 || sp.support != ActiveOpposition)))
+      }
+
+      def nextTerror(candidates: List[Space], needActivation: Boolean): Unit = {
+        if (candidates.nonEmpty && checkActivation(VC, needActivation, activationNumber)) {
+          val sp = pickSpacePlaceTerror(candidates)
+
+             log(s"\n$VC selects ${sp.name} for Terror")
+            revealPieces(sp.name, Pieces(vcGuerrillas_U = 1))
+            if (capabilityInPlay(Cadres_Unshaded)) {
+              // Get fresh copy of space to include the guerrilla that was just flipped
+              val toRemove = selectFriendlyRemoval(game.getSpace(sp.name).pieces.only(VCGuerrillas), 2)
+              removeToAvailable(sp.name, toRemove, Some(s"$Cadres_Unshaded triggers"))
+            }
+
+            if (sp.terror == 0)
+              addTerror(sp.name, 1) // Terror/Sabotage marker
+
+            if (!sp.isLoC && sp.support != ActiveOpposition)
+              decreaseSupport(sp.name, 1)
+
+          nextTerror(candidates filterNot (_.name == sp.name), !sp.isLoC)
+        }
+      }
+
+      logOpChoice(VC, Terror)
+      val candidates = game.spaces filter isCandidate
+      if (candidates.nonEmpty) {
+        nextTerror(candidates, false)
+        Some(Terror)
+      }
+      else {
+        logNoOp(VC, Rally)
+        None
+      }
     }
 
     //  -------------------------------------------------------------
@@ -2925,6 +2983,12 @@ object Bot {
   def executeOp(faction: Faction, params: Params): ExecuteResult = {
     val firstCard = drawTrungCard(faction)
 
+    def logTrungDraw(card: TrungCard): Unit = {
+      log(s"\nDrawing Trung Card for $faction")
+      log(separator())
+      log(card.toString)
+    }
+
     def executeCard(trungCard: TrungCard): ExecuteResult = {
       log(s"\n$faction Bot drew $trungCard")
       trungCard.execute(params) match {
@@ -2935,8 +2999,10 @@ object Bot {
           val nextCard = drawTrungCard(faction)
           if (nextCard == firstCard)
             ER_NoOp
-          else
+          else {
+            logTrungDraw(nextCard)
             executeCard(nextCard)
+          }
 
         case  TrungFlip =>
           executeCard(trungCard.flipSide)
@@ -2946,6 +3012,7 @@ object Bot {
       }
     }
 
+    logTrungDraw(firstCard)
     executeCard(firstCard)
   }
 
@@ -3307,9 +3374,43 @@ object Bot {
   object Trung_VC_U extends TrungCard(VC, "U", 2) {
     lazy val flipSide = Trung_VC_UU
 
+    def doSpecialActivity(): Boolean = {
+      val canSubvert = game.patronage >= 17 && (game.spaces exists VC_Bot.canSubvertSpace)
+      val canTax     = game.spaces exists VC_Bot.canTaxSpace
+
+      botLog("VC will attempt to perform a Special Activity")
+      botLog(separator())
+      botLogChoices(List(
+        (canSubvert ->  "Subvert: Patronage >= 17 and any spaces with Underground VC Guerrillas and ARVN Cubes"),
+        (canTax     -> s"Tax: Any valid and valid spaces to tax")
+      ))
+
+      if (canSubvert)
+        VC_Bot.subvertActivity()
+      else if (canTax)
+        VC_Bot.taxActivity()
+
+      // Return true if we did a special Activity
+      (canSubvert || canTax)
+    }
+
     def execute(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      val threePlusGuerrillas = game.spaces exists (_.pieces.totalOf(VCGuerrillas) > 2)
+      lazy val undergroundNoActiveOpp = game.spaces exists { sp =>
+        (sp.isLoC || sp.support != ActiveOpposition) && sp.pieces.has(VCGuerrillas_U)
+      }
+      if (threePlusGuerrillas) {
+        if (undergroundNoActiveOpp) {
+          VC_Bot.terrorOp(params, activationNumber) match {
+            case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity)
+            case None    => TrungNoOp
+          }
+        }
+        else
+          TrungFlip
+      }
+      else
+        TrungDraw
     }
   }
 
@@ -3353,8 +3454,7 @@ object Bot {
         VC_Bot.marchOp(params, activationNumber)
 
       operation match {
-        case Some(op) if params.specialActivity && doSpecialActivity(op) => TrungComplete(true)
-        case Some(op) => TrungComplete(false)
+        case Some(op) => TrungComplete(params.specialActivity && doSpecialActivity(op))
         case None     => TrungNoOp
       }
     }

@@ -85,7 +85,7 @@ object Bot {
   }
 
   case class Params(
-    includeSpecial: Boolean         = false,
+    specialActivity: Boolean        = false, // May select a Special Activity
     maxSpaces: Option[Int]          = None,
     free: Boolean                   = false, // Events grant free commands
     assaultRemovesTwoExtra: Boolean = false, // M48 Patton (unshaded)
@@ -195,6 +195,19 @@ object Bot {
      sp.isLoC && numAdjacentPieces(sp: Space, CoinPieces) > 0)      
   }
 
+  // When an ambush Special Activity follows a March Operation
+  // The Bot may ambush only in spaces that were selected as 
+  // March destination.  And the Underground guerrilla used to 
+  // perform the Ambush must have marched into the space this turn.
+  def marchAmbushCandidates(faction: Faction): List[String] = {
+    val GType = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
+    spaceNames(spaces(moveDestinations) filter { sp =>
+      movedPieces(sp.name).has(GType) &&
+      canAmbushFrom(faction)(sp)
+    })
+  }
+
+
   //  -------------------------------------------------------------
   //  NVA and VC Ambush Activity
   //  This function should be called with a list of all spaces that
@@ -262,11 +275,7 @@ object Bot {
       }
     }
 
-    // ambushSpaces
-    if (momentumInPlay(Mo_Claymores) || ambushSpaces.size == maxAmbush)
-      false
-    else
-      nextAmbush(ambushCandidates)
+    nextAmbush(ambushCandidates)
   }
 
 
@@ -2877,7 +2886,7 @@ object Bot {
           val first = game.sequence.numActors == 0
           val sa    = action == OpPlusSpecial
           val maxsp = if (action == LimitedOp) Some(1) else None
-          val params = Params(includeSpecial = sa, maxSpaces = maxsp)
+          val params = Params(specialActivity = sa, maxSpaces = maxsp)
           
           // If the first eligible was allowd to do a special
           // activity but was not able to do so then switch
@@ -3310,8 +3319,8 @@ object Bot {
     def execute(params: Params): TrungResult = {
 
       def doSpecialActivity(op: InsurgentOp): Boolean = {
-        val ambushCandidates = spaceNames(spaces(moveDestinations) filter canAmbushFrom(VC))
-        val canAmbush        = op == March && ambushCandidates.nonEmpty
+        val ambushCandidates = marchAmbushCandidates(VC)
+        val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
         val agitateRoll      = rollDice(2)
         val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
         val canSubvert       = game.spaces exists VC_Bot.canSubvertSpace
@@ -3344,7 +3353,7 @@ object Bot {
         VC_Bot.marchOp(params, activationNumber)
 
       operation match {
-        case Some(op) if params.includeSpecial && doSpecialActivity(op) => TrungComplete(true)
+        case Some(op) if params.specialActivity && doSpecialActivity(op) => TrungComplete(true)
         case Some(op) => TrungComplete(false)
         case None     => TrungNoOp
       }

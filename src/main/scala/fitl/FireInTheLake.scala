@@ -2222,7 +2222,7 @@ object FireInTheLake {
             resolveNextActor()
           case BotCmd  =>
             // Bot.testMove()
-            Bot.Trung_VC_UU.execute(Bot.Params())
+            Bot.Trung_VC_UU.execute(Bot.Params(specialActivity = true))
             // Bot.act()
             log(s"\nFinished with $faction turn")
             saveGameState(game.description)
@@ -2541,11 +2541,10 @@ object FireInTheLake {
       val updated = sp.copy(pieces = sp.pieces - pieces)
       game = game.updateSpace(updated)
       
-      reason match {
-        case Some(msg) => log(s"\n$msg"); log(separator())
-        case None      => log()
-      }
-      
+      reason foreach { msg =>
+        log(s"\n$msg")
+        log(separator())
+      }      
       for (desc <- pieces.descriptions)
         log(s"Remove $desc from $spaceName to AVAILABLE")
     }
@@ -2559,9 +2558,9 @@ object FireInTheLake {
       // Pieces in casualties are always normalized.
       game = game.updateSpace(updated).copy(casualties = game.casualties + pieces.normalized)
       
-      reason match {
-        case Some(msg) => log(s"\n$msg"); log(separator())
-        case None      => log()
+      reason foreach { msg =>
+        log(s"\n$msg")
+        log(separator())
       }
       for (desc <- pieces.descriptions)
         log(s"Remove $desc from $spaceName to CASUALTIES")
@@ -2575,9 +2574,9 @@ object FireInTheLake {
       // Pieces in casualties are always normalized.
       game = game.copy(casualties = game.casualties + pieces.normalized)
       
-      reason match {
-        case Some(msg) => log(s"\n$msg"); log(separator())
-        case None      => log()
+      reason foreach { msg =>
+        log(s"\n$msg")
+        log(separator())
       }
       for (desc <- pieces.descriptions)
         log(s"Remove $desc from AVAILABLE to CASUALTIES")
@@ -2920,9 +2919,11 @@ object FireInTheLake {
     if (orig.support != updated.support) {
       val name = orig.name
       (orig.support, updated.support) match {
-          case (s, Neutral) => log(s"Remove $s marker from $name")
-          case (Neutral, s) => log(s"Place $s marker in $name")
-          case (old, s)     => log(s"Replace $old marker in $name with $s marker")
+          case (s, Neutral)                             => log(s"Remove $s marker from $name")
+          case (Neutral, s)                             => log(s"Place $s marker in $name")
+          case (old, s) if old < Neutral && s < Neutral => log(s"Flip $old marker in $name to $s")
+          case (old, s) if old > Neutral && s > Neutral => log(s"Flip $old marker in $name to $s")
+          case (old, s)                                 => log(s"Replace $old marker in $name with $s marker")
       }
     }
   }

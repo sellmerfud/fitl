@@ -51,7 +51,7 @@ object Human {
   private var pt76_shaded_used = false  // NVA attack in one space
   
   case class Params(
-    includeSpecial: Boolean         = false,
+    specialActivity: Boolean        = false, // May select a Special Activity
     maxSpaces: Option[Int]          = None,
     free: Boolean                   = false, // Events grant free commands
     assaultRemovesTwoExtra: Boolean = false, // M48 Patton (unshaded)
@@ -92,7 +92,7 @@ object Human {
     var transportDestinations = Set.empty[String]
 
     def init(params: Params): Unit = {
-      allowSpecial     = params.includeSpecial
+      allowSpecial     = params.specialActivity
       specialTaken     = false
       ambushing        = false
       usedMainForceBns = false
@@ -533,7 +533,7 @@ object Human {
 
     action match {
       case Event         => executeEvent(faction)
-      case OpPlusSpecial => executeOp(faction, Params(includeSpecial = true))
+      case OpPlusSpecial => executeOp(faction, Params(specialActivity = true))
       case OpOnly        => executeOp(faction)
       case LimitedOp     => executeOp(faction, Params(maxSpaces = Some(1)))
       case Pass          => factionPasses(faction)
@@ -2745,7 +2745,7 @@ object Human {
     val moveableTypes   = if (faction == NVA) NVATroops::NVAGuerrillas else VCGuerrillas
     val maxDestinations = params.maxSpaces getOrElse NO_LIMIT
     var destinations    = Set.empty[String]
-    val mainForceBins   = capabilityInPlay(MainForceBns_Unshaded)
+    val mainForceBns    = capabilityInPlay(MainForceBns_Unshaded)
     val claymores       = momentumInPlay(Mo_Claymores)
     // Normally movedInto(name) == frozen(name), however for NVA pieces moving along the trail
     // they can be in the movedInto bucket but not the frozen bucket
@@ -2798,7 +2798,7 @@ object Human {
 
             movePieces(movers, srcName, destName)
 
-            val tolearance = if (mainForceBins) 1 else 3
+            val tolearance = if (mainForceBns) 1 else 3
             val activate   = (dest.isLoC || dest.support > Neutral) && (numCoin + movers.total) > tolearance
             if (activate) {
               val activeType = if (faction == NVA) NVAGuerrillas_A else VCGuerrillas_A
@@ -2811,6 +2811,9 @@ object Human {
               else
                 activeMovers
 
+              val suffix = if (mainForceBns) s" [$MainForceBns_Unshaded]" else ""
+              log(s"\nThe moving Guerrillas must activate$suffix")
+              log(separator())
               revealPieces(destName, hidden)
               if (claymores && activeMovers.has(activeType))
                 removeToAvailable(destName, Pieces().set(1, activeType))
@@ -2897,8 +2900,8 @@ object Human {
     }
 
     val notes = List(
-      noteIf(mainForceBins, s"March into LOC/Support activates if moving+COIN > 1 [$MainForceBns_Unshaded]"),
-      noteIf(claymores,     s"Remove 1 guerrilla in each marching group that activates [$Mo_Claymores]")
+      noteIf(mainForceBns, s"March into LOC/Support activates if moving+COIN > 1 [$MainForceBns_Unshaded]"),
+      noteIf(claymores,    s"Remove 1 guerrilla in each marching group that activates [$Mo_Claymores]")
     ).flatten
 
     logOpChoice(faction, March, notes)

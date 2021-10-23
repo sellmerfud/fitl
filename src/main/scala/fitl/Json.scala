@@ -77,12 +77,15 @@ private class EscapedStringParser extends JavaTokenParsers {
 
 // Stolen from the scala book and fixed by making string quotation explicit.
 private class JsonParser extends JavaTokenParsers {
+  sealed trait KeyValueSeparators
+  object Colon extends KeyValueSeparators
+
   def obj: Parser[Map[String, Any]] = "{" ~> repsep(member, ",") <~ "}" ^^ (Map.empty ++ _)
 
   def arr: Parser[List[Any]] = "[" ~> repsep(value, ",") <~ "]"
 
-  def member: Parser[(String, Any)] = string ~ ":" ~ value ^^ {
-    case name ~ ":" ~ value => (name, value)
+  def member: Parser[(String, Any)] = string ~ (":" ^^^ Colon) ~ value ^^ {
+    case name ~ Colon ~ value => (name, value)
   }
 
   def number: Parser[Any] = floatingPointNumber ^^ {
@@ -175,7 +178,8 @@ object Json {
           result.append(nl)
         else {
           val commas =  (false :: List.fill(m.size - 1)(true)).reverse
-          val names = m.keys.toList.sorted
+          val names = m.keys.toList
+          
           for ((name, comma) <- names zip commas; value = m(name)) {
             result.append(prefix).append("  ").append(quote(name)).append(": ")
             buildItem(value, indent + 2)

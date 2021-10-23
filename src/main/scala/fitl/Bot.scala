@@ -3139,7 +3139,9 @@ object Bot {
     Trung_US_F,  Trung_ARVN_M,  Trung_NVA_T,  Trung_VC_Z
   )
 
-
+  def trungFromId(id: String): TrungCard = TrungDeck.find(_.id == id) getOrElse {
+    throw new IllegalArgumentException(s"Invalid Trung Card id: $id")
+  }
   // ================================================================
   // US Trung Cards
   // ================================================================

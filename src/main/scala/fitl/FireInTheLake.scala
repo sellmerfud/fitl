@@ -440,6 +440,12 @@ object FireInTheLake {
     override def toString() = plural
   }
 
+  object PieceType {
+    def apply(name: String): PieceType = AllPieceTypes find (_.name == name) getOrElse {
+      throw new IllegalArgumentException(s"Invalid name for PieceType: $name")
+    }
+  }
+
   case object USTroops       extends PieceType("US Troop")
   case object Irregulars_U   extends PieceType("US Underground Irregular") { override def genericSingular = "US Irregular" }
   case object Irregulars_A   extends PieceType("US Active Irregular") { override def genericSingular = "US Irregular" }
@@ -1261,6 +1267,13 @@ object FireInTheLake {
   case object  LimitedOp     extends Action("Limited Op")
   case object  Pass          extends Action("Pass")
 
+  object Action {
+    val ALL = Set[Action](Event, OpPlusSpecial, OpOnly, LimitedOp, Pass)
+    def apply(name: String): Action = ALL find (_.name.toLowerCase == name.toLowerCase) getOrElse {
+      throw new IllegalArgumentException(s"Invalid action name: $name")
+    }
+  }
+  
   case class Actor(faction: Faction, action: Action)
 
   sealed abstract class SpecialActivity(val name: String) {
@@ -1421,6 +1434,7 @@ object FireInTheLake {
     cardsDrawn: Int                   = 0,
     currentCard: Int                  = 0,
     onDeckCard: Int                   = 0,
+    needCardDraw: Boolean             = true,
     prevCardWasCoup: Boolean          = false,
     coupCardsPlayed: Int              = 0,  // Number of Coup cards played/ignored thus far
     turn: Int                         = 0,  // turn zero indicates the start of the game
@@ -1445,16 +1459,17 @@ object FireInTheLake {
     // "#10 Rolling Thunder - 0 acted, US is up"
     def description: String = {
       val b = new StringBuilder
-      if (cardsDrawn == 0) {
+
+      if (cardsDrawn == 0)
         b.append("Start of game, no cards have been drawn")
-      }
       else {
+        b.append(s"turn ${game.turn}")
         val card = deck(currentCard)
-        b.append(s"$card - ")
+        b.append(s" [$card]")
         if (isCoupRound)
-          b.append("Coup! round")
+          b.append(" Coup! round")
         else {
-          b.append(s"${sequence.numActors} acted")
+          b.append(s" ${sequence.numActors} acted")
           if (sequence.numPassed > 0)
             b.append(s", ${sequence.numPassed} passed")
           actingFaction map (_.name) foreach { up =>
@@ -1796,6 +1811,32 @@ object FireInTheLake {
   val gamesDir = Pathname("./games")
   var gameName: Option[String] = None // The name of sub-directory containing the game files
 
+  // Ask the user for a name for their new game.
+  def askGameName(prompt: String): String = {
+    val VALID_NAME = """([-A-Za-z0-9_ ]+)""".r
+    def getName: String = {
+      readLine(prompt) match {
+        case null => getName
+        case VALID_NAME(name) =>
+          if ((gamesDir/name).exists) {
+            println(s"A game called '$name' already exists.")
+            if (askYorN(s"Do you want to overwrite the existing game (y/n)? ")) {
+              (gamesDir/name).rmtree()
+              name
+            }
+            else
+              getName
+          }
+          else
+            name
+        case name => 
+          println("The name must consist of one or more letters, numbers, spaces, dashes or undercores")
+          getName
+      }
+    }
+    getName
+  }
+
   case object ExitGame    extends Exception
   case object AbortAction extends Exception
   case object Rollback    extends Exception
@@ -1806,7 +1847,10 @@ object FireInTheLake {
 
       askWhichGame() match {
         case Some(name) =>
-          // loadMostRecent(name)
+          val filename = mostRecentSaveFile(name) getOrElse {
+            throw new IllegalStateException(s"No saved file found for game '$name'")
+          }
+          loadGameState(name, filename)
 
         case None => // Start a new game
           println()
@@ -1842,8 +1886,8 @@ object FireInTheLake {
             }
           }
 
-          // println()
-          // gameName = Some(askGameName("Enter a name for your new game: "))
+          println()
+          gameName = Some(askGameName("Enter a name for your new game: "))
 
           game = initialGameState(scenario, humanFactions, usePeriodEvents)
 
@@ -1858,9 +1902,8 @@ object FireInTheLake {
             log(s"\nRolling d3 to set the Agitate Total (VC resources cylinder)")
             log(separator())
             setAgitateTotal(d3)
+            saveGameState(game.description)
           }
-
-
       }
 
       mainLoop()
@@ -1902,11 +1945,95 @@ object FireInTheLake {
     )
   }
 
+  def saveGameState(segmentDescription: String): Unit = {
+    assert(gameName.nonEmpty, "saveGameState(): called with gameName not set!")
 
-  def saveGameState(desc: String): Unit = {
     val filename = s"save-${game.history.size}"
-    game = game.copy(log = Vector.empty, history = game.history :+ GameSegment(filename, desc, game.log))
-    // TODO: save JSON to disk
+    val path = gamesDir/gameName.get/filename
+    val segment = GameSegment(filename, segmentDescription, game.log)
+    game = game.copy(log = Vector.empty, history = game.history :+ segment)
+    SavedGame.save(path, game)
+    saveGameDescription()
+  }
+
+    // Load the most recent game file for the given game.
+  def loadGameState(name: String, filename: String): Unit = {
+    gameName = Some(name)
+    val path = gamesDir/name/filename
+    game = SavedGame.load(path)
+  }
+
+  val SAVE_FILE = """save-(\d+)""".r
+
+  def getSaveFileNumber(filename: String): Option[Int] = {
+    filename match {
+      case SAVE_FILE(n) => Some(n.toInt)
+      case _            => None
+    }
+  }
+
+  // Given a directory for a saved game finds the most recent save file.
+  def mostRecentSaveFile(name: String): Option[String] = {
+    case class Entry(number: Int, filename: String)
+    val dir = gamesDir/name
+    if (dir.isDirectory) {
+      val entries = dir.children(withDirectory = false) flatMap { child =>
+        val filename = child.toString
+        getSaveFileNumber(filename) map (n => Entry(n, filename))
+      }
+      entries.sortBy(-_.number).headOption map (_.filename)
+    }
+    else
+      None
+  }
+
+    // Return the list of saved games
+  def savedGames: List[String] = {
+    gamesDir.children(withDirectory = false).toList map (_.toString) filter { name =>
+      mostRecentSaveFile(name).nonEmpty 
+    }
+  }
+
+
+    // Ask which saved game the user wants to load.
+  // Return None if they wish to start a new game.
+  def askWhichGame(): Option[String] = {
+    val games = savedGames
+    if (games.isEmpty)
+      None
+    else {
+      val gameChoices = games map { name =>
+        val desc = loadGameDescription(name)
+        val suffix = if (desc == "") "" else s": $desc"
+        name -> s"Resume '$name'$suffix"
+      }
+      val choices = ("--new-game--" -> "Start a new game") :: gameChoices ::: List("--quit-game--" -> "Quit")
+      println()
+      println("Which game would you like to play:")
+      askMenu(choices, allowAbort = false).head match {
+        case "--new-game--"  => None
+        case "--quit-game--" => throw ExitGame
+        case name            => Some(name)
+      }
+    }
+  }
+
+  // Save a brief description of the game.
+  // The descriptions are used by the askWhichGame() function.
+  def saveGameDescription(): Unit = {
+    assert(gameName.nonEmpty, "saveGameState(): called with gameName not set!")
+    val desc = s"${game.scenarioName} - ${game.description}"
+    val path = gamesDir/gameName.get/"description"
+
+    path.writeFile(desc)
+  }
+  
+  def loadGameDescription(name: String): String = {
+    val path = gamesDir/name/"description"
+    if (path.exists)
+      path.readFile()
+    else
+      ""
   }
 
 
@@ -2036,12 +2163,16 @@ object FireInTheLake {
     if (game.cardsDrawn == 0) {
       val card1 = paramValue(param) getOrElse askCardNumber("Enter the # of the first event card: ")
       val card2 = askCardNumber("\nEnter the # of the second event card: ")
-      game = game.copy(currentCard = card1, onDeckCard = card2, cardsDrawn = 2)
+      game = game.copy(currentCard  = card1,
+                       onDeckCard   = card2,
+                       cardsDrawn   = 2,
+                       needCardDraw = false)
     }
     else {
       val nextCard = paramValue(param) getOrElse askCardNumber("Enter the # of the next event card: ")
-      game = game.copy(onDeckCard      = nextCard,
-                       cardsDrawn      = game.cardsDrawn + 1)
+      game = game.copy(onDeckCard   = nextCard,
+                       cardsDrawn   = game.cardsDrawn + 1,
+                       needCardDraw = false)
     }
 
     log()
@@ -2084,15 +2215,16 @@ object FireInTheLake {
   // ---------------------------------------------
   // Process all top level user commands.
   @tailrec def mainLoop(): Unit = {
-    game = game.copy(turn = game.turn + 1)
-
     try {
-      askCardDrawCommand()
-
-      if (game.isCoupRound)
-        resolveCoupCard()
+      if (game.needCardDraw) {
+        askCardDrawCommand()
+        if (game.isCoupRound)
+          resolveCoupCard()
+        else
+          resolveNextActor()
+      }
       else
-        resolveNextActor()
+          resolveNextActor()
     }
     catch {
       // The rollback command will have restored the game state from a previosly
@@ -2174,7 +2306,9 @@ object FireInTheLake {
             adjustFactionEligibility()
             game.copy(
               prevCardWasCoup = deck(game.currentCard).isCoup,
-              currentCard     = game.onDeckCard)
+              currentCard     = game.onDeckCard,
+              needCardDraw    = true,
+              turn            = game.turn + 1)
 
             saveGameState(game.description)
           case _ =>
@@ -3330,10 +3464,6 @@ object FireInTheLake {
   }
 
 
-  // TODO: Implement askWhichGame()
-  def askWhichGame(): Option[String] = None
-
-
   def askFaction(prompt: String, factions: Set[Faction] = Faction.ALL, allowAbort: Boolean = true): Faction = {
       assert(factions.nonEmpty, "askFaction called with empty set")
       println()
@@ -3474,10 +3604,73 @@ object FireInTheLake {
     }
   }
 
-  def rollback(param: Option[String]): Unit = {
-    for ((segment, i) <- game.history.zipWithIndex)
-      println(f"$i%3d: ${segment.description}")
+
+  // def rollback(param: Option[String]): Unit = {
+  //   for ((segment, i) <- game.history.zipWithIndex)
+  //     println(f"$i%3d: ${segment.description}")
+  // }
+
+  // Allows the user to roll back to the beginning of any turn.
+  def rollback(input: Option[String]): Unit = {
+    
+    try {      
+      val pages = game.history.reverse.sliding(25, 25).toList
+      val firstPage = 0
+      val lastPage  = pages.size -1
+      
+      def showPage(pageNum: Int): Unit = {
+        val saveChoices = pages(pageNum).toList map {
+          case GameSegment(filename, desc, _) =>
+            filename -> desc
+          }
+          val otherChoices = List(
+            choice(pageNum > firstPage, "page-up",   "Page up, show newer save points "),
+            choice(pageNum < lastPage,  "page-down", "Page down, show older save points "),
+            choice(true,                "cancel",    "Cancel, do not roll back ")
+            ).flatten
+            
+        println("\nRollback to the beginning of a previous save point.")
+        println("The save points are displayed with the most recent first.")
+        askMenu(saveChoices:::otherChoices, "Choose a save point:").head match {
+          case "cancel"    =>
+          case "page-up"   => showPage(pageNum - 1)
+          case "page-down" => showPage(pageNum + 1)
+          case save_file   =>
+            if (askYorN(s"Are you sure you want to rollback to this save point? (y/n) ")) {
+              // Games are saved at the end of the turn, so we actually want
+              // to load the file with turnNumber -1.
+              val name         = gameName.get
+              val fileNumber   = getSaveFileNumber(save_file).get
+              val oldGameState = game
+              loadGameState(name, save_file)
+              saveGameDescription()  // Update the description file
+
+              // Remove all safe files that succeed this one.
+              // We are exploring anew
+              removeSaveFiles(name, fileNumber + 1)      
+              displayGameStateDifferences(oldGameState, game)
+              throw Rollback
+            }
+            else
+              showPage(pageNum)
+        }
+      }
+
+      showPage(0)
+    }
+    catch {
+      case AbortAction =>
+    }
   }
+
+  // Remove turn files starting with the given save file number and all 
+  // those that follow that number.
+  def removeSaveFiles(name: String, num: Int): Unit = {
+    import Pathname.glob    
+    val turnFiles = glob(gamesDir/name/"save-*")
+    turnFiles filter (getSaveFileNumber(_) exists (_ >= num)) foreach (_.delete())
+  }
+
 
   def adjustSettings(param: Option[String]): Unit = {
     val agitate = if (game.isBot(VC)) List("agitate") else Nil

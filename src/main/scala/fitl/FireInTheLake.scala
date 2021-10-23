@@ -3233,6 +3233,8 @@ object FireInTheLake {
     }
   }
 
+  def noteIf(cond: Boolean, note: String): Option[String] = if (cond) Some(note) else None
+
   // Convenience method for createing choices for the askMenu() function.
   def choice[T](condition: Boolean, value: T, desc: String): Option[(T, String)] =
     if (condition) Some(value -> desc) else None

@@ -148,18 +148,22 @@ object Bot {
     def execute(params: Params): TrungResult
   }
   
-  def logOpChoice(faction: Faction, op: Operation): Unit = {
+  def logOpChoice(faction: Faction, op: Operation, notes: TraversableOnce[String] = Nil): Unit = {
     log(s"\n$faction chooses $op operation")
     log(separator())
+    for (note <- notes)
+      log(note)
   }
 
   def logNoOp(faction: Faction, op: Operation): Unit = {
       log(s"\nNo spaces found for $faction $op")
   }
 
-  def logSAChoice(faction: Faction, sa: SpecialActivity): Unit = {
-  log(s"\n$faction chooses $sa special activity")
-  log(separator())
+  def logSAChoice(faction: Faction, sa: SpecialActivity, notes: TraversableOnce[String] = Nil): Unit = {
+    log(s"\n$faction chooses $sa special activity")
+    log(separator())
+    for (note <- notes)
+      log(note)
 }
 
   // Make an activation roll
@@ -170,7 +174,7 @@ object Bot {
 
     log(s"\n$faction activation roll against activation number of $activationNumber")
     log(separator())
-    log(s"Die roll is $die: ${if (success) "Success" else "Failure"}")
+    log(s"Die roll: $die [${if (success) "Success!" else "Failure"}]")
     success
   }
 
@@ -206,7 +210,6 @@ object Bot {
     })
   }
 
-
   //  -------------------------------------------------------------
   //  NVA and VC Ambush Activity
   //  This function should be called with a list of all spaces that
@@ -216,65 +219,93 @@ object Bot {
   //  there is no need to make activation rolls.
   //  For Attack, this is called as part of the Attack and thus an activation
   //  roll may be necesasry.
+  //  if `checkFirst` is true then we must make an activation roll before the
+  //  first ambush (Attack only)
   //  
+  //  Return the names of the spaces that were ambushed and true if no
+  //  actvation roll was failed.
+  //  This lets the calling Attack know whether or not it can continue
+  //  attacking spaces and which spaces have already been selected.
+  //
   //  Mo_Claymores          - Prohibits Ambush
   //  Mo_TyphoonKate        - All SA's are limited to 1 space
   //  MainForceBns_Shaded   - 1 VC Ambush space may remove 2 enemy pieces
   //  BoobyTraps_Unshaded   - Ambush is max one space
   //  PT76_Unshaded         - If Attack, then NVA must first remove 1 Troop (if one is present)
   //  -------------------------------------------------------------
-  def ambushActivity(faction: Faction, ambushCandidates: List[String], op: Operation, activationNumber: Option[Int]): Unit = {
+  def ambushActivity(faction: Faction, 
+                     ambushCandidates: List[String],
+                     op: Operation,
+                     activationNumber: Int,
+                     checkFirst: Boolean): (Set[String], Boolean) = {
     var ambushSpaces     = Set.empty[String]
     var mainForceBnsUsed = false
     val limited          = momentumInPlay(Mo_TyphoonKate) || capabilityInPlay(BoobyTraps_Unshaded)
     val maxAmbush = if (limited) 1 else 2
+    val notes = List(
+      noteIf(momentumInPlay(Mo_TyphoonKate),s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
+      noteIf(capabilityInPlay(BoobyTraps_Unshaded), s"You may ambush in only one space [$BoobyTraps_Unshaded]")
+    ).flatten
 
-    def canAmbush = ambushSpaces.isEmpty || 
-                    checkActivation(faction, activationNumber.nonEmpty, activationNumber getOrElse 1)
-    def nextAmbush(candidates: List[String]): Unit = {
+    def activateOK() = {
+      val needActivation = op == Attack && (checkFirst || ambushSpaces.nonEmpty)
+      checkActivation(faction, needActivation, activationNumber)
+    }
+
+    // Return true if we can continue the attack (ie. No activation roll failure)
+    def nextAmbush(candidates: List[String]): Boolean = {
       // Re-verify that we can ambush in the spaces because
       // a previous ambush may have removed a target piece
       val validSpaces = spaces(candidates) filter canAmbushFrom(faction)
-      if (validSpaces.nonEmpty && ambushSpaces.size < maxAmbush && canAmbush) {
-        val (sp, target) = if (faction == NVA)
-          NVA_Bot.pickSpaceAndTargetForAmbush(validSpaces)
-        else
-          VC_Bot.pickSpaceAndTargetForAmbush(validSpaces)
-        val coinPieces = target.pieces.only(CoinPieces)
-        val maxNum     = if (faction == VC && capabilityInPlay(MainForceBns_Shaded) && !mainForceBnsUsed) 2 else 1
-        val num        = coinPieces.total min maxNum
-        // Bases only removed if no other Coin forces (of either faction)
-        val targetPieces = if (coinPieces.totalOf(CoinForces) >= num)
-          coinPieces.only(CoinForces)
-        else
-          coinPieces
-        val deadPieces = selectEnemyRemovePlaceActivate(targetPieces, num)
+      
+      if (validSpaces.nonEmpty && ambushSpaces.size < maxAmbush) {
 
-        if (ambushSpaces.isEmpty)
-          logSAChoice(faction, Ambush)
+        if (activateOK()) {
+          val (sp, target) = if (faction == NVA)
+            NVA_Bot.pickSpaceAndTargetForAmbush(validSpaces)
+          else
+            VC_Bot.pickSpaceAndTargetForAmbush(validSpaces)
+          val coinPieces = target.pieces.only(CoinPieces)
+          val maxNum     = if (faction == VC && capabilityInPlay(MainForceBns_Shaded) && !mainForceBnsUsed) 2 else 1
+          val num        = coinPieces.total min maxNum
+          // Bases only removed if no other Coin forces (of either faction)
+          val targetPieces = if (coinPieces.totalOf(CoinForces) >= num)
+            coinPieces.only(CoinForces)
+          else
+            coinPieces
+          val deadPieces = selectEnemyRemovePlaceActivate(targetPieces, num)
 
-        if (sp.name == target.name)
-          log(s"\n$faction Ambushes in ${sp.name}")
-        else
-          log(s"\n$faction Ambushes in ${sp.name}, targeting ${target.name}")
-        log(separator())
+          if (ambushSpaces.isEmpty)
+            logSAChoice(faction, Ambush, notes)
 
-        if (deadPieces.total == 2) {
-          log(s"$faction elects to remove 2 enemy pieces [$MainForceBns_Shaded]")
-          mainForceBnsUsed = true
+          if (sp.name == target.name)
+            log(s"\n$faction Ambushes in ${sp.name}")
+          else
+            log(s"\n$faction Ambushes in ${sp.name}, targeting ${target.name}")
+          log(separator())
+
+          if (deadPieces.total == 2) {
+            log(s"$faction elects to remove 2 enemy pieces [$MainForceBns_Shaded]")
+            mainForceBnsUsed = true
+          }
+
+          if (faction == NVA && op == Attack && capabilityInPlay(PT76_Unshaded) && sp.pieces.has(NVATroops))
+            removeToAvailable(sp.name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
+
+          revealPieces(sp.name, Pieces(vcGuerrillas_U = 1))
+          removePieces(target.name, deadPieces)
+          ambushSpaces = ambushSpaces + sp.name
+          nextAmbush(validSpaces map (_.name) filterNot (_ == sp.name))
         }
-
-        if (faction == NVA && op == Attack && capabilityInPlay(PT76_Unshaded) && sp.pieces.has(NVATroops))
-          removeToAvailable(sp.name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
-
-        revealPieces(sp.name, Pieces(vcGuerrillas_U = 1))
-        removePieces(target.name, deadPieces)
-        ambushSpaces = ambushSpaces + sp.name
-        nextAmbush(validSpaces map (_.name) filterNot (_ == sp.name))
+        else
+          false // Failed activation
       }
+      else
+        true // ran out of candidates, No failed activation
     }
 
-    nextAmbush(ambushCandidates)
+    val canContinue = nextAmbush(ambushCandidates)
+    (ambushSpaces, canContinue)
   }
 
 
@@ -2408,6 +2439,10 @@ object Bot {
       hasG && ((sp.isLoC && sp.printedEconValue > 0) || (!sp.coinControlled && sp.population > 0))
     }
 
+    def undergroundAtNoActiveOpposition = game.spaces exists { sp =>
+      (sp.isLoC || sp.support != ActiveOpposition) && sp.pieces.has(VCGuerrillas_U)
+    }
+
     val MostUndergroundGuerrillas = List(
       new HighestScore[Space](
         "Most Underground VC Guerrillas",
@@ -2721,7 +2756,7 @@ object Bot {
         if (candidates.nonEmpty && checkActivation(VC, needActivation, activationNumber)) {
           val sp = pickSpacePlaceTerror(candidates)
 
-             log(s"\n$VC selects ${sp.name} for Terror")
+            log(s"\n$VC selects ${sp.name} for Terror")
             revealPieces(sp.name, Pieces(vcGuerrillas_U = 1))
             if (capabilityInPlay(Cadres_Unshaded)) {
               // Get fresh copy of space to include the guerrilla that was just flipped
@@ -2748,6 +2783,81 @@ object Bot {
       else {
         logNoOp(VC, Rally)
         None
+      }
+    }
+
+    //  -------------------------------------------------------------
+    //  Implement the VC Attack Instructions from the VC Trung cards.
+    //  Select spaces using the Remove Space Priority
+    //  1. Ambush in 2 spaces (if able)
+    //  2. Select spaces with 3+ VC Guerrillas and no VC base
+    //
+    //  Return Some(Attack) if we attack/ambush at least one space
+    //         true if we included the ambush special activity
+    //  -------------------------------------------------------------
+    def attackOp(params: Params, activationNumber: Int): (Option[InsurgentOp], Boolean) = {
+      val threePlusGuerrillasNoVCBase = (sp: Space) => {
+        sp.pieces.totalOf(VCGuerrillas) > 2 &&
+        !sp.pieces.has(VCBase::VCTunnel::Nil)
+      }
+        
+      def nextAttack(candidates: List[Space], needActivation: Boolean): Unit = {
+        if (candidates.nonEmpty && checkActivation(VC, needActivation, activationNumber)) {
+          val sp         = pickSpaceRemoveReplace(candidates)
+          val guerrillas = sp.pieces.only(VCGuerrillas)
+          val coinPieces = sp.pieces.only(CoinPieces)
+          val toActivate = guerrillas.only(VCGuerrillas_U)
+          val num        = 2 min coinPieces.total
+          val die        = d6
+          val success    = die <= guerrillas.total
+
+          log(s"\n$VC Attacks in ${sp.name}")
+          log(separator())
+          log(s"Die roll: $die [${if (success) "Success!" else "Failure"}]")
+
+          if (success) {
+            // Bases only removed if no other Coin forces (of either faction)
+            val targetPieces = if (coinPieces.totalOf(CoinForces) >= num)
+              coinPieces.only(CoinForces)
+            else
+              coinPieces
+            val deadPieces = selectEnemyRemovePlaceActivate(targetPieces, num)
+            val attrition  = deadPieces.only(USTroops::USBase::Nil).total min guerrillas.total
+            val attritionPieces = Pieces(vcGuerrillas_A = attrition) // All VC guerrillas are now active
+
+            revealPieces(sp.name, toActivate)
+            loggingControlChanges {
+              removePieces(sp.name, deadPieces)
+              removeToAvailable(sp.name, attritionPieces, Some("Attrition:"))
+            }
+          }
+          nextAttack(candidates filterNot (_.name == sp.name), needActivation = true)
+        }
+      }
+
+      logOpChoice(VC, Attack)
+      val ambushCandidates = spaceNames(game.spaces filter canAmbushFrom(VC))
+      val (ambushSpaces: Set[String], canContinue) = if (params.specialActivity && ambushCandidates.nonEmpty)
+        ambushActivity(VC, ambushCandidates, Attack, activationNumber, checkFirst = false)
+      else
+        (Set.empty, true)
+
+      val ambushed = ambushSpaces.nonEmpty
+      // If we have not failed an activation roll then continue attacking in
+      // spaces the 3+ VC Guerrillas and not VC Base
+      val attackCandidates = game.spaces filterNot (sp => ambushSpaces(sp.name)) filter threePlusGuerrillasNoVCBase
+      val attacked = if (canContinue && attackCandidates.nonEmpty) {
+        nextAttack(attackCandidates, needActivation = ambushed)
+        true
+      }
+      else
+        false
+      
+      if (ambushed || attacked)
+        (Some(Attack), ambushed)
+      else {
+        logNoOp(VC, Attack)
+        (None, false)
       }
     }
 
@@ -2990,7 +3100,6 @@ object Bot {
     }
 
     def executeCard(trungCard: TrungCard): ExecuteResult = {
-      log(s"\n$faction Bot drew $trungCard")
       trungCard.execute(params) match {
         case  TrungComplete(true)  => ER_OpPlusSpecial
         case  TrungComplete(false) => ER_OpOnly
@@ -3005,6 +3114,9 @@ object Bot {
           }
 
         case  TrungFlip =>
+          log("\nTrung card flipped to its back side")
+          log(separator())
+          log(trungCard.flipSide.toString)
           executeCard(trungCard.flipSide)
 
         case  TrungNoOp =>
@@ -3032,7 +3144,7 @@ object Bot {
   // US Trung Cards
   // ================================================================
 
-  object Trung_US_A extends TrungCard(US, "A", 3) {
+  object Trung_US_A extends TrungCard(US, "A", activationNumber = 3) {
     lazy val flipSide = Trung_US_AA
 
     def execute(params: Params): TrungResult = {
@@ -3041,7 +3153,8 @@ object Bot {
     }
   }
 
-  object Trung_US_AA extends TrungCard(US, "AA", 3) {
+  // ---------------------------------------------------------------
+  object Trung_US_AA extends TrungCard(US, "AA", activationNumber = 3) {
     lazy val flipSide = Trung_US_A
 
     def execute(params: Params): TrungResult = {
@@ -3050,7 +3163,8 @@ object Bot {
     }
   }
 
-  object Trung_US_B extends TrungCard(US, "B", 3) {
+  // ---------------------------------------------------------------
+  object Trung_US_B extends TrungCard(US, "B", activationNumber = 3) {
     lazy val flipSide = Trung_US_BB
 
     def execute(params: Params): TrungResult = {
@@ -3059,7 +3173,8 @@ object Bot {
     }
   }
 
-  object Trung_US_BB extends TrungCard(US, "BB", 3) {
+  // ---------------------------------------------------------------
+  object Trung_US_BB extends TrungCard(US, "BB", activationNumber = 3) {
     lazy val flipSide = Trung_US_B
 
     def execute(params: Params): TrungResult = {
@@ -3068,7 +3183,8 @@ object Bot {
     }
   }
 
-  object Trung_US_C extends TrungCard(US, "C", 3) {
+  // ---------------------------------------------------------------
+  object Trung_US_C extends TrungCard(US, "C", activationNumber = 3) {
     lazy val flipSide = Trung_US_CC
 
     def execute(params: Params): TrungResult = {
@@ -3077,7 +3193,8 @@ object Bot {
     }
   }
 
-  object Trung_US_CC extends TrungCard(US, "CC", 3) {
+  // ---------------------------------------------------------------
+  object Trung_US_CC extends TrungCard(US, "CC", activationNumber = 3) {
     lazy val flipSide = Trung_US_C
 
     def execute(params: Params): TrungResult = {
@@ -3086,7 +3203,8 @@ object Bot {
     }
   }
 
-  object Trung_US_D extends TrungCard(US, "D", 3) {
+  // ---------------------------------------------------------------
+  object Trung_US_D extends TrungCard(US, "D", activationNumber = 3) {
     lazy val flipSide = Trung_US_DD
 
     def execute(params: Params): TrungResult = {
@@ -3095,7 +3213,8 @@ object Bot {
     }
   }
 
-  object Trung_US_DD extends TrungCard(US, "DD", 3) {
+  // ---------------------------------------------------------------
+  object Trung_US_DD extends TrungCard(US, "DD", activationNumber = 3) {
     lazy val flipSide = Trung_US_D
 
     def execute(params: Params): TrungResult = {
@@ -3104,7 +3223,8 @@ object Bot {
     }
   }
 
-  object Trung_US_E extends TrungCard(US, "E", 3) {
+  // ---------------------------------------------------------------
+  object Trung_US_E extends TrungCard(US, "E", activationNumber = 3) {
     lazy val flipSide = Trung_US_EE
 
     def execute(params: Params): TrungResult = {
@@ -3113,7 +3233,8 @@ object Bot {
     }
   }
 
-  object Trung_US_EE extends TrungCard(US, "EE", 3) {
+  // ---------------------------------------------------------------
+  object Trung_US_EE extends TrungCard(US, "EE", activationNumber = 3) {
     lazy val flipSide = Trung_US_E
 
     def execute(params: Params): TrungResult = {
@@ -3122,7 +3243,8 @@ object Bot {
     }
   }
 
-  object Trung_US_F extends TrungCard(US, "F", 3) {
+  // ---------------------------------------------------------------
+  object Trung_US_F extends TrungCard(US, "F", activationNumber = 3) {
     lazy val flipSide = Trung_US_FF
 
     def execute(params: Params): TrungResult = {
@@ -3131,7 +3253,8 @@ object Bot {
     }
   }
 
-  object Trung_US_FF extends TrungCard(US, "FF", 3) {
+  // ---------------------------------------------------------------
+  object Trung_US_FF extends TrungCard(US, "FF", activationNumber = 3) {
     lazy val flipSide = Trung_US_F
 
     def execute(params: Params): TrungResult = {
@@ -3145,7 +3268,7 @@ object Bot {
   // ARVN Trung Cards
   // ================================================================
 
-  object Trung_ARVN_G extends TrungCard(ARVN, "G", 3) {
+  object Trung_ARVN_G extends TrungCard(ARVN, "G", activationNumber = 3) {
     lazy val flipSide = Trung_ARVN_GG
 
     def execute(params: Params): TrungResult = {
@@ -3154,7 +3277,8 @@ object Bot {
     }
   }
 
-  object Trung_ARVN_GG extends TrungCard(ARVN, "GG", 3) {
+  // ---------------------------------------------------------------
+  object Trung_ARVN_GG extends TrungCard(ARVN, "GG", activationNumber = 3) {
     lazy val flipSide = Trung_ARVN_G
 
     def execute(params: Params): TrungResult = {
@@ -3163,7 +3287,8 @@ object Bot {
     }
   }
 
-  object Trung_ARVN_H extends TrungCard(ARVN, "H", 3) {
+  // ---------------------------------------------------------------
+  object Trung_ARVN_H extends TrungCard(ARVN, "H", activationNumber = 3) {
     lazy val flipSide = Trung_ARVN_HH
 
     def execute(params: Params): TrungResult = {
@@ -3172,7 +3297,8 @@ object Bot {
     }
   }
 
-  object Trung_ARVN_HH extends TrungCard(ARVN, "HH", 3) {
+  // ---------------------------------------------------------------
+  object Trung_ARVN_HH extends TrungCard(ARVN, "HH", activationNumber = 3) {
     lazy val flipSide = Trung_ARVN_H
 
     def execute(params: Params): TrungResult = {
@@ -3181,7 +3307,8 @@ object Bot {
     }
   }
 
-  object Trung_ARVN_J extends TrungCard(ARVN, "J", 3) {
+  // ---------------------------------------------------------------
+  object Trung_ARVN_J extends TrungCard(ARVN, "J", activationNumber = 3) {
     lazy val flipSide = Trung_ARVN_JJ
 
     def execute(params: Params): TrungResult = {
@@ -3190,7 +3317,8 @@ object Bot {
     }
   }
 
-  object Trung_ARVN_JJ extends TrungCard(ARVN, "JJ", 3) {
+  // ---------------------------------------------------------------
+  object Trung_ARVN_JJ extends TrungCard(ARVN, "JJ", activationNumber = 3) {
     lazy val flipSide = Trung_ARVN_J
 
     def execute(params: Params): TrungResult = {
@@ -3199,7 +3327,8 @@ object Bot {
     }
   }
 
-  object Trung_ARVN_K extends TrungCard(ARVN, "K", 3) {
+  // ---------------------------------------------------------------
+  object Trung_ARVN_K extends TrungCard(ARVN, "K", activationNumber = 3) {
     lazy val flipSide = Trung_ARVN_KK
 
     def execute(params: Params): TrungResult = {
@@ -3208,7 +3337,8 @@ object Bot {
     }
   }
 
-  object Trung_ARVN_KK extends TrungCard(ARVN, "KK", 3) {
+  // ---------------------------------------------------------------
+  object Trung_ARVN_KK extends TrungCard(ARVN, "KK", activationNumber = 3) {
     lazy val flipSide = Trung_ARVN_K
 
     def execute(params: Params): TrungResult = {
@@ -3217,7 +3347,8 @@ object Bot {
     }
   }
 
-  object Trung_ARVN_L extends TrungCard(ARVN, "L", 3) {
+  // ---------------------------------------------------------------
+  object Trung_ARVN_L extends TrungCard(ARVN, "L", activationNumber = 3) {
     lazy val flipSide = Trung_ARVN_LL
 
     def execute(params: Params): TrungResult = {
@@ -3226,7 +3357,8 @@ object Bot {
     }
   }
 
-  object Trung_ARVN_LL extends TrungCard(ARVN, "LL", 3) {
+  // ---------------------------------------------------------------
+  object Trung_ARVN_LL extends TrungCard(ARVN, "LL", activationNumber = 3) {
     lazy val flipSide = Trung_ARVN_L
 
     def execute(params: Params): TrungResult = {
@@ -3235,7 +3367,8 @@ object Bot {
     }
   }
 
-  object Trung_ARVN_M extends TrungCard(ARVN, "M", 3) {
+  // ---------------------------------------------------------------
+  object Trung_ARVN_M extends TrungCard(ARVN, "M", activationNumber = 3) {
     lazy val flipSide = Trung_ARVN_MM
 
     def execute(params: Params): TrungResult = {
@@ -3244,7 +3377,8 @@ object Bot {
     }
   }
 
-  object Trung_ARVN_MM extends TrungCard(ARVN, "MM", 3) {
+  // ---------------------------------------------------------------
+  object Trung_ARVN_MM extends TrungCard(ARVN, "MM", activationNumber = 3) {
     lazy val flipSide = Trung_ARVN_M
 
     def execute(params: Params): TrungResult = {
@@ -3258,7 +3392,7 @@ object Bot {
   // NVA Trung Cards
   // ================================================================
 
-  object Trung_NVA_N extends TrungCard(NVA, "N", 2) {
+  object Trung_NVA_N extends TrungCard(NVA, "N", activationNumber = 2) {
     lazy val flipSide = Trung_NVA_NN
 
     def execute(params: Params): TrungResult = {
@@ -3267,7 +3401,8 @@ object Bot {
     }
   }
 
-  object Trung_NVA_NN extends TrungCard(NVA, "NN", 2) {
+  // ---------------------------------------------------------------
+  object Trung_NVA_NN extends TrungCard(NVA, "NN", activationNumber = 2) {
     lazy val flipSide = Trung_NVA_N
 
     def execute(params: Params): TrungResult = {
@@ -3276,7 +3411,8 @@ object Bot {
     }
   }
 
-  object Trung_NVA_P extends TrungCard(NVA, "P", 2) {
+  // ---------------------------------------------------------------
+  object Trung_NVA_P extends TrungCard(NVA, "P", activationNumber = 2) {
     lazy val flipSide = Trung_NVA_PP
 
     def execute(params: Params): TrungResult = {
@@ -3285,7 +3421,8 @@ object Bot {
     }
   }
 
-  object Trung_NVA_PP extends TrungCard(NVA, "PP", 2) {
+  // ---------------------------------------------------------------
+  object Trung_NVA_PP extends TrungCard(NVA, "PP", activationNumber = 2) {
     lazy val flipSide = Trung_NVA_P
 
     def execute(params: Params): TrungResult = {
@@ -3294,7 +3431,8 @@ object Bot {
     }
   }
 
-  object Trung_NVA_Q extends TrungCard(NVA, "Q", 2) {
+  // ---------------------------------------------------------------
+  object Trung_NVA_Q extends TrungCard(NVA, "Q", activationNumber = 2) {
     lazy val flipSide = Trung_NVA_QQ
 
     def execute(params: Params): TrungResult = {
@@ -3303,7 +3441,8 @@ object Bot {
     }
   }
 
-  object Trung_NVA_QQ extends TrungCard(NVA, "QQ", 2) {
+  // ---------------------------------------------------------------
+  object Trung_NVA_QQ extends TrungCard(NVA, "QQ", activationNumber = 2) {
     lazy val flipSide = Trung_NVA_Q
 
     def execute(params: Params): TrungResult = {
@@ -3312,7 +3451,8 @@ object Bot {
     }
   }
 
-  object Trung_NVA_R extends TrungCard(NVA, "R", 2) {
+  // ---------------------------------------------------------------
+  object Trung_NVA_R extends TrungCard(NVA, "R", activationNumber = 2) {
     lazy val flipSide = Trung_NVA_RR
 
     def execute(params: Params): TrungResult = {
@@ -3321,7 +3461,8 @@ object Bot {
     }
   }
 
-  object Trung_NVA_RR extends TrungCard(NVA, "RR", 2) {
+  // ---------------------------------------------------------------
+  object Trung_NVA_RR extends TrungCard(NVA, "RR", activationNumber = 2) {
     lazy val flipSide = Trung_NVA_R
 
     def execute(params: Params): TrungResult = {
@@ -3330,7 +3471,8 @@ object Bot {
     }
   }
 
-  object Trung_NVA_S extends TrungCard(NVA, "S", 2) {
+  // ---------------------------------------------------------------
+  object Trung_NVA_S extends TrungCard(NVA, "S", activationNumber = 2) {
     lazy val flipSide = Trung_NVA_SS
 
     def execute(params: Params): TrungResult = {
@@ -3339,7 +3481,8 @@ object Bot {
     }
   }
 
-  object Trung_NVA_SS extends TrungCard(NVA, "SS", 2) {
+  // ---------------------------------------------------------------
+  object Trung_NVA_SS extends TrungCard(NVA, "SS", activationNumber = 2) {
     lazy val flipSide = Trung_NVA_S
 
     def execute(params: Params): TrungResult = {
@@ -3348,7 +3491,8 @@ object Bot {
     }
   }
 
-  object Trung_NVA_T extends TrungCard(NVA, "T", 2) {
+  // ---------------------------------------------------------------
+  object Trung_NVA_T extends TrungCard(NVA, "T", activationNumber = 2) {
     lazy val flipSide = Trung_NVA_TT
 
     def execute(params: Params): TrungResult = {
@@ -3357,7 +3501,8 @@ object Bot {
     }
   }
 
-  object Trung_NVA_TT extends TrungCard(NVA, "TT", 2) {
+  // ---------------------------------------------------------------
+  object Trung_NVA_TT extends TrungCard(NVA, "TT", activationNumber = 2) {
     lazy val flipSide = Trung_NVA_T
 
     def execute(params: Params): TrungResult = {
@@ -3371,7 +3516,7 @@ object Bot {
   // VC Trung Cards
   // ================================================================
 
-  object Trung_VC_U extends TrungCard(VC, "U", 2) {
+  object Trung_VC_U extends TrungCard(VC, "U", activationNumber = 2) {
     lazy val flipSide = Trung_VC_UU
 
     def doSpecialActivity(): Boolean = {
@@ -3396,11 +3541,11 @@ object Bot {
 
     def execute(params: Params): TrungResult = {
       val threePlusGuerrillas = game.spaces exists (_.pieces.totalOf(VCGuerrillas) > 2)
-      lazy val undergroundNoActiveOpp = game.spaces exists { sp =>
-        (sp.isLoC || sp.support != ActiveOpposition) && sp.pieces.has(VCGuerrillas_U)
-      }
+
       if (threePlusGuerrillas) {
-        if (undergroundNoActiveOpp) {
+
+        if (VC_Bot.undergroundAtNoActiveOpposition) {
+
           VC_Bot.terrorOp(params, activationNumber) match {
             case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity)
             case None    => TrungNoOp
@@ -3414,37 +3559,37 @@ object Bot {
     }
   }
 
-  object Trung_VC_UU extends TrungCard(VC, "UU", 2) {
+  // ---------------------------------------------------------------
+  object Trung_VC_UU extends TrungCard(VC, "UU", activationNumber = 2) {
     lazy val flipSide = Trung_VC_U
 
+    def doSpecialActivity(op: InsurgentOp): Boolean = {
+      val ambushCandidates = marchAmbushCandidates(VC)
+      val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
+      val agitateRoll      = rollDice(2)
+      val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
+      val canSubvert       = game.spaces exists VC_Bot.canSubvertSpace
+      
+      botLog("VC will attempt to perform a Special Activity")
+      botLog(separator())
+      botLogChoices(List(
+        (canAmbush  ->  "Ambush: March operation and can Ambush from a March destination"),
+        (canTax     -> s"Tax: 2d6 ($agitateRoll) > Agitate Total (${game.agitateTotal}) and valid spaces"),
+        (canSubvert ->  "Subvert: Any spaces with Underground VC Guerrillas and ARVN Cubes")
+      ))
+
+      if (canAmbush)
+        ambushActivity(VC, ambushCandidates, op, activationNumber, false)
+      else if (canTax)
+        VC_Bot.taxActivity()
+      else if (canSubvert)
+        VC_Bot.subvertActivity()
+
+      // Return true if we did a special Activity
+      (canAmbush || canTax || canSubvert)
+    }
+
     def execute(params: Params): TrungResult = {
-
-      def doSpecialActivity(op: InsurgentOp): Boolean = {
-        val ambushCandidates = marchAmbushCandidates(VC)
-        val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
-        val agitateRoll      = rollDice(2)
-        val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
-        val canSubvert       = game.spaces exists VC_Bot.canSubvertSpace
-        
-        botLog("VC will attempt to perform a Special Activity")
-        botLog(separator())
-        botLogChoices(List(
-          (canAmbush  ->  "Ambush: March operation and can Ambush from a March destination"),
-          (canTax     -> s"Tax: 2d6 ($agitateRoll) > Agitate Total (${game.agitateTotal}) and valid spaces"),
-          (canSubvert ->  "Subvert: Any spaces with Underground VC Guerrillas and ARVN Cubes")
-        ))
-
-        if (canAmbush)
-          ambushActivity(VC, ambushCandidates, op, activationNumber = None)
-        else if (canTax)
-          VC_Bot.taxActivity()
-        else if (canSubvert)
-          VC_Bot.subvertActivity()
-
-        // Return true if we did a special Activity
-        (canAmbush || canTax || canSubvert)
-      }
-
       val dice = rollDice(3)
       botLog(s"Dice roll: $dice, available VC pieces: ${game.availablePieces.totalOf(VCPieces)}")
 
@@ -3460,25 +3605,92 @@ object Bot {
     }
   }
 
-  object Trung_VC_V extends TrungCard(VC, "V", 2) {
+  // ---------------------------------------------------------------
+  object Trung_VC_V extends TrungCard(VC, "V", activationNumber = 2) {
     lazy val flipSide = Trung_VC_VV
 
+    def doSpecialActivity(): Boolean = {
+      val agitateRoll      = rollDice(2)
+      val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
+      val canSubvert       = game.spaces exists VC_Bot.canSubvertSpace
+      
+      botLog("VC will attempt to perform a Special Activity")
+      botLog(separator())
+      botLogChoices(List(
+        (canTax     -> s"Tax: 2d6 ($agitateRoll) > Agitate Total (${game.agitateTotal}) and valid spaces"),
+        (canSubvert ->  "Subvert: Any spaces with Underground VC Guerrillas and ARVN Cubes")
+      ))
+
+      if (canTax)
+        VC_Bot.taxActivity()
+      else if (canSubvert)
+        VC_Bot.subvertActivity()
+
+      // Return true if we did a special Activity
+      (canTax || canSubvert)
+    }
+
     def execute(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      if (VC_Bot.undergroundAtNoActiveOpposition) {
+        if (rollDice(3) <= game.availablePieces.totalOf(VCPieces)) {
+
+          VC_Bot.rallyOp(params, activationNumber) match {
+            case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity)
+            case None    => TrungNoOp
+          }
+        }
+        else
+          TrungFlip
+      }
+      else
+        TrungDraw
     }
   }
 
-  object Trung_VC_VV extends TrungCard(VC, "VV", 2) {
+  // ---------------------------------------------------------------
+  object Trung_VC_VV extends TrungCard(VC, "VV", activationNumber = 2) {
     lazy val flipSide = Trung_VC_V
 
+    val threePlusGuerrillasWithUSTroopsNoVCBase = (sp: Space) => {
+      sp.pieces.totalOf(VCGuerrillas) > 2 &&
+      sp.pieces.has(USTroops)             &&
+      !sp.pieces.has(VCBase::VCTunnel::Nil)
+    }
+
+    def doSubvertActivity(): Boolean = {
+      val canSubvert       = game.spaces exists VC_Bot.canSubvertSpace
+      
+      botLog("VC will attempt to perform a Special Activity")
+      botLog(separator())
+      botLogChoices(List(
+        (canSubvert ->  "Subvert: Any spaces with Underground VC Guerrillas and ARVN Cubes")
+      ))
+
+      if (canSubvert) {
+        VC_Bot.subvertActivity()
+        true
+      }
+      else
+        false
+    }
+
     def execute(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+
+      val (operation, ambushed) = if (game.spaces exists threePlusGuerrillasWithUSTroopsNoVCBase)
+        VC_Bot.attackOp(params, activationNumber)
+      else
+        (VC_Bot.terrorOp(params, activationNumber), false)
+
+      operation match {
+        case Some(Attack) => TrungComplete(ambushed)
+        case Some(Terror) => TrungComplete(params.specialActivity && doSubvertActivity())
+        case _            => TrungNoOp
+      }
     }
   }
 
-  object Trung_VC_W extends TrungCard(VC, "W", 2) {
+  // ---------------------------------------------------------------
+  object Trung_VC_W extends TrungCard(VC, "W", activationNumber = 2) {
     lazy val flipSide = Trung_VC_WW
 
     def execute(params: Params): TrungResult = {
@@ -3487,7 +3699,8 @@ object Bot {
     }
   }
 
-  object Trung_VC_WW extends TrungCard(VC, "WW", 2) {
+  // ---------------------------------------------------------------
+  object Trung_VC_WW extends TrungCard(VC, "WW", activationNumber = 2) {
     lazy val flipSide = Trung_VC_W
 
     def execute(params: Params): TrungResult = {
@@ -3496,7 +3709,8 @@ object Bot {
     }
   }
 
-  object Trung_VC_X extends TrungCard(VC, "X", 2) {
+  // ---------------------------------------------------------------
+  object Trung_VC_X extends TrungCard(VC, "X", activationNumber = 2) {
     lazy val flipSide = Trung_VC_XX
 
     def execute(params: Params): TrungResult = {
@@ -3505,7 +3719,8 @@ object Bot {
     }
   }
 
-  object Trung_VC_XX extends TrungCard(VC, "XX", 2) {
+  // ---------------------------------------------------------------
+  object Trung_VC_XX extends TrungCard(VC, "XX", activationNumber = 2) {
     lazy val flipSide = Trung_VC_X
 
     def execute(params: Params): TrungResult = {
@@ -3514,7 +3729,8 @@ object Bot {
     }
   }
 
-  object Trung_VC_Y extends TrungCard(VC, "Y", 2) {
+  // ---------------------------------------------------------------
+  object Trung_VC_Y extends TrungCard(VC, "Y", activationNumber = 2) {
     lazy val flipSide = Trung_VC_YY
 
     def execute(params: Params): TrungResult = {
@@ -3523,7 +3739,8 @@ object Bot {
     }
   }
 
-  object Trung_VC_YY extends TrungCard(VC, "YY", 2) {
+  // ---------------------------------------------------------------
+  object Trung_VC_YY extends TrungCard(VC, "YY", activationNumber = 2) {
     lazy val flipSide = Trung_VC_Y
 
     def execute(params: Params): TrungResult = {
@@ -3532,7 +3749,8 @@ object Bot {
     }
   }
 
-  object Trung_VC_Z extends TrungCard(VC, "Z", 2) {
+  // ---------------------------------------------------------------
+  object Trung_VC_Z extends TrungCard(VC, "Z", activationNumber = 2) {
     lazy val flipSide = Trung_VC_ZZ
 
     def execute(params: Params): TrungResult = {
@@ -3541,7 +3759,8 @@ object Bot {
     }
   }
 
-  object Trung_VC_ZZ extends TrungCard(VC, "ZZ", 2) {
+  // ---------------------------------------------------------------
+  object Trung_VC_ZZ extends TrungCard(VC, "ZZ", activationNumber = 2) {
     lazy val flipSide = Trung_VC_Z
 
     def execute(params: Params): TrungResult = {

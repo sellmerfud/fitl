@@ -130,8 +130,6 @@ object Human {
     def size   = groups.size
   }
 
-  def noteIf(cond: Boolean, note: String): Option[String] = if (cond) Some(note) else None
-
   // TODO:  Perhaps this can be shared with the Bot code
   //        Would have to also put MovingGroups class in shared trait
   def sweepSources(destName:String, faction: Faction, alreadyMoved: MovingGroups): List[String] = {

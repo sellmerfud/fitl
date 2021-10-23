@@ -1981,6 +1981,7 @@ object FireInTheLake {
                               |  adjust momentum        - Momentum events currently in play
                               |  adjust rvnLeaders      - Stack of RVN Leaders
                               |  adjust pivotal         - Adjust available Pivotal event cards
+                              |  adjust trung           - Adjust Trung deck
                               |  adjust bot debug       - Toggle debug output of bot logic
                               |  adjust <space>         - Space specific settings""".stripMargin
 
@@ -2222,8 +2223,8 @@ object FireInTheLake {
             resolveNextActor()
           case BotCmd  =>
             // Bot.testMove()
-            Bot.Trung_VC_U.execute(Bot.Params(specialActivity = true))
-            // Bot.act()
+            // Bot.Trung_VC_U.execute(Bot.Params(specialActivity = true))
+            Bot.act()
             log(s"\nFinished with $faction turn")
             saveGameState(game.description)
             resolveNextActor()
@@ -3480,7 +3481,7 @@ object FireInTheLake {
     val agitate = if (game.isBot(VC)) List("agitate") else Nil
     val options = (
       List("resources", "aid", "patronage", "econ", "trail", "uspolicy", "casualties", "out of play",
-      "capabilities", "momentum", "rvnLeaders", "pivotal", "bot log") ::: agitate
+      "capabilities", "momentum", "rvnLeaders", "pivotal", "trung", "bot log") ::: agitate
     ).sorted ::: SpaceNames
 
     val choice = askOneOf("[Adjust] (? for list): ", options, param, allowNone = true, allowAbort = false)
@@ -3498,6 +3499,7 @@ object FireInTheLake {
       case "momentum"     => adjustMomentum()
       case "rvnLeaders"   => adjustRvnLeaders()
       case "pivotal"      => adjustPivotalCards()
+      case "trung"        => adjustTrungDeck()
       case "bot log"      => adjustBotDebug()
       case name           => adjustSpace(name)
     }
@@ -3920,6 +3922,36 @@ object FireInTheLake {
     if (savedGame.pivotCardsAvailable != game.pivotCardsAvailable)
       saveGameState("Adjusted pivotal card availability")
   }
+
+  def adjustTrungDeck(): Unit = {
+
+    def nextAdjustment(): Unit = {
+      val current = game.trungDeck(1)
+
+      val choices: List[(Option[TrungCard], String)] =
+          (game.trungDeck map (tc =>  Some(tc) -> tc.toString)) :+
+          (None -> "Finished adjusting the Trung deck")
+
+      println(s"\n$current is second from the top")
+      askMenu(choices, "\nChoose which Trung card should second from the top:").head match {
+        case None =>
+        case Some(tc) =>
+          //  The top card is alwasy put on the bottom of the deck
+          //  So the next card drawn is the second card in the stack.
+          val others = game.trungDeck filterNot (_ == tc)
+          val newDeck = others.head::tc::others.tail
+          game = game.copy(trungDeck = newDeck)
+          log(s"Adjusted Trung deck: [$tc now second from the top]")
+          nextAdjustment()
+      }
+    }
+
+    val savedGame = game
+    nextAdjustment()
+    if (savedGame.pivotCardsAvailable != game.pivotCardsAvailable)
+      saveGameState("Adjusted Trung deck")
+  }
+
 
   def adjustBotDebug(): Unit = {
     val newValue = !game.botLogging

@@ -44,7 +44,6 @@ object SavedGame {
 
   def save(filepath: Pathname, gameState: GameState): Unit = {
     try {
-      filepath.dirname.mkpath() // Make sure that the game directory exists
       filepath.writeFile(toJson(gameState))
     }
     catch {
@@ -147,19 +146,18 @@ object SavedGame {
 
   private def gameSegmentToMap(seg: GameSegment): Map[String, Any] =
     Map(
-      "filename"    -> seg.filename,
-      "description" -> seg.description,
-      "log"         -> seg.log
+      "save_number" -> seg.save_number,
+      "card"        -> seg.card,
+      "summary"     -> seg.summary
     )
 
   private def gameSegmentFromMap(data: Map[String, Any]): GameSegment = {
     GameSegment(
-      asString(data("filename")),
-      asString(data("description")),
-      (asList(data("log")) map (_.toString)).toVector
+      asInt(data("save_number")),
+      asString(data("card")),
+      asList(data("summary")) map (_.toString)
     )
   }
-
 
   private def sequenceOfPlayToMap(seq: SequenceOfPlay): Map[String, Any] =
     Map(
@@ -231,10 +229,8 @@ object SavedGame {
       "cardsDrawn"          -> gameState.cardsDrawn,
       "currentCard"         -> gameState.currentCard,
       "onDeckCard"          -> gameState.onDeckCard,
-      "needCardDraw"        -> gameState.needCardDraw,
       "prevCardWasCoup"     -> gameState.prevCardWasCoup,
       "coupCardsPlayed"     -> gameState.coupCardsPlayed,
-      "turn"                -> gameState.turn,
       "botLogging"          -> gameState.botLogging,
       "history"             -> (gameState.history map gameSegmentToMap)
     )
@@ -266,10 +262,8 @@ object SavedGame {
       asInt(data("cardsDrawn")),
       asInt(data("currentCard")),
       asInt(data("onDeckCard")),
-      asBoolean(data("needCardDraw")),
       asBoolean(data("prevCardWasCoup")),
       asInt(data("coupCardsPlayed")),
-      asInt(data("turn")),
       asBoolean(data("botLogging")),
       (asList(data("history")) map (s => gameSegmentFromMap(asMap(s)))).toVector
     )

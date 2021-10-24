@@ -1276,7 +1276,9 @@ object FireInTheLake {
     }
   }
   
-  case class Actor(faction: Faction, action: Action)
+  case class Actor(faction: Faction, action: Action) {
+    override def toString() = s"$faction performed $action"
+  }
 
   sealed abstract class SpecialActivity(val name: String) {
     override def toString() = name
@@ -1390,7 +1392,11 @@ object FireInTheLake {
     // Called when two factions have acted, or all have passed
     // Adjusts eligibility for the following turn
     def adjustEligibility(): SequenceOfPlay = {
-      SequenceOfPlay(eligibleThisTurn = eligibleThisTurn ++ ineligibleThisTurn ++ passed ++ eligibleNextTurn -- ineligibleNextTurn)
+      SequenceOfPlay(eligibleThisTurn = eligibleThisTurn   ++ 
+                                        ineligibleThisTurn ++
+                                        passed             ++ 
+                                        eligibleNextTurn   --
+                                        ineligibleNextTurn)
     }
   }
 
@@ -1420,7 +1426,7 @@ object FireInTheLake {
   // A game segment containing a file name for the segment,
   // a short description and the log messages that were generated
   // during the game segment.
-  case class GameSegment(filename: String, description: String, log: Vector[String])
+  case class GameSegment(save_number: Int, card: String, summary: Seq[String])
 
   //  Note: we calculate the 'Available' pieces by starting with the Force Pool totals
   //        and subtracting pieces on the map, casualties, and out of play.
@@ -1449,10 +1455,8 @@ object FireInTheLake {
     cardsDrawn: Int                   = 0,
     currentCard: Int                  = 0,
     onDeckCard: Int                   = 0,
-    needCardDraw: Boolean             = true,
     prevCardWasCoup: Boolean          = false,
     coupCardsPlayed: Int              = 0,  // Number of Coup cards played/ignored thus far
-    turn: Int                         = 0,  // turn zero indicates the start of the game
     botLogging: Boolean               = false,
     history: Vector[GameSegment]      = Vector.empty,
     log: Vector[String]               = Vector.empty) {  // Log of the cuurent game segment
@@ -1469,30 +1473,22 @@ object FireInTheLake {
 
     val agitateTotal = vcResources
 
-    // Create a one line turn description for the current game state.
-    // This is used to mark the current game segment, etc.
-    // "#10 Rolling Thunder - 0 acted, US is up"
-    def description: String = {
-      val b = new StringBuilder
+    def actionSummary: Seq[String] = {
+      val b = new ListBuffer[String]
 
-      if (cardsDrawn == 0)
-        b.append("Start of game, no cards have been drawn")
-      else {
-        b.append(s"turn ${game.turn}")
-        val card = deck(currentCard)
-        b.append(s" [$card]")
-        if (isCoupRound)
-          b.append(" Coup! round")
-        else {
-          b.append(s" ${sequence.numActors} acted")
-          if (sequence.numPassed > 0)
-            b.append(s", ${sequence.numPassed} passed")
-          actingFaction map (_.name) foreach { up =>
-            b.append(s", $up is up")
-          }
-        }
+      if (isCoupRound) {
+        s"${ordinal(coupCardsPlayed + 1)} Coup! round"
       }
-      b.toString
+      else {
+        actingFaction foreach { faction =>
+          b += s"${faction} is up"
+        }
+        if (sequence.actors.nonEmpty)
+          b ++= sequence.actors map (_.toString)
+        if (sequence.passed.nonEmpty)
+          b += s"${andList(sequence.passed)} passed"
+      }
+      b.toList
     }
 
     def isHuman(faction: Faction) = humanFactions(faction)
@@ -1507,10 +1503,10 @@ object FireInTheLake {
     lazy val useEcon = trackResources(ARVN)
 
     // Return faction that is currently the next available or None
-    def actingFaction: Option[Faction] = if (sequence.numActors < 2)
-      deck(currentCard).factionOrder find sequence.eligibleThisTurn
-    else
+    def actingFaction: Option[Faction] = if (sequence.exhausted)
       None
+    else
+      deck(currentCard).factionOrder find sequence.eligibleThisTurn
     
     // Return faction that would be following the acting faction 
     // on the current card.
@@ -1862,10 +1858,10 @@ object FireInTheLake {
 
       askWhichGame() match {
         case Some(name) =>
-          val filename = mostRecentSaveFile(name) getOrElse {
+          val save_number = mostRecentSaveNumber(name) getOrElse {
             throw new IllegalStateException(s"No saved file found for game '$name'")
           }
-          loadGameState(name, filename)
+          loadGameState(name, save_number)
 
         case None => // Start a new game
           println()
@@ -1906,6 +1902,7 @@ object FireInTheLake {
 
           game = initialGameState(scenario, humanFactions, usePeriodEvents)
 
+          log("Start of Game")
           logSummary(scenarioSummary)
           log()
           scenario.additionalSetup()
@@ -1917,8 +1914,12 @@ object FireInTheLake {
             log(s"\nRolling d3 to set the Agitate Total (VC resources cylinder)")
             log(separator())
             setAgitateTotal(d3)
-            saveGameState(game.description)
           }
+
+          // Ask user for the first two event cards
+          // and create the initial save point
+          drawNextCard()
+          saveGameState()
       }
 
       mainLoop()
@@ -1960,43 +1961,70 @@ object FireInTheLake {
     )
   }
 
-  def saveGameState(segmentDescription: String): Unit = {
+
+    // Save a brief description of the game.
+  // The descriptions are used by the askWhichGame() function.
+  def saveGameDescription(): Unit = {
+    assert(gameName.nonEmpty, "saveGameDescription(): called with gameName not set!")
+    val summary = game.actionSummary.headOption getOrElse ""
+    val desc = s"${game.scenarioName}  [${deck(game.currentCard)}] $summary"
+    val path = gamesDir/gameName.get/"description"
+
+    path.writeFile(desc)
+  }
+  
+  def loadGameDescription(name: String): String = {
+    val path = gamesDir/name/"description"
+    if (path.exists)
+      path.readFile().trim
+    else
+      ""
+  }
+
+  def saveGameState(): Unit = {
     assert(gameName.nonEmpty, "saveGameState(): called with gameName not set!")
 
-    val filename = s"save-${game.history.size}"
-    val path = gamesDir/gameName.get/filename
-    val segment = GameSegment(filename, segmentDescription, game.log)
+    val save_number = game.history.size
+    val save_path   = gamesDir/gameName.get/getSaveName(save_number)
+    val log_path    = gamesDir/gameName.get/getLogName(save_number)
+    val segment = GameSegment(save_number, deck(game.currentCard).toString, game.actionSummary)
+
+    // Make sure that the game directory exists
+    save_path.dirname.mkpath()
+    log_path.writeFile(game.log.mkString("", lineSeparator, lineSeparator))
     game = game.copy(log = Vector.empty, history = game.history :+ segment)
-    SavedGame.save(path, game)
+    SavedGame.save(save_path, game)
     saveGameDescription()
   }
 
     // Load the most recent game file for the given game.
-  def loadGameState(name: String, filename: String): Unit = {
+  def loadGameState(name: String, save_number: Int): Unit = {
+    val save_path = gamesDir/name/getSaveName(save_number)
     gameName = Some(name)
-    val path = gamesDir/name/filename
-    game = SavedGame.load(path)
+    game = SavedGame.load(save_path).copy(log = Vector.empty)
   }
 
-  val SAVE_FILE = """save-(\d+)""".r
-
+  
   def getSaveFileNumber(filename: String): Option[Int] = {
+    val SAVE_FILE = """save-(\d+)""".r
     filename match {
       case SAVE_FILE(n) => Some(n.toInt)
       case _            => None
     }
   }
 
+  def getSaveName(save_number: Int) = s"save-$save_number"
+  def getLogName(save_number: Int)  = s"log-$save_number"
+
   // Given a directory for a saved game finds the most recent save file.
-  def mostRecentSaveFile(name: String): Option[String] = {
-    case class Entry(number: Int, filename: String)
+  def mostRecentSaveNumber(name: String): Option[Int] = {
     val dir = gamesDir/name
     if (dir.isDirectory) {
       val entries = dir.children(withDirectory = false) flatMap { child =>
         val filename = child.toString
-        getSaveFileNumber(filename) map (n => Entry(n, filename))
+        getSaveFileNumber(filename) 
       }
-      entries.sortBy(-_.number).headOption map (_.filename)
+      entries.sortBy(num => -num).headOption
     }
     else
       None
@@ -2005,7 +2033,7 @@ object FireInTheLake {
     // Return the list of saved games
   def savedGames: List[String] = {
     gamesDir.children(withDirectory = false).toList map (_.toString) filter { name =>
-      mostRecentSaveFile(name).nonEmpty 
+      mostRecentSaveNumber(name).nonEmpty 
     }
   }
 
@@ -2019,7 +2047,7 @@ object FireInTheLake {
     else {
       val gameChoices = games map { name =>
         val desc = loadGameDescription(name)
-        val suffix = if (desc == "") "" else s": $desc"
+        val suffix = if (desc == "") "" else s", $desc"
         name -> s"Resume '$name'$suffix"
       }
       val choices = ("--new-game--" -> "Start a new game") :: gameChoices ::: List("--quit-game--" -> "Quit")
@@ -2033,33 +2061,10 @@ object FireInTheLake {
     }
   }
 
-  // Save a brief description of the game.
-  // The descriptions are used by the askWhichGame() function.
-  def saveGameDescription(): Unit = {
-    assert(gameName.nonEmpty, "saveGameState(): called with gameName not set!")
-    val desc = s"${game.scenarioName} - ${game.description}"
-    val path = gamesDir/gameName.get/"description"
-
-    path.writeFile(desc)
-  }
-  
-  def loadGameDescription(name: String): String = {
-    val path = gamesDir/name/"description"
-    if (path.exists)
-      path.readFile()
-    else
-      ""
-  }
-
 
   trait Command {
     val name: String
     val desc: String
-  }
-
-  object EndTurnCmd extends Command {
-    val name = "end turn"
-    val desc = "End the turn for the current event card"
   }
 
   object ActCmd extends Command {
@@ -2072,60 +2077,50 @@ object FireInTheLake {
     val desc = s"The Bot acts on the current card"
   }
 
-  object DrawCardCmd extends Command {
-    val name = "card"
-    val desc = """Draw the next event card
-                 |  card #    - Enter the number of the event card
-                 |  card      - You will be prompted for the card number
-               """.stripMargin
-    val action = (param: Option[String]) => ()
-  }
-
-
   object ShowCmd extends Command {
     val name = "show"
 
-    val desc = """Display the current game state
-                 |  show scenario  - name of the current scenario
-                 |  show summary   - current score, resources, etc.
-                 |  show pieces    - available pieces, casualties, out of play pieces
-                 |  show events    - capabilities, momentum, pivotal events
-                 |  show sequence  - current sequence of play
-                 |  show all       - entire game state
-                 |  show <space>   - state of a single space""".stripMargin
+    val desc = """|Display the current game state
+                  |  show scenario  - name of the current scenario
+                  |  show summary   - current score, resources, etc.
+                  |  show pieces    - available pieces, casualties, out of play pieces
+                  |  show events    - capabilities, momentum, pivotal events
+                  |  show sequence  - current sequence of play
+                  |  show all       - entire game state
+                  |  show <space>   - state of a single space""".stripMargin
 
   }
 
   object HistoryCmd extends Command {
     val name = "history"
-    val desc = """Display game history
-                 |  history            - Shows the log from the most recent game segment
-                 |  history n          - Shows the log from n the most recent game segments
-                 |  history all        - Shows the entire log
-                 |  history  >file     - Saves the log from the most recent game segment to file
-                 |  history n >file    - Saves the log from n the most recent game segments to file
-                 |  history all >file  - Saves the entire log to file""".stripMargin
+    val desc = """|Display game history
+                  |  history            - Shows the log from the beginning of the most recent save point
+                  |  history n          - Shows the log from the beginning of the nth most recent save point
+                  |  history all        - Shows the entire log
+                  |  history  >file     - Same as above but writes the history to a file
+                  |  history n >file    - Same as above but writes the history to a file
+                  |  history all >file  - Same as above but writes the history to a file""".stripMargin
 
   }
 
   object AdjustCmd extends Command {
     val name = "adjust"
-    val desc = """Adjust game settings  (Minimal rule checking is applied)
-                              |  adjust aid             - US Aid level
-                              |  adjust patronage       - ARVN Patronage
-                              |  adjust resources       - Faction resources
-                              |  adjust econ            - Econ marker value
-                              |  adjust trail           - Trail value
-                              |  adjust uspolicy        - Current US Policy
-                              |  adjust casualties      - Pieces in the Casualties box
-                              |  adjust out of play     - Pieces in the Out of Play box
-                              |  adjust capabilities    - Capabilities currently in play
-                              |  adjust momentum        - Momentum events currently in play
-                              |  adjust rvnLeaders      - Stack of RVN Leaders
-                              |  adjust pivotal         - Adjust available Pivotal event cards
-                              |  adjust trung           - Adjust Trung deck
-                              |  adjust bot debug       - Toggle debug output of bot logic
-                              |  adjust <space>         - Space specific settings""".stripMargin
+    val desc = """|Adjust game settings  (Minimal rule checking is applied)
+                  |  adjust aid             - US Aid level
+                  |  adjust patronage       - ARVN Patronage
+                  |  adjust resources       - Faction resources
+                  |  adjust econ            - Econ marker value
+                  |  adjust trail           - Trail value
+                  |  adjust uspolicy        - Current US Policy
+                  |  adjust casualties      - Pieces in the Casualties box
+                  |  adjust out of play     - Pieces in the Out of Play box
+                  |  adjust capabilities    - Capabilities currently in play
+                  |  adjust momentum        - Momentum events currently in play
+                  |  adjust rvnLeaders      - Stack of RVN Leaders
+                  |  adjust pivotal         - Adjust available Pivotal event cards
+                  |  adjust trung           - Adjust Trung deck
+                  |  adjust bot debug       - Toggle debug output of bot logic
+                  |  adjust <space>         - Space specific settings""".stripMargin
 
   }
 
@@ -2167,91 +2162,28 @@ object FireInTheLake {
 
   // Prompt the user for one or two cards if necessary.
   // Then update the game state with the new card numbers.
-  def drawNextCard(param: Option[String]): Unit = {
-
-    def paramValue(p: Option[String]): Option[Int] =
-      p match {
-        case Some(num) if checkCardNum(num) => Some(num.toInt)
-        case _ => None
-      }
-
+  def drawNextCard(): Unit = {
+    val newSequence = game.sequence.adjustEligibility()
     if (game.cardsDrawn == 0) {
-      val card1 = paramValue(param) getOrElse askCardNumber("Enter the # of the first event card: ")
-      val card2 = askCardNumber("\nEnter the # of the second event card: ")
+      val card1 = askCardNumber("\nEnter the number of the first Event card: ")
+      val card2 = askCardNumber("Enter the number of the second Event card: ")
       game = game.copy(currentCard  = card1,
                        onDeckCard   = card2,
                        cardsDrawn   = 2,
-                       needCardDraw = false)
+                       sequence     = newSequence)
     }
     else {
-      val nextCard = paramValue(param) getOrElse askCardNumber("Enter the # of the next event card: ")
-      game = game.copy(onDeckCard   = nextCard,
+      val nextCard = askCardNumber("\nEnter the number of the next Event card: ")
+      game = game.copy(currentCard  = game.onDeckCard,
+                       onDeckCard   = nextCard,
                        cardsDrawn   = game.cardsDrawn + 1,
-                       needCardDraw = false)
+                       sequence     = newSequence)
     }
 
     log()
-    log(s"Current card: ${deck(game.currentCard).fullString}")
-    log(s"On deck card: ${deck(game.onDeckCard).fullString}")
+    log(s"Current card: ${deck(game.currentCard)}")
+    log(s"On deck card: ${deck(game.onDeckCard)}")
   }
-
-
-  def askCardDrawCommand(): Unit = {
-    val opts = orList(DrawCardCmd.name :: "?" :: Nil)
-    val promptLines = new ListBuffer[String]
-    val seqList = sequenceList
-    val msg = if (game.cardsDrawn == 0)
-      "(First event card not yet drawn)"
-    else
-      "(On deck event card not yet drawn)"
-    promptLines += ""
-    promptLines += s">>> Turn ${game.turn}  $msg"
-    if (seqList.nonEmpty) {
-      promptLines += separator()
-      promptLines ++= seqList
-    }
-    promptLines += separator()
-    promptLines += s"($opts): "
-
-    val prompt = promptLines.mkString("\n", "\n", "")
-
-    val (cmd, param) = askCommand(prompt, DrawCardCmd :: CommonCmds)
-    cmd match {
-      case DrawCardCmd =>
-        drawNextCard(param)
-
-      case _ =>
-        // Handle history, show, etc.
-        doCommonCommand(cmd, param)
-        askCardDrawCommand()
-    }
-  }
-
-  // ---------------------------------------------
-  // Process all top level user commands.
-  @tailrec def mainLoop(): Unit = {
-    try {
-      if (game.needCardDraw) {
-        askCardDrawCommand()
-        if (game.isCoupRound)
-          resolveCoupCard()
-        else
-          resolveNextActor()
-      }
-      else
-          resolveNextActor()
-    }
-    catch {
-      // The rollback command will have restored the game state from a previosly
-      // saved turn.
-      case Rollback =>
-    }
-
-    // Loop infinitely
-    // We will terminate when we get an ExitGame exception (caught in main())
-    mainLoop()
-  }
-
 
   // Resolve the Coup phase, then reset the sequence of play and draw the next card.
   // ------------------
@@ -2275,8 +2207,6 @@ object FireInTheLake {
     
     // ....
     
-    saveGameState(game.description)
-    
   }
 
   def adjustFactionEligibility(): Unit = {
@@ -2296,96 +2226,84 @@ object FireInTheLake {
   }
 
   // Resolve the action for the next eligible faction.
-  // Then if two actions have occurred or if there are no more
-  // eligible factions, adjust the sequence of play and draw the next card.
-  def resolveNextActor(): Unit = {
-    val promptLines = new ListBuffer[String]
-    val next = game.actingFaction map (f => s"  ($f is up next)") getOrElse ""
-    promptLines += ""
-    promptLines += s">>> Turn ${game.turn}${next}"
-    promptLines += separator()
-    promptLines ++= sequenceList
-    promptLines += separator()
-
-    if (game.sequence.exhausted) {
-      val opts = orList(EndTurnCmd.name::"?"::Nil)
-
+  @tailrec def processActorCommand(faction: Faction): Unit = {
+    val upNext    = s"  ($faction is up next)"
+    val actorCmds = if (game.isBot(faction)) List(BotCmd) else List(ActCmd)
+    val opts      = orList((actorCmds map (_.name)) :+ "?")
+    val prompt = {
+      val promptLines = new ListBuffer[String]
+      promptLines += ""
+      promptLines += s">>> $faction turn <<<"
+      promptLines += separator()
+      promptLines ++= sequenceList
       promptLines += s"($opts): "
+      promptLines.mkString("\n", "\n", "")
+    }
 
-      val prompt = promptLines.mkString("\n", "\n", "")
+    val (cmd, param) = askCommand(prompt, actorCmds ::: CommonCmds)
 
-      @tailrec def nextEndCommand(): Unit = {
-        val (cmd, param) = askCommand(prompt.toString, EndTurnCmd::CommonCmds)
-        cmd match {
-          case EndTurnCmd =>
-            adjustFactionEligibility()
-            game.copy(
-              prevCardWasCoup = deck(game.currentCard).isCoup,
-              currentCard     = game.onDeckCard,
-              needCardDraw    = true,
-              turn            = game.turn + 1)
+    cmd match {
+      case ActCmd  =>
+        Human.act()
+        log(s"\nFinished with $faction turn")
 
-            saveGameState(game.description)
-          case _ =>
-            doCommonCommand(cmd, param)
-            nextEndCommand()
+      case BotCmd  =>
+        Bot.act()
+        log(s"\nFinished with $faction turn")
+
+      case _ =>
+        doCommonCommand(cmd, param)
+        processActorCommand(faction)
+    }
+  }
+
+  @tailrec def mainLoop(): Unit = {
+    try {
+      val savedState = game
+      try {
+        if (game.isCoupRound) {
+          resolveCoupCard()
+          // TODO:  Need to check if we have just played the
+          //        final Coup! card.  If so call endGameCommand()
+          //        which should let the user do common commands 
+          //        including rollback.
+          drawNextCard()
+          saveGameState()
+        }
+        else {
+        
+          // TODO:  We must check to see if nay faction wishes to play it's pivotal event.
+          //        If so we replace the current card with the approprate event card.
+          // ....
+
+          processActorCommand(game.actingFaction.get)
+          
+          // If no more factions can act on the current card
+          // prompt prompt for a new Event card.
+          if (game.sequence.exhausted)
+            drawNextCard()
+
+          // Now create a save point to capture the action
+          saveGameState()
         }
       }
-
-      nextEndCommand()
-    }
-    else {
-      val faction   = game.actingFaction.get
-      
-      // TODO:  We must check to see if nay faction wishes to play it's pivotal event.
-      //        If so we replace the current card with the approprate event card.
-      // ....
-      
-      val actorCmds = if (game.isBot(faction))
-        List(BotCmd)
-      else
-        List(ActCmd)
-
-      val opts = orList((actorCmds map (_.name)) :+ "?")
-
-      promptLines += s"[$faction] ($opts): "
-
-      val prompt = promptLines.mkString("\n", "\n", "")
-
-      @tailrec def nextActorCommand(): Unit = {
-        val (cmd, param) = askCommand(prompt.toString, actorCmds ::: CommonCmds)
-        cmd match {
-          case ActCmd  =>
-            val savedState = game
-            try {
-              Human.act()
-              log(s"\nFinished with $faction turn")
-              saveGameState(game.description)
-            }
-            catch {
-              case AbortAction =>
-                println("\n>>>> Aborting the current action <<<<")
-                println(separator())
-                displayGameStateDifferences(game, savedState)
-                game = savedState
-            }
-            resolveNextActor()
-          case BotCmd  =>
-            // Bot.testMove()
-            // Bot.Trung_VC_U.execute(Bot.Params(specialActivity = true))
-            Bot.act()
-            log(s"\nFinished with $faction turn")
-            saveGameState(game.description)
-            resolveNextActor()
-          case _ =>
-            doCommonCommand(cmd, param)
-            nextActorCommand()
-        }
+      catch {
+        case AbortAction =>
+          println("\n>>>> Aborting the current action <<<<")
+          println(separator())
+          displayGameStateDifferences(game, savedState)
+          game = savedState
       }
-
-      // Ask for initial command
-      nextActorCommand()
     }
+    catch {
+      // The rollback command will have restored the game state from a previosly
+      // saved turn.
+      case Rollback =>
+    }
+
+    // Loop infinitely
+    // We will terminate when we get an ExitGame exception (caught in main())
+    mainLoop()
   }
 
 
@@ -2440,7 +2358,6 @@ object FireInTheLake {
     //                      currentCard = faction.pivotCard)
     //     log()
     //     log(s"The $faction play their pivotal event")
-    //     saveGameState(game.description)
     //   }
     // }
   }
@@ -2930,8 +2847,7 @@ object FireInTheLake {
         val pieces = sp.pieces.only(types)
         val numInSpace = pieces.total min numLeft
         val minFromSpace = 1 max (numLeft - (avail - numInSpace))
-        val num = if (minFromSpace == numInSpace) numInSpace
-                 else askInt(s"Remove how many ${pieceType.genericPlural}", minFromSpace, numInSpace)
+        val num = askInt(s"Remove how many ${pieceType.genericPlural}", minFromSpace, numInSpace)
         val toRemove = askPieces(pieces, num, types)
 
         nextSpace(removed :+ (name -> toRemove), candidates filterNot (_ == name))
@@ -3170,11 +3086,11 @@ object FireInTheLake {
   //    List("apples")                      => "apples"
   //    List("apples", "oranges")           => "apples and oranges"
   //    List("apples", "oranges", "grapes") => "apples, oranges and grapes"
-  def andList(x: Seq[Any]) = x match {
+  def andList(x: TraversableOnce[Any]) = x.toSeq match {
     case Seq()     => ""
     case Seq(a)    => a.toString
     case Seq(a, b) => s"${a.toString} and ${b.toString}"
-    case _         => x.dropRight(1).mkString(", ") + ", and " + x.last.toString
+    case s         => s.dropRight(1).mkString(", ") + ", and " + s.last.toString
   }
 
   // Returns comma separated string with last choice separated by "or"
@@ -3212,13 +3128,15 @@ object FireInTheLake {
 
   // Format the given sequence of strings in a comma separated list
   // such that we do not exceed the given number of columns.
-  def wrap[T](prefix: String, values: Seq[T], columns: Int = 78): Seq[String] = {
+  def wrap[T](prefix: String, values: Seq[T], columns: Int = 78, showNone: Boolean = true): Seq[String] = {
     val stringValues = values map (_.toString)
     val b = new ListBuffer[String]
     val s = new StringBuilder(prefix)
     var first = true
-    if (stringValues.isEmpty)
-      s.append("none")
+    if (stringValues.isEmpty) {
+      if (showNone)
+        s.append("none")
+    }
     else {
       val margin = " " * prefix.length
       s.append(stringValues.head)
@@ -3465,6 +3383,9 @@ object FireInTheLake {
   def choice[T](condition: Boolean, value: T, desc: String): Option[(T, String)] =
     if (condition) Some(value -> desc) else None
 
+  def choice[T](condition: Boolean, value: T, desc: String, detail: Seq[String]): Option[(T, (String, Seq[String]))] =
+    if (condition) Some(value -> (desc, detail)) else None
+
   def askSimpleMenu[T](items: List[T],
                        prompt: String = "",
                        numChoices: Int = 1,
@@ -3496,6 +3417,47 @@ object FireInTheLake {
         for ((key, i) <- itemsRemaining.keysIterator.zipWithIndex) {
           val prefix = String.format(s"%${width}d) ", new Integer(i+1))
           println(s"${prefix}${itemsRemaining(key)}")
+        }
+        val prompt = if (numChoices > 1) s"${ordinal(num)} Selection: "
+        else "Selection: "
+        println(separator())
+        val choice = askOneOf(prompt, 1 to itemsRemaining.size, allowAbort = allowAbort).get.toInt
+        val index  = choice - 1
+        val key    = indexMap(index)
+        val remain = if (repeatsOK) itemsRemaining else itemsRemaining - key
+        indexMap(index) :: nextChoice(num + 1, remain)
+      }
+    }
+    nextChoice(1, ListMap(items:_*))
+  }
+
+  // Present a numbered menu of choices
+  // Allow the user to choose 1 or more choices and return
+  // a list of keys to the chosen items.
+  // Caller should println() a brief description of what is being chosen.
+  // items is a list of (key -> display) for each item in the menu.
+  def askMenuWithWrap[T](
+    items: List[(T, (String, Seq[String]))],
+    menuPrompt: String = "",
+    numChoices: Int = 1,
+    repeatsOK: Boolean = false,
+    allowAbort: Boolean = true): List[T] = {
+
+    def nextChoice(num: Int, itemsRemaining: ListMap[T, (String, Seq[String])]): List[T] = {
+      if (itemsRemaining.isEmpty || num > numChoices)
+        Nil
+      else if (itemsRemaining.size == 1)
+        itemsRemaining.keys.head :: Nil
+      else {
+        val width = itemsRemaining.size.toString.size
+        println(menuPrompt)
+        println(separator(char = '='))
+        val indexMap = (itemsRemaining.keys.zipWithIndex map (_.swap)).toMap
+        for ((key, i) <- itemsRemaining.keysIterator.zipWithIndex) {
+          val number = String.format(s"%${width}d) ", new Integer(i+1))
+          val (desc, detail) = itemsRemaining(key)
+          val prefix = s"${number}${desc} "
+          wrap(prefix, detail, showNone = false) foreach println
         }
         val prompt = if (numChoices > 1) s"${ordinal(num)} Selection: "
         else "Selection: "
@@ -3637,109 +3599,133 @@ object FireInTheLake {
 
   // Display some or all of the game log.
   // usage:
-  //   history            ##  Shows the log from the most recent game segment
-  //   history 1          ##  Shows the log from the most recent game segment
-  //   history n          ##  Shows the log from n the most recent game segments
+  //   history            ##  Shows the log from the beginning of most recent save point
+  //   history n          ##  Shows the log from the beginning of the nth the most recent save point
   //   history all        ##  Shows the entire log
-  //   history  >file     ##  Saves the log from the most recent game segment to file
-  //   history 1 >file    ##  Saves the log from the most recent game segment to file
-  //   history n >file    ##  Saves the log from n the most recent game segments to file
-  //   history all >file  ##  Saves the entire log to file
+  //   history  >file     ##  Same as above but log to a file instead of the terminal
+  //   history n >file
+  //   history all >file
   def showHistory(input: Option[String]): Unit = {
     case class Error(msg: String) extends Exception
     try {
-      def redirect(tokens: List[String]): Option[String] = {
+      def redirect(tokens: List[String]): Option[Pathname] = {
         tokens match {
           case Nil => None
           case x::xs  if !(x startsWith ">") => None
           case ">":: Nil => throw Error("No filename specified after '>'")
-          case ">"::file::xs => Some(file)
-          case file::xs => Some(file drop 1)
+          case ">"::file::xs => Some(Pathname(file))
+          case file::xs => Some(Pathname(file drop 1))
+        }
+      }
+
+      def printSegment(save_number: Int, path: Option[Pathname]): Unit = {
+        if (save_number < game.history.size) {
+          val header   = s"\n>>> History of save point $save_number <<<"
+          val log_path = gamesDir/gameName.get/getLogName(save_number)
+
+          val msgs = if (log_path.exists)
+            log_path.readLines.toVector
+          else
+            Vector.empty
+
+          path match {
+            case None =>
+              println(header)
+              println(separator())
+              for (msg <- msgs)
+                println(msg)
+
+            case Some(path) =>
+              path.appender { stream =>
+                stream.write(header + lineSeparator)
+                stream.write(separator() + lineSeparator)
+                for (msg <- msgs)
+                  stream.write(msg + lineSeparator)
+              }
+          }
+          printSegment(save_number + 1, path)
         }
       }
 
       val tokens = (input getOrElse "" split "\\s+").toList map (_.toLowerCase) dropWhile (_ == "")
-      val (param, file) = if (tokens.isEmpty)
+      val (param, redirect_path) = if (tokens.isEmpty)
         (None, None)
-      else if (!(tokens.head startsWith ">"))
-          (tokens.headOption, redirect(tokens.tail))
-      else
+      else if (tokens.head startsWith ">")
         (None, redirect(tokens))
+      else
+        (tokens.headOption, redirect(tokens.tail))
 
+      // The messages for history since the last save point is in game.log
+      // The messages for history for previous save points are in log-n files
       val NUM = """(\d+)""".r
-      val segments = param match {
-        case None                     => game.history.takeRight(1)
-        case Some(NUM(n))             => game.history.takeRight(n.toInt)
-        case Some("all" | "al" | "a") => game.history
+      val start_num = param match {
+        case None                     => game.history.size - 1
+        case Some(NUM(n))             => (game.history.size - n.toInt) max 0
+        case Some("all" | "al" | "a") => 0
         case Some(p)                  => throw Error(s"Invalid parameter: $p")
       }
 
-      val msgs = for (s <- segments; msg <- s.log)
-        yield msg
+      // Delete any previous file before we start appending to it.
+      redirect_path foreach { p =>
+        if (p.isDirectory)
+          throw new IllegalArgumentException(s"Cannot redirect to a directory ($p)!")
+        p.delete()
+      }
 
-      file match {
-        case None =>
-          for (s <- segments; msg <- s.log)
-            println(msg)
-        case Some(fname) =>
-          Pathname(fname).writer { w =>
-            for (s <- segments; msg <- s.log) {
-              w.write(msg)
-              w.write(lineSeparator)
-            }
-          }
+      printSegment(start_num, redirect_path)
+      
+      redirect_path foreach { p =>
+        println(s"\nHistory was written to file: $p")
       }
     }
     catch {
       case e: IOException => println(s"IOException: ${e.getMessage}")
       case Error(msg) => println(msg)
     }
+
+
   }
-
-
-  // def rollback(param: Option[String]): Unit = {
-  //   for ((segment, i) <- game.history.zipWithIndex)
-  //     println(f"$i%3d: ${segment.description}")
-  // }
 
   // Allows the user to roll back to the beginning of any turn.
   def rollback(input: Option[String]): Unit = {
     
     try {      
-      val pages = game.history.reverse.sliding(25, 25).toList
+      val pages = game.history.reverse.drop(1).sliding(25, 25).toList
       val firstPage = 0
       val lastPage  = pages.size -1
+      val PAGE_UP   = -1
+      val PAGE_DOWN = -2
+      val CANCEL    = -3
       
       def showPage(pageNum: Int): Unit = {
-        val saveChoices = pages(pageNum).toList map {
-          case GameSegment(filename, desc, _) =>
-            filename -> desc
-          }
-          val otherChoices = List(
-            choice(pageNum > firstPage, "page-up",   "Page up, show newer save points "),
-            choice(pageNum < lastPage,  "page-down", "Page down, show older save points "),
-            choice(true,                "cancel",    "Cancel, do not roll back ")
-            ).flatten
+        val saveChoices: List[(Int, (String, Seq[String]))] = pages(pageNum).toList map {
+          case GameSegment(save_number, card, summary) => save_number -> (s"[$card]", summary)
+        }
+          val otherChoices: List[(Int, (String, Seq[String]))] = List(
+            choice(pageNum > firstPage, PAGE_UP,   "Page up, show newer save points ", Seq.empty),
+            choice(pageNum < lastPage,  PAGE_DOWN, "Page down, show older save points ", Seq.empty),
+            choice(true,                CANCEL,    "Cancel, do not roll back ", Seq.empty)
+          ).flatten
             
         println("\nRollback to the beginning of a previous save point.")
         println("The save points are displayed with the most recent first.")
-        askMenu(saveChoices:::otherChoices, "Choose a save point:").head match {
-          case "cancel"    =>
-          case "page-up"   => showPage(pageNum - 1)
-          case "page-down" => showPage(pageNum + 1)
-          case save_file   =>
+        
+        askMenuWithWrap(saveChoices:::otherChoices, "Choose a save point:").head match {
+          case CANCEL      =>
+          case PAGE_UP     => showPage(pageNum - 1)
+          case PAGE_DOWN   => showPage(pageNum + 1)
+          case save_number =>
             if (askYorN(s"Are you sure you want to rollback to this save point? (y/n) ")) {
               // Games are saved at the end of the turn, so we actually want
               // to load the file with turnNumber -1.
               val name         = gameName.get
-              val fileNumber   = getSaveFileNumber(save_file).get
               val oldGameState = game
-              loadGameState(name, save_file)
+              loadGameState(name, save_number)
               saveGameDescription()  // Update the description file
 
               // Remove all safe files that succeed this one.
               // We are exploring anew
-              removeSaveFiles(name, fileNumber + 1)      
+              removeSaveFiles(name, save_number + 1)      
               displayGameStateDifferences(oldGameState, game)
               throw Rollback
             }
@@ -3829,7 +3815,6 @@ object FireInTheLake {
           val desc = adjustmentDesc("NVA resources", game.nvaResources, value)
           game = game.copy(nvaResources = value)
           log(desc)
-          saveGameState(desc)
         }
     }
     else if (game.isHuman(VC)) {
@@ -3837,7 +3822,6 @@ object FireInTheLake {
         val desc = adjustmentDesc("VC resources", game.vcResources, value)
         game = game.copy(vcResources = value)
         log(desc)
-        saveGameState(desc)
       }
     }
     else {
@@ -3845,7 +3829,6 @@ object FireInTheLake {
         val desc = adjustmentDesc("ARVN resources", game.arvnResources, value)
         game = game.copy(arvnResources = value)
         log(desc)
-        saveGameState(desc)
       }
     }
   }
@@ -3855,7 +3838,6 @@ object FireInTheLake {
       val desc = adjustmentDesc("VC Agitate total (resources cylinder)", game.vcResources, value)
       game = game.copy(vcResources = value)
       log(desc)
-      saveGameState(desc)
     }
   }
 
@@ -3864,7 +3846,6 @@ object FireInTheLake {
       val desc = adjustmentDesc("US Aid", game.usAid, value)
       game = game.copy(usAid = value)
       log(desc)
-      saveGameState(desc)
     }
   }
 
@@ -3875,7 +3856,6 @@ object FireInTheLake {
       game = game.copy(patronage = value)
       log(desc)
       logPointsChanges(origGame, game)
-      saveGameState(desc)
     }
 
 
@@ -3886,7 +3866,6 @@ object FireInTheLake {
       val desc = adjustmentDesc("Econ marker", game.econ, value)
       game = game.copy(econ = value)
       log(desc)
-      saveGameState(desc)
     }
   }
 
@@ -3895,7 +3874,6 @@ object FireInTheLake {
       val desc = adjustmentDesc("Trail Marker", game.trail, value)
       game = game.copy(trail = value)
       log(desc)
-      saveGameState(desc)
     }
   }
 
@@ -3910,7 +3888,6 @@ object FireInTheLake {
       game = game.copy(usPolicy = newPolicy)
       val desc = adjustmentDesc("US Policy", oldPolicy, newPolicy)
       log(desc)
-      saveGameState(desc)
     }
   }
 
@@ -3961,7 +3938,6 @@ object FireInTheLake {
       if (savedGame.casualties != game.casualties) {
         // Number of available US pieces affects US score
         logPointsChanges(savedGame, game)
-        saveGameState("Adjustments to US casualties")
       }
     }
   }
@@ -4013,7 +3989,6 @@ object FireInTheLake {
       if (savedGame.outOfPlay != game.outOfPlay) {
         // Number of available US pieces affects US score
         logPointsChanges(savedGame, game)
-        saveGameState("Adjustments to out of play pieces")
       }
     }
   }
@@ -4057,8 +4032,6 @@ object FireInTheLake {
 
     val savedGame = game
     nextAdjustment()
-    if (savedGame.rvnLeaders != game.rvnLeaders)
-      saveGameState("Adjustments to RVN Leader stack")
   }
 
   def adjustCapabilities(): Unit = {
@@ -4118,8 +4091,6 @@ object FireInTheLake {
 
     val savedGame = game
     nextAdjustment()
-    if (savedGame.capabilities != game.capabilities)
-      saveGameState("Adjusted capabilities in play")
   }
 
   def adjustMomentum(): Unit = {
@@ -4167,8 +4138,6 @@ object FireInTheLake {
 
     val savedGame = game
     nextAdjustment()
-    if (savedGame.momentum != game.momentum)
-      saveGameState("Adjusted momentum cards in play")
   }
 
   def adjustPivotalCards(): Unit = {
@@ -4206,8 +4175,6 @@ object FireInTheLake {
 
     val savedGame = game
     nextAdjustment()
-    if (savedGame.pivotCardsAvailable != game.pivotCardsAvailable)
-      saveGameState("Adjusted pivotal card availability")
   }
 
   def adjustTrungDeck(): Unit = {
@@ -4235,8 +4202,6 @@ object FireInTheLake {
 
     val savedGame = game
     nextAdjustment()
-    if (savedGame.pivotCardsAvailable != game.pivotCardsAvailable)
-      saveGameState("Adjusted Trung deck")
   }
 
 
@@ -4245,7 +4210,6 @@ object FireInTheLake {
     val desc = adjustmentDesc("Bot log", game.botLogging, newValue)
     game = game.copy(botLogging = newValue)
     log(desc)
-    saveGameState(desc)
   }
 
 
@@ -4280,8 +4244,6 @@ object FireInTheLake {
       }
     }
     nextAction()
-    if (game.getSpace(name) != origSpace)
-      saveGameState(s"Adjusted space: $name")
   }
 
 

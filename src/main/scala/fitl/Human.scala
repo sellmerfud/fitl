@@ -2060,7 +2060,7 @@ object Human {
 
     def moveCubesFrom(srcName: String): Unit = {
         val src            = game.getSpace(srcName)
-        val destCandidates = getPatrolDestinations(srcName).sorted(LocLastOrdering)
+        val destCandidates = getPatrolDestinations(srcName)
         val eligible       = patrolCubes(src)
 
         println(s"\nMoving Patrol cubes out of $srcName")

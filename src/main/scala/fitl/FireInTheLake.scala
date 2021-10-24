@@ -235,7 +235,9 @@ object FireInTheLake {
   val LaosCambodia =  List(CentralLaos, SouthernLaos, NortheastCambodia,
                            TheFishhook, TheParrotsBeak, Sihanoukville)
   
-  val LocLastOrdering = new Ordering[String] {
+  // Order space name Cities first then Provinces the LoCs
+  // Within each category sort alphabetically
+  val SpaceNameOrdering = new Ordering[String] {
     def compare(x: String, y: String) = {
       (x startsWith "LOC", y startsWith "LOC") match {
         case (false, true) => -1
@@ -372,7 +374,7 @@ object FireInTheLake {
       }          
     }
     
-    getDests(Set(srcName), Set.empty).toList.sorted
+    spaceNames(spaces(getDests(Set(srcName), Set.empty).toList))
   }
   
   
@@ -1344,6 +1346,19 @@ object FireInTheLake {
         }
         case _ => throw new IllegalStateException("availableActions called after two actions taken")
       }
+    }
+    
+    def location(faction: Faction): String = {
+      val actor = actors find (_.faction == faction)
+
+      if (actor.nonEmpty)
+        s"${actor.get.action} box"
+      else if (eligibleThisTurn(faction))
+        "Eligible Factions box"
+      else if (passed(faction))
+        "Pass box"
+      else
+        "Ineligible Factions box"
     }
 
     def canDo(action: Action) = availableActions contains action
@@ -3197,16 +3212,17 @@ object FireInTheLake {
 
   // Format the given sequence of strings in a comma separated list
   // such that we do not exceed the given number of columns.
-  def wrap(prefix: String, values: Seq[String], columns: Int = 78): Seq[String] = {
+  def wrap[T](prefix: String, values: Seq[T], columns: Int = 78): Seq[String] = {
+    val stringValues = values map (_.toString)
     val b = new ListBuffer[String]
     val s = new StringBuilder(prefix)
     var first = true
-    if (values.isEmpty)
+    if (stringValues.isEmpty)
       s.append("none")
     else {
       val margin = " " * prefix.length
-      s.append(values.head)
-      for (v <- values.tail) {
+      s.append(stringValues.head)
+      for (v <- stringValues.tail) {
         s.append(", ")
         if (s.length + v.length < columns)
           s.append(v)
@@ -3267,8 +3283,84 @@ object FireInTheLake {
   def amountOf(num: Int, name: String, plural: Option[String] = None) = s"$num ${pluralize(num, name, plural)}"
   def amtPiece(num: Int, pieceType: PieceType) = amountOf(num, pieceType.singular, Some(pieceType.plural))
 
-  def displayGameStateDifferences(from: GameState, to: GameState): Unit = {
-    println("\ndisplayGameStateDifferences() not implemented")
+  def displayGameStateDifferences(from: GameState, to: GameState): Unit = if (from != to) { 
+    val b = new ListBuffer[String]
+
+    def showMarker(marker: String, oldValue: Any, newValue: Any, displayValue: Any = null): Unit = {
+      if (oldValue != newValue) {
+        val display = if (displayValue == null) newValue.toString else displayValue.toString
+        b += s"Set $marker to: $display"
+      }
+    }
+
+    def showList[T](label: String, oldList: Seq[T], newList: Seq[T]): Unit = {
+      if (oldList != newList) {
+        wrap(label, newList) foreach (x => b += x)
+      }
+    }
+
+    def showPieces(label: String, oldPieces: Pieces, newPieces: Pieces): Unit = {
+      if (oldPieces != newPieces) {
+        wrap(label, newPieces.descriptions) foreach (x => b += x)
+      }
+    }
+
+    val heading = "The following changes should be made to the game board"
+    println()
+    println(separator(length = heading.length, char = '='))
+    println("The following changes should be made to the game board")
+    println(separator(length = heading.length, char = '='))
+
+    // Show changes to spaces first
+    for (fromSp <- from.spaces.sorted) {
+      val toSp = to.getSpace(fromSp.name)
+      val terrorName = if (fromSp.isLoC) "Sabotage markers" else "Terror markers"
+      b.clear
+      showMarker("Support", fromSp.support, toSp.support)
+      showMarker(terrorName, fromSp.terror, toSp.terror)
+      showPieces("Pieces: ", fromSp.pieces, toSp.pieces)
+
+      if (b.nonEmpty) {
+        println(s"\nChanges to ${fromSp.name}:")
+        println(separator())
+        b foreach println
+      }
+    }
+
+    b.clear
+    b += ""
+    for (f <- List(ARVN, NVA, VC))
+      if (game.trackResources(f))
+        showMarker("ARVN resources", from.resources(f), to.resources(f))
+
+    if (from.isBot(VC))
+      showMarker("VC Agitate total", from.agitateTotal, to.agitateTotal)
+
+    showMarker("US Aid", from.usAid, to.usAid)
+    showMarker("Patronage", from.patronage, to.patronage)
+    showMarker("Econ marker", from.econ, to.econ)
+    showMarker("Trail marker", from.trail, to.trail)
+    if (game.isBot(US))
+      showMarker("US Policy", from.usPolicy, to.usPolicy)
+
+    showPieces("Casualties: ", from.casualties, to.casualties)
+    showPieces("Out of play: ", from.outOfPlay, to.outOfPlay)
+    showPieces("Available: ", from.availablePieces, to.availablePieces)
+    showList("Capabilities: ", from.capabilities, to.capabilities)
+    showList("Momentum: ", from.momentum, to.momentum)
+    showList("RVN Leaders: ", from.rvnLeaders, to.rvnLeaders)
+
+    if (from.sequence != to.sequence) {
+      b += ""
+      for {
+        f <- List(US, ARVN, NVA, VC)
+        if from.sequence.location(f) != to.sequence.location(f)
+      } {
+        b += s"Place $f cylinder in the ${to.sequence.location(f)}"
+      }
+    }
+
+    b foreach println
   }
 
   // Find a match for the given string in the list of options.

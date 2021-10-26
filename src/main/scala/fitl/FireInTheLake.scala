@@ -354,8 +354,8 @@ object FireInTheLake {
   def isOutsideSouth(name: String)   = OutsideSouth contains name
   def isInSouthVietnam(name: String) = !isOutsideSouth(name)
   
-  //  Return a sequence of all spaces that can be reached from the given space by patrolling cubes.
   //  A cube can move onto adjacent LOCs/Cities and keep moving via adjacent LOCs/Cities until
+  //  Return a sequence of all spaces that can be reached from the given space by patrolling cubes.
   //  it reaches a space with an insurgent piece.
   def getPatrolDestinations(srcName: String): Seq[String] = {
     
@@ -478,6 +478,8 @@ object FireInTheLake {
   val InsurgentPieces     = NVAPieces:::VCPieces
   val NonNVAPieces        = USPieces:::ARVNPieces:::VCPieces
   val CoinBases           = List(USBase, ARVNBase)
+  val NVABases            = List(NVABase, NVATunnel)
+  val VCBases             = List(VCBase, VCTunnel)
   val InsurgentBases      = List(NVATunnel, NVABase, VCTunnel, VCBase)
   val InsurgentNonTunnels = List(NVABase, VCBase)
   val InsurgentTunnels    = List(NVATunnel, VCTunnel)
@@ -495,6 +497,7 @@ object FireInTheLake {
   val USForces            = List(USTroops, Irregulars_A, Irregulars_U)
   val ARVNForces          = List(ARVNTroops, ARVNPolice, Rangers_A, Rangers_U)
   val CoinCubes           = List(USTroops, ARVNTroops, ARVNPolice)
+  val CoinTroops          = List(USTroops, ARVNTroops)
   val NVAForces           = List(NVATroops, NVAGuerrillas_A, NVAGuerrillas_U)
   val InsurgentForces     = List(NVATroops, NVAGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_A, VCGuerrillas_U)
 
@@ -516,8 +519,8 @@ object FireInTheLake {
   val factionBases: Map[Faction, List[PieceType]] = Map(
     US   -> List(USBase),
     ARVN -> List(ARVNBase),
-    NVA  -> List(NVABase, NVATunnel),
-    VC   -> List(VCBase, VCTunnel))
+    NVA  -> NVABases,
+    VC   -> VCBases)
   
   //  Normalize active types to their undeground counterparts,
   //  and tunneled bases to their non-tunnel counterparts
@@ -536,8 +539,8 @@ object FireInTheLake {
     case Rangers_A | Rangers_U             => Seq(Rangers_A, Rangers_U)
     case VCGuerrillas_A | VCGuerrillas_U   => Seq(VCGuerrillas_A, VCGuerrillas_U)
     case NVAGuerrillas_A | NVAGuerrillas_U => Seq(NVAGuerrillas_A, NVAGuerrillas_U)
-    case NVABase | NVATunnel               => Seq(NVABase, NVATunnel)
-    case VCBase | VCTunnel                 => Seq(VCBase, VCTunnel)
+    case NVABase | NVATunnel               => NVABases
+    case VCBase | VCTunnel                 => VCBases
     case _                                 => Seq(pieceType)
   }
 

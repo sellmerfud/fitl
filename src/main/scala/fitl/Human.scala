@@ -486,7 +486,7 @@ object Human {
 
 
       val ratio      = if (use_pt76_shaded) 1.0 else 0.5
-      val numTroops  = if (pt76_unshaded) troops.total - 1 else troops.total
+      val numTroops  = (if (pt76_unshaded) troops.total - 1 else troops.total) max 0
       val num        = (numTroops * ratio).toInt min coinPieces.total
       val deadPieces = if (num > 0)
         askEnemyCoin(coinPieces, num, prompt = Some(s"Attacking in $name"))
@@ -503,6 +503,8 @@ object Human {
         removeToAvailable(name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
       if (num == 0)
         log("No hits are inflicted")
+      if (use_pt76_shaded)
+        log(s"NVA elects to use [$PT76_Shaded]")
       removePieces(name, deadPieces)
       removeToAvailable(name, Pieces(nvaTroops = attrition), Some("Attrition:"))
 
@@ -1378,7 +1380,6 @@ object Human {
   // LongRangeGuns_Unshaded - NVA Bombard is max 1 space
   // LongRangeGuns_Shaded   - NVA Bombard is max 3 spaces
   def doBombard(params: Params): Unit = {
-    val CoinTroops = USTroops::ARVNTroops::Nil
     val longRange_unshaded = capabilityInPlay(LongRangeGuns_Unshaded)
     val longRange_shaded   = capabilityInPlay(LongRangeGuns_Shaded)
     var bombardSpaces      = Set.empty[String]
@@ -1387,7 +1388,8 @@ object Human {
                     else                         2
                       
     val isCandidate = (sp: Space) => {
-      val enemyCondition = sp.pieces.totalOf(CoinTroops) > 2 || (sp.pieces.has(CoinTroops) && sp.pieces.has(CoinBases))
+      val enemyCondition = sp.pieces.totalOf(CoinTroops) > 2 ||
+                           (sp.pieces.has(CoinTroops) && sp.pieces.has(CoinBases))
       lazy val hasAdjacentTroops = getAdjacent(sp.name) exists { name =>
         game.getSpace(name).pieces.totalOf(NVATroops) > 2
       }
@@ -1402,11 +1404,7 @@ object Human {
       log(separator())
       
       val toRemove  = askPieces(sp.pieces, 1, CoinTroops, Some("Bombarding a Coin Troop"))
-      val pieceType = toRemove.getTypes.head
-      if (pieceType == USTroops)
-        removeToCasualties(name, Pieces(usTroops = 1))
-      else
-        removeToAvailable(name, Pieces(arvnTroops = 1))
+      removePieces(name, toRemove)
     }
     
     def nextBombardAction(): Unit = {

@@ -166,7 +166,7 @@ object Human {
       def pieces     = game.getSpace(name).pieces
       def remaining  = maxRemoval - removed.total
 
-      (remaining min pieces.numOf(NVATroops)) match {
+      (remaining min pieces.totalOf(NVATroops)) match {
         case 0 =>
         case num =>
           val toRemove = Pieces(nvaTroops = num)
@@ -704,9 +704,9 @@ object Human {
         val maxNewOthers  = (4 - totalLiftedOthers) min unmovedOthers.total
         def maxForce(t: PieceType): Int = {
           if (t == USTroops)
-            eligible.numOf(USTroops)
+            eligible.totalOf(USTroops)
           else
-            liftedOthers(srcName).numOf(t) + (maxNewOthers min unmovedOthers.numOf(t))
+            liftedOthers(srcName).totalOf(t) + (maxNewOthers min unmovedOthers.totalOf(t))
         }
         val forceChoices = ForceTypes flatMap { t =>
           val num = maxForce(t)
@@ -723,7 +723,7 @@ object Human {
             movePieces(Pieces().set(num, t), srcName, destName)
             // Update liftedOthers
             if (t != USTroops) {
-              val numMovedBefore = liftedOthers(srcName).numOf(t)
+              val numMovedBefore = liftedOthers(srcName).totalOf(t)
               val numFirstMove   = (num - numMovedBefore) max 0
               val numMovingAgain = num - numFirstMove
               liftedOthers.remove(srcName, Pieces().set(numMovingAgain, t))
@@ -1014,7 +1014,7 @@ object Human {
         case "select" =>
           askCandidateOrBlank("\nGovern in which space: ", candidates) foreach { name =>
             val sp           = game.getSpace(name)
-            val canPatronage = sp.population > 0 && sp.pieces.totalOf(ARVNCubes) > sp.pieces.numOf(USTroops)
+            val canPatronage = sp.population > 0 && sp.pieces.totalOf(ARVNCubes) > sp.pieces.totalOf(USTroops)
 
             val action = if (sp.population == 0)  // Special case for Young Turks
               "turks_only"
@@ -1272,7 +1272,7 @@ object Human {
     
     def placeTroops(name: String): Unit = {
       def sp            = game.getSpace(name)
-      val toPlaceTroops = game.piecesToPlace.numOf(NVATroops)
+      val toPlaceTroops = game.piecesToPlace.totalOf(NVATroops)
       val trailNum      = game.trail + sp.pieces.totalOf(NVABases)
       val maxGuerrillas = sp.pieces.totalOf(NVAGuerrillas)
       
@@ -1389,10 +1389,10 @@ object Human {
     val isCandidate = (sp: Space) => {
       val enemyCondition = sp.pieces.totalOf(CoinTroops) > 2 || (sp.pieces.has(CoinTroops) && sp.pieces.has(CoinBases))
       lazy val hasAdjacentTroops = getAdjacent(sp.name) exists { name =>
-        game.getSpace(name).pieces.numOf(NVATroops) > 2
+        game.getSpace(name).pieces.totalOf(NVATroops) > 2
       }
       
-      enemyCondition && (sp.pieces.numOf(NVATroops) > 2 || hasAdjacentTroops)
+      enemyCondition && (sp.pieces.totalOf(NVATroops) > 2 || hasAdjacentTroops)
     }
     
     def bombardSpace(name: String): Unit = {

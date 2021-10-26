@@ -618,22 +618,23 @@ object FireInTheLake {
 
     def totalBases = totalOf(BasePieces)
 
-    def descriptions = AllPieceTypes filter (numOf(_) > 0) map (t => amtPiece(numOf(t), t))
+    def descriptions = AllPieceTypes filter (totalOf(_) > 0) map (t => amtPiece(totalOf(t), t))
 
     override def toString() = if (isEmpty) "none" else descriptions.mkString(", ")
 
-    def totalOf(pieceTypes: TraversableOnce[PieceType]) = pieceTypes.foldLeft(0) { (num, piece) => num + numOf(piece) }
+    def totalOf(pieceTypes: TraversableOnce[PieceType]): Int =
+      pieceTypes.foldLeft(0) { (num, piece) => num + totalOf(piece) }
 
     // Return true of this Pieces instance contains at least all of the specified pieces.
-    def contains(query: Pieces): Boolean = AllPieceTypes forall (t => numOf(t) >= query.numOf(t))
+    def contains(query: Pieces): Boolean = AllPieceTypes forall (t => totalOf(t) >= query.totalOf(t))
 
     // Return true if this Pieces instance has at least one of the given piece type
-    def has(pt: PieceType): Boolean = numOf(pt) > 0
+    def has(pt: PieceType): Boolean = totalOf(pt) > 0
 
     // Return true if this Pieces instance has at least one of any of the given piece types
     def has(pts: TraversableOnce[PieceType]): Boolean = totalOf(pts) > 0
 
-    def numOf(pieceType: PieceType): Int = pieceType match {
+    def totalOf(pieceType: PieceType): Int = pieceType match {
       case USTroops        => usTroops
       case Irregulars_U    => irregulars_U
       case Irregulars_A    => irregulars_A
@@ -718,9 +719,9 @@ object FireInTheLake {
     }
 
     def only(pieceTypes: TraversableOnce[PieceType]): Pieces =
-      pieceTypes.foldLeft(Pieces()) { (pieces, t) => pieces.add(numOf(t), t) }
+      pieceTypes.foldLeft(Pieces()) { (pieces, t) => pieces.add(totalOf(t), t) }
 
-    def only(pieceType: PieceType): Pieces = Pieces().add(numOf(pieceType), pieceType)
+    def only(pieceType: PieceType): Pieces = Pieces().add(totalOf(pieceType), pieceType)
 
     def except(pieceTypes: TraversableOnce[PieceType]): Pieces =
       pieceTypes.foldLeft(this) { (pieces, t) => pieces.set(0, t) }
@@ -773,7 +774,7 @@ object FireInTheLake {
     // Convert to a list where each the piece type of each piece occupies
     // and entry in the list.
     def explode(order: List[PieceType] = AllPieceTypes): List[PieceType] = {
-      order flatMap { pieceType => List.fill(numOf(pieceType))(pieceType) }
+      order flatMap { pieceType => List.fill(totalOf(pieceType))(pieceType) }
     }
   }
 
@@ -890,9 +891,9 @@ object FireInTheLake {
     def setPieces(newPieces: Pieces): Space = copy(pieces = newPieces)
 
     def assaultCubes(faction: Faction): Int = faction match {
-      case US                      => pieces.numOf(USTroops)
+      case US                      => pieces.totalOf(USTroops)
       case ARVN if isCity || isLoC => pieces.totalOf(ARVNCubes)
-      case ARVN                    => pieces.numOf(ARVNTroops)
+      case ARVN                    => pieces.totalOf(ARVNTroops)
       case _                       => 0
     }
     
@@ -1695,7 +1696,7 @@ object FireInTheLake {
     val avail = game.availablePieces
 
     def addPieces(types: TraversableOnce[PieceType]): Unit = {
-      for (t <- types; name = t.genericPlural; count = avail.numOf(t))
+      for (t <- types; name = t.genericPlural; count = avail.totalOf(t))
         b += f"${name}%-15s: ${count}%2d"
     }
 
@@ -1715,7 +1716,7 @@ object FireInTheLake {
     val b = new ListBuffer[String]
 
     def addPieces(types: TraversableOnce[PieceType]): Unit = {
-      for (t <- types; name = t.genericPlural; count = game.casualties.numOf(t) if count > 0)
+      for (t <- types; name = t.genericPlural; count = game.casualties.totalOf(t) if count > 0)
         b += f"${name}%-15s: ${count}%2d"
     }
     b += "Casualties"
@@ -1731,7 +1732,7 @@ object FireInTheLake {
     val b = new ListBuffer[String]
 
     def addPieces(types: TraversableOnce[PieceType]): Unit = {
-      for (t <- types; name = t.genericPlural; count = game.outOfPlay.numOf(t) if count > 0)
+      for (t <- types; name = t.genericPlural; count = game.outOfPlay.totalOf(t) if count > 0)
         b += f"${name}%-15s: ${count}%2d"
     }
     b += "Out of Play"
@@ -2788,13 +2789,13 @@ object FireInTheLake {
               // If we have to include all remainig pieces, don't bother asking
               if (pieces.totalOf(types) == numRemaining) {
                 for (pieceType <- types)
-                  selected = selected.add(pieces.numOf(pieceType), pieceType)
+                  selected = selected.add(pieces.totalOf(pieceType), pieceType)
               }
               else {
                 val (pieceType :: rest) = types
                 val totalOfRest = pieces.totalOf(rest)
                 val minimum = if (totalOfRest < numRemaining) numRemaining - totalOfRest else 0
-                val maximum = numRemaining min pieces.numOf(pieceType)
+                val maximum = numRemaining min pieces.totalOf(pieceType)
                 val n = askInt(s"How many ${pieceType}", minimum, maximum, allowAbort = allowAbort)
                 selected = selected.add(n, pieceType)
                 nextType(rest)
@@ -2908,7 +2909,7 @@ object FireInTheLake {
           }
           else {
             val num = askInt(s"\nPlace how many ${pieceType.genericPlural}? ", 0, maxOfType)
-            val numAvail = game.availablePieces.numOf(pieceType)
+            val numAvail = game.availablePieces.totalOf(pieceType)
             val finalNum = if (num <= numAvail)
                num
             else {
@@ -2940,10 +2941,10 @@ object FireInTheLake {
   // If there are not enough of the pieces in the available box, then we must
   // ask for vountariy removal.
   def ensurePieceTypeAvailable(pieceType: PieceType, num: Int): Unit = {
-    assert(game.piecesToPlace.numOf(pieceType) >= num, "askPieceTypeToPlace: Not enought pieces can be placed")
+    assert(game.piecesToPlace.totalOf(pieceType) >= num, "askPieceTypeToPlace: Not enought pieces can be placed")
     
-    if (game.availablePieces.numOf(pieceType) <  num) {
-      val mustRemove = num - game.availablePieces.numOf(pieceType)
+    if (game.availablePieces.totalOf(pieceType) <  num) {
+      val mustRemove = num - game.availablePieces.totalOf(pieceType)
       
       println(s"\nThere are not enough ${pieceType.genericPlural} in the available box")
       voluntaryRemoval(mustRemove, pieceType)
@@ -3916,8 +3917,8 @@ object FireInTheLake {
 
       askMenu(choices, "\nSelect the type of casualties piece to adjust:", allowAbort = false).head foreach {
         pieceType =>
-          val origNum = casualties.numOf(pieceType)
-          val maxNum  = available.numOf(pieceType) + casualties.numOf(pieceType)
+          val origNum = casualties.totalOf(pieceType)
+          val maxNum  = available.totalOf(pieceType) + casualties.totalOf(pieceType)
 
           adjustInt(pieceType.plural, origNum, 0 to maxNum) foreach { value =>
             if (value != origNum) {
@@ -3967,8 +3968,8 @@ object FireInTheLake {
 
       askMenu(choices, "\nSelect the type of 'Out of Play' piece to adjust:", allowAbort = false).head foreach {
         pieceType =>
-          val origNum = outOfPlay.numOf(pieceType)
-          val maxNum  = available.numOf(pieceType) + outOfPlay.numOf(pieceType)
+          val origNum = outOfPlay.totalOf(pieceType)
+          val maxNum  = available.totalOf(pieceType) + outOfPlay.totalOf(pieceType)
 
           adjustInt(pieceType.plural, origNum, 0 to maxNum) foreach { value =>
             if (value != origNum) {
@@ -4299,11 +4300,11 @@ object FireInTheLake {
 
       askMenu(choices, "\nSelect type of piece to adjust:", allowAbort = false).head foreach {
         pieceType =>
-          val origNum = pieces.numOf(pieceType)
+          val origNum = pieces.totalOf(pieceType)
           val maxNum  = {
-            val n = available.numOf(normalizedType(pieceType)) + pieces.numOf(pieceType)
+            val n = available.totalOf(normalizedType(pieceType)) + pieces.totalOf(pieceType)
             if (isBase(pieceType)) {
-              val maxBase = 2 + pieces.numOf(pieceType) - pieces.totalOf(BasePieces)
+              val maxBase = 2 + pieces.totalOf(pieceType) - pieces.totalOf(BasePieces)
                n min maxBase
             }
             else n

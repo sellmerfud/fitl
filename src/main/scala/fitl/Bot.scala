@@ -556,7 +556,7 @@ object Bot {
         // Get all adjacent spaces that have not yet been selecte as march destinations
         val adjacent = NVA_Bot.getNVAAdjacent(sp.name) filterNot moveDestinations.contains
         adjacent.foldLeft(0) { (totalTroops, name) =>
-          totalTroops + game.getSpace(name).pieces.numOf(NVATroops)
+          totalTroops + game.getSpace(name).pieces.totalOf(NVATroops)
         }
     }
   )
@@ -1055,7 +1055,7 @@ object Bot {
     import params._
     val desc = "Keep ARVN cubes > US Troops at Support"
 
-    val numUS      = origin.pieces.numOf(USTroops)
+    val numUS      = origin.pieces.totalOf(USTroops)
     val numARVNNow = (origin.pieces - candidates).totalOf(ARVNCubes)
     val totalARVN  = numARVNNow + candidates.totalOf(ARVNCubes)
 
@@ -1119,8 +1119,8 @@ object Bot {
     val desc = "Keep 1 US Troop in Saigon and all 2-Pop not at Active Support"
 
     if (origin.name == Saigon || (!origin.isLoC && origin.population == 2 && origin.support != ActiveSupport)) {
-      val numTroopsNow = (origin.pieces - candidates).numOf(USTroops)
-      val totalTroops  = numTroopsNow + candidates.numOf(USTroops)
+      val numTroopsNow = (origin.pieces - candidates).totalOf(USTroops)
+      val totalTroops  = numTroopsNow + candidates.totalOf(USTroops)
 
       if (totalTroops == 0) {
         logKept(params, desc, "ignore [No US Troops to meet requirement]")
@@ -1149,8 +1149,8 @@ object Bot {
     import params._
     val desc = "Keep US Troops >= ARVN cubes in 2-Pop with Suport"
     val numARVN      = origin.pieces.totalOf(ARVNCubes)
-    val numUSNow = (origin.pieces - candidates).numOf(USTroops)
-    val totalUS  = numUSNow + candidates.numOf(USTroops)
+    val numUSNow = (origin.pieces - candidates).totalOf(USTroops)
+    val totalUS  = numUSNow + candidates.totalOf(USTroops)
 
     if (origin.isLoC || origin.population != 2 || origin.support <= Neutral) {
       logKept(params, desc, "ignore [Not 2-Pop space with Support]")
@@ -1277,7 +1277,7 @@ object Bot {
     val desc = "Keep 1 Undeground VC Guerrilla in 1+ Pop space not at Active Opposition"
 
     if (!origin.isLoC && origin.population > 0 && origin.support != ActiveOpposition) {
-      val numNow  = (origin.pieces - candidates).numOf(VCGuerrillas_U)
+      val numNow  = (origin.pieces - candidates).totalOf(VCGuerrillas_U)
 
       if (numNow > 0) {
         logKept(params, desc, "ignore [Already have VC Underground Guerrilla in space]")
@@ -1519,7 +1519,7 @@ object Bot {
     import params._
     val desc = "Get NVA Control (In South Vietnam with COIN forces)"
 
-    val totalNvaTroops = origin.pieces.numOf(NVATroops) + dest.pieces.numOf(NVATroops)
+    val totalNvaTroops = origin.pieces.totalOf(NVATroops) + dest.pieces.totalOf(NVATroops)
     val dieRoll        = d6 + d6
     val nowAtDest      = dest.pieces + selected
 
@@ -2297,7 +2297,7 @@ object Bot {
     val MostUndergroundGuerrillas = List(
       new HighestScore[Space](
         "Most Underground NVA Guerrillas",
-        sp => sp.pieces.numOf(NVAGuerrillas_U)
+        sp => sp.pieces.totalOf(NVAGuerrillas_U)
       )
     )
 
@@ -2435,7 +2435,7 @@ object Bot {
     val canTaxSpace = (sp: Space) => {
       // Bot will only tax spaces with a VC Base if at least 2 underground guerrillas
       val needed = if (sp.pieces.has(VCBase::VCTunnel::Nil)) 2 else 1 
-      val hasG = sp.pieces.numOf(VCGuerrillas_U) >= needed
+      val hasG = sp.pieces.totalOf(VCGuerrillas_U) >= needed
       hasG && ((sp.isLoC && sp.printedEconValue > 0) || (!sp.coinControlled && sp.population > 0))
     }
 
@@ -2446,14 +2446,14 @@ object Bot {
     val MostUndergroundGuerrillas = List(
       new HighestScore[Space](
         "Most Underground VC Guerrillas",
-        sp => sp.pieces.numOf(VCGuerrillas_U)
+        sp => sp.pieces.totalOf(VCGuerrillas_U)
       )
     )
 
     val MostActiveGuerrillas = List(
       new HighestScore[Space](
         "Most Active VC Guerrillas",
-        sp => sp.pieces.numOf(VCGuerrillas_A)
+        sp => sp.pieces.totalOf(VCGuerrillas_A)
       )
     )
 
@@ -2654,7 +2654,7 @@ object Bot {
           val sp         = pickSpacePlaceGuerrillas(candidates)
           val hadBase    = sp.pieces.has(vcBaseTypes)
           val numToPlace = if (sp.pieces.has(vcBaseTypes))
-            (sp.pieces.totalOf(vcBaseTypes) + sp.population) min game.availablePieces.numOf(VCGuerrillas_U)
+            (sp.pieces.totalOf(vcBaseTypes) + sp.population) min game.availablePieces.totalOf(VCGuerrillas_U)
           else
             1
           log(s"\n$VC selects ${sp.name} for Rally")
@@ -2747,7 +2747,7 @@ object Bot {
 
       val isCandidate = (sp: Space) => {
         val needed = if (sp.pieces.has(VCBase::VCTunnel::Nil)) 2 else 1
-        sp.pieces.numOf(VCGuerrillas_U) >= needed &&
+        sp.pieces.totalOf(VCGuerrillas_U) >= needed &&
         ((sp.isLoC && sp.terror == 0 && sp.printedEconValue > 0) ||
          (!sp.isLoC && sp.population > 0 && (sp.terror == 0 || sp.support != ActiveOpposition)))
       }

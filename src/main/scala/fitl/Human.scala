@@ -1303,13 +1303,12 @@ object Human {
       if (askYorN("\nDo you wish to replace one VC piece with its NVA counterpart? (y/n) "))
         loggingControlChanges {
           val vcPiece = askPieces(sp.pieces, 1, VCPieces,  Some("Selecting a VC piece to replace"))
-          val vcType  = vcPiece.explode().head
-          val nvaType = getInsurgentCounterPart(vcType)
+          val nvaType = getInsurgentCounterPart(vcPiece.explode().head)
           
           if (vcPiece.has(VCBase) || vcPiece.has(VCTunnel)) {
             removeToAvailable(name, vcPiece)
             ensurePieceTypeAvailable(NVABase, 1)
-            placePieces(name, Pieces().set(1, NVABase))
+            placePieces(name, Pieces(nvaBases = 1))
             if (nvaType == NVATunnel)
               addTunnelMarker(name, NVABase)
           }

@@ -2795,9 +2795,81 @@ object Bot {
     //  Mo_McNamaraLine    - prohibits infiltrate
     //  Mo_559TransportGrp - Infiltrate is max 1 space
 //  -------------------------------------------------------------
-    def infiltrateActivity(): Boolean = {
-      log("NVA Infiltrate not yet implemented.")
-      false
+    def infiltrateActivity(needDiceRoll: Boolean, replaceVCBase: Boolean): Boolean = {
+      var infiltrateSpaces = Set.empty[String]
+      val limited          = momentumInPlay(Mo_TyphoonKate) || momentumInPlay(Mo_559TransportGrp)
+      val maxInfiltrate    = if (limited) 1 else 2
+
+      val notes = List(
+        noteIf(momentumInPlay(Mo_TyphoonKate),s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
+        noteIf(momentumInPlay(Mo_559TransportGrp), s"Infiltrate is max 1 space [Momentum: $Mo_559TransportGrp]")
+      ).flatten
+
+      val canReplaceBase = (sp: Space) =>
+        !infiltrateSpaces(sp.name) &&
+        sp.pieces.totalOf(NVAPieces) > sp.pieces.totalOf(VCPieces) &&
+        sp.pieces.has(VCBases)
+      val canPlaceTroops = (sp: Space) =>
+        !infiltrateSpaces(sp.name) &&
+        sp.pieces.has(NVABases)
+      val diceSuccess = rollDice(3) <= game.availablePieces.totalOf(NVATroops)
+      
+      def placeTroops(): Unit = {
+        val troopCandidates = game.nonLocSpaces filter canPlaceTroops
+        val canPlace        = infiltrateSpaces.size < maxInfiltrate &&
+                              game.availablePieces.has(NVATroops)   &&
+                              troopCandidates.nonEmpty
+        if (canPlace) {
+          val sp        = pickSpacePlaceTroops(troopCandidates)
+          val numGs     = (sp.pieces.totalOf(NVAGuerrillas) - 2) max 0
+          val numTroops = (game.trail + sp.pieces.totalOf(NVABases) + numGs) min game.availablePieces.totalOf(NVATroops)
+          val toRemove  = selectFriendlyRemoval(sp.pieces.only(NVAGuerrillas), numGs)
+          val toPlace   = Pieces(nvaTroops = numTroops)
+          if (infiltrateSpaces.isEmpty)
+            logSAChoice(NVA, Infiltrate, notes)
+
+          log(s"\nNVA Infiltrates in ${sp.name}")
+            log(separator())
+
+          loggingControlChanges {
+            removeToAvailable(sp.name, toRemove)
+            placePieces(sp.name, toPlace)
+          }
+          infiltrateSpaces += sp.name
+          placeTroops()
+        }
+      }
+
+      if (!needDiceRoll || diceSuccess) {
+        val baseCandidates = game.nonLocSpaces filter canReplaceBase
+
+        // First try to replace a VC base if requested
+        if (replaceVCBase && game.availablePieces.has(NVABase) && baseCandidates.nonEmpty) {
+          val sp      = pickSpaceRemoveReplace(baseCandidates)
+          val vcPiece = selectEnemyRemovePlaceActivate(sp.pieces.only(VCBases), 1)
+          val nvaType = getInsurgentCounterPart(vcPiece.explode().head)
+
+          logSAChoice(NVA, Infiltrate, notes)
+          log(s"\nNVA Infiltrates in ${sp.name}")
+            log(separator())
+
+          if (sp.support < Neutral)
+            increaseSupport(sp.name, 1)
+
+          loggingControlChanges {
+            removeToAvailable(sp.name, vcPiece)
+            placePieces(sp.name, Pieces(nvaBases = 1))
+            if (nvaType == NVATunnel)
+                addTunnelMarker(sp.name, NVABase)
+            infiltrateSpaces += sp.name
+          }
+        }
+
+        // Next attempt to place troops at NVA bases
+        placeTroops()
+      }
+
+      infiltrateSpaces.nonEmpty
     }
 
     //  -------------------------------------------------------------
@@ -2826,7 +2898,10 @@ object Bot {
           enemyCondition          &&
           (sp.pieces.totalOf(NVATroops) > 2 || hasAdjacentTroops)
         }
-
+        val notes = List(
+          noteIf(capabilityInPlay(LongRangeGuns_Unshaded),s"NVA Bombard is max 1 space [$LongRangeGuns_Unshaded]"),
+          noteIf(capabilityInPlay(LongRangeGuns_Shaded), s"NVA Bombard is max 3 spaces [$LongRangeGuns_Shaded]")
+        ).flatten
 
         def nextBombard(numBombarded: Int): Unit = {
           val candidates = game.spaces filter isCandidate
@@ -2837,7 +2912,7 @@ object Bot {
             val toRemove = selectEnemyRemovePlaceActivate(troops, troops.total min 1)
     
             if (numBombarded == 0)
-              logSAChoice(NVA, Bombard)
+              logSAChoice(NVA, Bombard, notes)
     
             log(s"\nNVA Bombards ${sp.name}")
             log(separator())
@@ -3790,7 +3865,7 @@ object Bot {
 
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       if (NVA_Bot.eightTroopsOutsideSouth) {
-        val infiltrated = params.specialActivity && NVA_Bot.infiltrateActivity()
+        val infiltrated = params.specialActivity && NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false)
 
         NVA_Bot.marchOp(params, activationNumber, withLoC = true, withLaosCambodia = false) match {
           case Some(_) => TrungComplete(infiltrated)
@@ -3799,7 +3874,7 @@ object Bot {
       }
       else {
         NVA_Bot.rallyOp(params, activationNumber) match {
-          case Some(_) => TrungComplete(params.specialActivity && NVA_Bot.infiltrateActivity())
+          case Some(_) => TrungComplete(params.specialActivity && NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false))
           case None    => TrungNoOp
         }
       }

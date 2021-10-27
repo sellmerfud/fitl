@@ -3055,7 +3055,6 @@ object Human {
 
             faction match {
               case NVA if !sp.isLoC && sp.support > Neutral           => decreaseSupport(name, 1)
-              case NVA if !sp.isLoC && sp.support < Neutral           => increaseSupport(name, 1)
               case VC  if !sp.isLoC && sp.support != ActiveOpposition => decreaseSupport(name, 1)
               case _ => // No effect
             }

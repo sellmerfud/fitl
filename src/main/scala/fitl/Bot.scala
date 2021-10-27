@@ -150,14 +150,17 @@ object Bot {
       log(separator())
       log(display(id * 2))
       executeBack(params, specialDone)
-
     }
     def executeFront(params: Params): TrungResult
     def executeBack(params: Params, specialDone: Boolean): TrungResult
-
-
   }
-  
+
+  // Add a march actiation number function to all NVA Trung cards
+  // to override the cards activation number when the trail is a 4
+  trait NVATrung extends TrungCard {
+    def marchActivationNumber = if (game.trail == TrailMax) 1 else activationNumber
+  }  
+
   def logOpChoice(faction: Faction, op: Operation, notes: TraversableOnce[String] = Nil): Unit = {
     log(s"\n$faction chooses $op operation")
     log(separator())
@@ -2355,6 +2358,9 @@ object Bot {
       game.spaces exists (sp => sp.isLoC || !sp.coinControlled)
     }
 
+    def atleastTwentyNVATroopsOnMap: Boolean = {
+      game.totalOnMap(_.pieces.totalOf(NVATroops)) >= 20
+    }
 
     val MostUndergroundGuerrillas = List(
       new HighestScore[Space](
@@ -2754,21 +2760,25 @@ object Bot {
       // Attack where 2+ troops
       keepAttacking = nextAttack(troopCandidates, useTroops = true, false)
       
-      // Ambush in 1 or 2 spaces (if special activity allowed)
-      lazy val ambushCandidates = spaceNames(game.spaces filter { sp =>
-        !attackSpaces(sp.name) &&
-        canAmbushFrom(NVA)(sp)
-      })
-      val (ambushSpaces: Set[String], canContinue) = {
-        if (keepAttacking && params.specialActivity && ambushCandidates.nonEmpty)
-          ambushActivity(NVA, ambushCandidates, Attack, activationNumber, checkFirst = attackSpaces.nonEmpty)
-        else
-          (Set.empty, true)
+      val ambushed = if (addAmbush && keepAttacking && params.specialActivity) {
+        // Ambush in 1 or 2 spaces (if special activity allowed)
+        lazy val ambushCandidates = spaceNames(game.spaces filter { sp =>
+          !attackSpaces(sp.name) &&
+          canAmbushFrom(NVA)(sp)
+        })
+        val (ambushSpaces: Set[String], canContinue) = {
+          if (ambushCandidates.nonEmpty)
+            ambushActivity(NVA, ambushCandidates, Attack, activationNumber, checkFirst = attackSpaces.nonEmpty)
+          else
+            (Set.empty, true)
+        }
+  
+        attackSpaces ++= ambushSpaces
+        keepAttacking  = canContinue
+        ambushSpaces.nonEmpty
       }
-
-      val ambushed = ambushSpaces.nonEmpty
-      attackSpaces ++= ambushSpaces
-      keepAttacking  = canContinue
+      else
+        false
 
       lazy val guerrillaCandidates = game.spaces filter { sp =>
         !attackSpaces(sp.name) &&
@@ -2785,6 +2795,47 @@ object Bot {
       else {
         logNoOp(NVA, Attack)
         (None, false)
+      }
+    }
+
+    //  -------------------------------------------------------------
+    //  Implement the NVA Terror Instructions from the NVA Trung cards.
+    //  Select spaces using Place Terror
+    //  -------------------------------------------------------------
+    def terrorOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
+      val isCandidate = (sp: Space) => {
+        (sp.pieces.has(NVAGuerrillas_U) || sp.pieces.has(NVATroops)) &&
+        ((sp.isLoC && sp.terror == 0 && sp.printedEconValue > 0) ||
+         (!sp.isLoC && sp.population > 0 && (sp.terror == 0 || sp.support > Neutral)))
+      }
+
+      def nextTerror(candidates: List[Space], needActivation: Boolean): Unit = {
+        if (candidates.nonEmpty && checkActivation(VC, needActivation, activationNumber)) {
+          val sp = pickSpacePlaceTerror(candidates)
+
+            log(s"\n$NVA selects ${sp.name} for Terror")
+            if (sp.pieces.has(NVAGuerrillas_U))
+              revealPieces(sp.name, Pieces(nvaGuerrillas_U = 1))
+
+            if (sp.terror == 0)
+              addTerror(sp.name, 1) // Terror/Sabotage marker
+
+            if (!sp.isLoC && sp.support > Neutral)
+              decreaseSupport(sp.name, 1)
+
+          nextTerror(candidates filterNot (_.name == sp.name), true)
+        }
+      }
+
+      logOpChoice(NVA, Terror)
+      val candidates = game.spaces filter isCandidate
+      if (candidates.nonEmpty) {
+        nextTerror(candidates, false)
+        Some(Terror)
+      }
+      else {
+        logNoOp(NVA, Terror)
+        None
       }
     }
 
@@ -3264,55 +3315,6 @@ object Bot {
     }
 
     //  -------------------------------------------------------------
-    //  Implement the VC Terror Instructions from the VC Trung cards.
-    //    Select spaces using Place Terror
-    //    VC Base - where 2+ Undergound Guerrillas
-    //    Loc     - no activation number roll
-    //  -------------------------------------------------------------
-    def terrorOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
-
-      val isCandidate = (sp: Space) => {
-        val needed = if (sp.pieces.has(VCBases)) 2 else 1
-        sp.pieces.totalOf(VCGuerrillas_U) >= needed &&
-        ((sp.isLoC && sp.terror == 0 && sp.printedEconValue > 0) ||
-         (!sp.isLoC && sp.population > 0 && (sp.terror == 0 || sp.support != ActiveOpposition)))
-      }
-
-      def nextTerror(candidates: List[Space], needActivation: Boolean): Unit = {
-        if (candidates.nonEmpty && checkActivation(VC, needActivation, activationNumber)) {
-          val sp = pickSpacePlaceTerror(candidates)
-
-            log(s"\n$VC selects ${sp.name} for Terror")
-            revealPieces(sp.name, Pieces(vcGuerrillas_U = 1))
-            if (capabilityInPlay(Cadres_Unshaded)) {
-              // Get fresh copy of space to include the guerrilla that was just flipped
-              val toRemove = selectFriendlyRemoval(game.getSpace(sp.name).pieces.only(VCGuerrillas), 2)
-              removeToAvailable(sp.name, toRemove, Some(s"$Cadres_Unshaded triggers"))
-            }
-
-            if (sp.terror == 0)
-              addTerror(sp.name, 1) // Terror/Sabotage marker
-
-            if (!sp.isLoC && sp.support != ActiveOpposition)
-              decreaseSupport(sp.name, 1)
-
-          nextTerror(candidates filterNot (_.name == sp.name), !sp.isLoC)
-        }
-      }
-
-      logOpChoice(VC, Terror)
-      val candidates = game.spaces filter isCandidate
-      if (candidates.nonEmpty) {
-        nextTerror(candidates, false)
-        Some(Terror)
-      }
-      else {
-        logNoOp(VC, Rally)
-        None
-      }
-    }
-
-    //  -------------------------------------------------------------
     //  Implement the VC Attack Instructions from the VC Trung cards.
     //  Select spaces using the Remove Space Priority
     //  1. Ambush in 2 spaces (if able)
@@ -3379,6 +3381,55 @@ object Bot {
       else {
         logNoOp(VC, Attack)
         (None, false)
+      }
+    }
+
+    //  -------------------------------------------------------------
+    //  Implement the VC Terror Instructions from the VC Trung cards.
+    //    Select spaces using Place Terror
+    //    VC Base - where 2+ Undergound Guerrillas
+    //    Loc     - no activation number roll
+    //  -------------------------------------------------------------
+    def terrorOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
+
+      val isCandidate = (sp: Space) => {
+        val needed = if (sp.pieces.has(VCBases)) 2 else 1
+        sp.pieces.totalOf(VCGuerrillas_U) >= needed &&
+        ((sp.isLoC && sp.terror == 0 && sp.printedEconValue > 0) ||
+         (!sp.isLoC && sp.population > 0 && (sp.terror == 0 || sp.support != ActiveOpposition)))
+      }
+
+      def nextTerror(candidates: List[Space], needActivation: Boolean): Unit = {
+        if (candidates.nonEmpty && checkActivation(VC, needActivation, activationNumber)) {
+          val sp = pickSpacePlaceTerror(candidates)
+
+            log(s"\n$VC selects ${sp.name} for Terror")
+            revealPieces(sp.name, Pieces(vcGuerrillas_U = 1))
+            if (capabilityInPlay(Cadres_Unshaded)) {
+              // Get fresh copy of space to include the guerrilla that was just flipped
+              val toRemove = selectFriendlyRemoval(game.getSpace(sp.name).pieces.only(VCGuerrillas), 2)
+              removeToAvailable(sp.name, toRemove, Some(s"$Cadres_Unshaded triggers"))
+            }
+
+            if (sp.terror == 0)
+              addTerror(sp.name, 1) // Terror/Sabotage marker
+
+            if (!sp.isLoC && sp.support != ActiveOpposition)
+              decreaseSupport(sp.name, 1)
+
+          nextTerror(candidates filterNot (_.name == sp.name), !sp.isLoC)
+        }
+      }
+
+      logOpChoice(VC, Terror)
+      val candidates = game.spaces filter isCandidate
+      if (candidates.nonEmpty) {
+        nextTerror(candidates, false)
+        Some(Terror)
+      }
+      else {
+        logNoOp(VC, Terror)
+        None
       }
     }
 
@@ -3671,11 +3722,17 @@ object Bot {
 
   object Trung_US_A extends TrungCard(US, "A", activationNumber = 3) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
@@ -3685,11 +3742,17 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_US_B extends TrungCard(US, "B", activationNumber = 3) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
@@ -3699,11 +3762,17 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_US_C extends TrungCard(US, "C", activationNumber = 3) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
@@ -3713,11 +3782,17 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_US_D extends TrungCard(US, "D", activationNumber = 3) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
@@ -3727,11 +3802,17 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_US_E extends TrungCard(US, "E", activationNumber = 3) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
@@ -3741,11 +3822,17 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_US_F extends TrungCard(US, "F", activationNumber = 3) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
@@ -3759,11 +3846,17 @@ object Bot {
 
   object Trung_ARVN_G extends TrungCard(ARVN, "G", activationNumber = 3) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
@@ -3773,11 +3866,17 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_ARVN_H extends TrungCard(ARVN, "H", activationNumber = 3) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
@@ -3787,11 +3886,17 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_ARVN_J extends TrungCard(ARVN, "J", activationNumber = 3) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
@@ -3801,11 +3906,17 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_ARVN_K extends TrungCard(ARVN, "K", activationNumber = 3) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
@@ -3815,11 +3926,17 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_ARVN_L extends TrungCard(ARVN, "L", activationNumber = 3) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
@@ -3829,11 +3946,17 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_ARVN_M extends TrungCard(ARVN, "M", activationNumber = 3) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       log(s"\n$this not yet implemented!")
       TrungNoOp
@@ -3845,15 +3968,18 @@ object Bot {
   // NVA Trung Cards
   // ================================================================
 
-  object Trung_NVA_N extends TrungCard(NVA, "N", activationNumber = 2) {
+  object Trung_NVA_N extends TrungCard(NVA, "N", activationNumber = 2) with NVATrung {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       if (rollDice(3) > game.availablePieces.totalOf(NVATroops))
         TrungDraw
       else if (!NVA_Bot.sixTroopsWithCOINTroopsOrBase)
         flipCard(params)
       else {
-        val (operation, ambushed) = NVA_Bot.attackOp(params, activationNumber, addAmbush = true)
+        val (operation, ambushed) = NVA_Bot.attackOp(params, activationNumber, addAmbush = params.specialActivity)
 
         operation match {
           case Some(_) if ambushed => TrungComplete(true)
@@ -3863,18 +3989,78 @@ object Bot {
       }
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       if (NVA_Bot.eightTroopsOutsideSouth) {
         val infiltrated = params.specialActivity && NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false)
 
-        NVA_Bot.marchOp(params, activationNumber, withLoC = true, withLaosCambodia = false) match {
+        NVA_Bot.marchOp(params, marchActivationNumber, withLoC = true, withLaosCambodia = false) match {
           case Some(_) => TrungComplete(infiltrated)
           case None    => TrungNoOp
         }
       }
       else {
         NVA_Bot.rallyOp(params, activationNumber) match {
-          case Some(_) => TrungComplete(params.specialActivity && NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false))
+          case Some(_) => 
+            val infiltrated = params.specialActivity &&
+                              NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false)
+            TrungComplete(infiltrated)
+
+          case None =>
+            TrungNoOp
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------
+  object Trung_NVA_P extends TrungCard(NVA, "P", activationNumber = 2) with NVATrung {
+
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
+    def executeFront(params: Params): TrungResult = {
+      if (game.totalCoinControl < 42)
+        TrungDraw
+      else if (!NVA_Bot.atleastTwentyNVATroopsOnMap)
+        flipCard(params)
+      else {
+        val bombarded = params.specialActivity && NVA_Bot.bombardActivity()
+
+        val operation = if (NVA_Bot.sixTroopsWithCOINTroopsOrBase)
+          NVA_Bot.attackOp(params, activationNumber, addAmbush = false)
+        else
+          NVA_Bot.marchOp(params, marchActivationNumber, withLoC = false, withLaosCambodia = false)
+
+        operation match {
+          case Some(_) => TrungComplete(bombarded)
+          case None    => TrungNoOp
+        }
+      }
+    }
+
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
+      if (rollDice(2) <= game.availablePieces.totalOf(NVAGuerrillas)) {
+        NVA_Bot.rallyOp(params, activationNumber) match {
+          case Some(_) =>
+            val infiltrated = params.specialActivity && 
+                              NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = true)
+            TrungComplete(infiltrated)
+
+          case None =>
+            TrungNoOp
+        }
+      }
+      else {
+        val infiltrated = params.specialActivity &&
+                          NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false)
+        NVA_Bot.marchOp(params, marchActivationNumber, withLoC = false, withLaosCambodia = false) match {
+          case Some(_) => TrungComplete(infiltrated)
           case None    => TrungNoOp
         }
       }
@@ -3882,72 +4068,211 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_NVA_P extends TrungCard(NVA, "P", activationNumber = 2) {
+  object Trung_NVA_Q extends TrungCard(NVA, "Q", activationNumber = 2) with NVATrung {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      val guerrilasCheck = rollDice(2) <= game.availablePieces.totalOf(NVAGuerrillas)
+      val trailCheck     = d3 >= game.trail
+
+      if (!guerrilasCheck && !trailCheck)
+        TrungDraw
+      else if (!NVA_Bot.sixTroopsWithCOINTroopsOrBase)
+        flipCard(params)
+      else {
+        val (operation, ambushed) = NVA_Bot.attackOp(params, activationNumber, addAmbush = params.specialActivity)
+        val bombarded = operation.nonEmpty && !ambushed && NVA_Bot.bombardActivity()
+        operation match {
+          case Some(_) if ambushed => TrungComplete(true)
+          case Some(_) => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
+          case None    => TrungNoOp
+        }
+      }
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      NVA_Bot.rallyOp(params, activationNumber) match {
+        case Some(_) if params.specialActivity =>
+          val didSpecial = NVA_Bot.infiltrateActivity(needDiceRoll = true, replaceVCBase = true) ||
+                           NVA_Bot.bombardActivity()
+          TrungComplete(didSpecial)
+
+        case Some(_) =>
+          TrungComplete(false)
+
+        case None =>
+          TrungNoOp
+      }
     }
   }
 
   // ---------------------------------------------------------------
-  object Trung_NVA_Q extends TrungCard(NVA, "Q", activationNumber = 2) {
+  object Trung_NVA_R extends TrungCard(NVA, "R", activationNumber = 2) with NVATrung {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      if (game.usPoints < 42)  // Support + available US Troops and Bases
+        TrungDraw
+      else if (rollDice(3) > game.availablePieces.totalOf(NVATroops))
+        flipCard(params)
+      else {
+        val infiltrated = params.specialActivity &&
+                          NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = true)
+
+        NVA_Bot.marchOp(params, marchActivationNumber, withLoC = true, withLaosCambodia = true) match {
+          case Some(_) => TrungComplete(infiltrated)
+          case None    => TrungNoOp
+        }
+      }
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      if (game.nonLocSpaces exists (sp => sp.support > Neutral && sp.pieces.has(NVAGuerrillas_U))) {
+        NVA_Bot.terrorOp(params, activationNumber) match {
+          case Some(_) =>
+            val bombarded = params.specialActivity && NVA_Bot.bombardActivity()
+            TrungComplete(bombarded)
+
+          case None =>
+            TrungNoOp
+        }
+      }
+      else {
+        def doSpecialActivity(): Boolean = {
+          val ambushCandidates = marchAmbushCandidates(NVA)
+          val canAmbush        = ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
+        
+          if (canAmbush)
+            ambushActivity(NVA, ambushCandidates, March, activationNumber, false)
+          
+          canAmbush || NVA_Bot.bombardActivity()
+        }
+
+        NVA_Bot.marchOp(params, marchActivationNumber, withLoC = true, withLaosCambodia = true) match {
+          case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity())
+          case None    => TrungNoOp
+        }
+      }
     }
   }
 
   // ---------------------------------------------------------------
-  object Trung_NVA_R extends TrungCard(NVA, "R", activationNumber = 2) {
+  object Trung_NVA_S extends TrungCard(NVA, "S", activationNumber = 2) with NVATrung {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      val guerrillaCheck = rollDice(2) <= game.availablePieces.totalOf(NVAGuerrillas)
+      val trailCheck     = d3 >= game.trail
+
+      if (!NVA_Bot.pop2WithoutCoinControl)
+        TrungDraw
+      else if (!guerrillaCheck && !trailCheck)
+        flipCard(params)
+      else {
+        NVA_Bot.rallyOp(params, activationNumber) match {
+          case Some(_) if (params.specialActivity) =>
+            val didSpecial = NVA_Bot.infiltrateActivity(needDiceRoll = true, replaceVCBase = true) ||
+                             NVA_Bot.bombardActivity()
+            TrungComplete(didSpecial)
+            
+          case Some(_) =>
+            TrungComplete(false)
+
+          case None =>
+            TrungNoOp
+        }
+      }
+      
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecialActivity(op: InsurgentOp): Boolean = {
+        val ambushCandidates = marchAmbushCandidates(NVA)
+        val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
+        
+        if (canAmbush)
+          ambushActivity(VC, ambushCandidates, op, activationNumber, false)
+
+        canAmbush || NVA_Bot.bombardActivity()
+      }
+
+
+      val (operation, ambushed) = if (NVA_Bot.sixTroopsWithCOINPieces)
+        NVA_Bot.attackOp(params, activationNumber, addAmbush = params.specialActivity)
+      else
+        (NVA_Bot.marchOp(params, marchActivationNumber, withLoC = true, withLaosCambodia = true), false)
+
+      operation match {
+        case Some(Attack) if ambushed => TrungComplete(true)
+        case Some(op)                 => TrungComplete(params.specialActivity && doSpecialActivity(op))
+        case None                     => TrungNoOp
+      }
     }
   }
 
   // ---------------------------------------------------------------
-  object Trung_NVA_S extends TrungCard(NVA, "S", activationNumber = 2) {
+  object Trung_NVA_T extends TrungCard(NVA, "T", activationNumber = 2) with NVATrung {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      if (!NVA_Bot.atleastTwentyNVATroopsOnMap)
+        TrungDraw
+      else if (!NVA_Bot.sixTroopsWithCOINTroopsOrBase)
+        flipCard(params)
+      else {
+        val (operation, ambushed) = NVA_Bot.attackOp(params, activationNumber, addAmbush = params.specialActivity)
+
+        operation match {
+          case Some(_) if ambushed => TrungComplete(true)
+          case Some(_)             => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
+          case None                => TrungNoOp
+        }
+      }
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
-    }
-  }
+      val underGroundWithSupport = (sp: Space) =>
+        sp.pieces.has(NVAGuerrillas_U) && sp.support > Neutral
+      val undergroundIn2PlusSpacesWithSupport: Boolean =
+        (game.nonLocSpaces count underGroundWithSupport) > 1
+      
+      if (undergroundIn2PlusSpacesWithSupport) {
+        NVA_Bot.terrorOp(params, activationNumber) match {
+          case Some(_) => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
+          case None    => TrungNoOp
+        }
+      }
+      else {
+        val didSpecial =
+          params.specialActivity &&
+          (NVA_Bot.infiltrateActivity(needDiceRoll = true, replaceVCBase = true) ||
+           NVA_Bot.bombardActivity())
 
-  // ---------------------------------------------------------------
-  object Trung_NVA_T extends TrungCard(NVA, "T", activationNumber = 2) {
-
-    def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
-    }
-
-    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+        NVA_Bot.marchOp(params, marchActivationNumber, withLoC = true, withLaosCambodia = false) match {
+          case Some(_) => TrungComplete(didSpecial)
+          case None    => TrungNoOp
+        }
+      }
     }
   }
 
@@ -3957,7 +4282,10 @@ object Bot {
   // ================================================================
 
   object Trung_VC_U extends TrungCard(VC, "U", activationNumber = 2) {
-
+    
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
 
       def doSpecialActivity(): Boolean = {
@@ -3966,9 +4294,6 @@ object Bot {
         (canSubvert && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
       }
       
-      // ------------------------------------------------------------
-      // Front Operation
-      // ------------------------------------------------------------
       val threePlusGuerrillas = game.spaces exists (_.pieces.totalOf(VCGuerrillas) > 2)
 
       if (threePlusGuerrillas) {
@@ -3987,6 +4312,9 @@ object Bot {
         TrungDraw
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
 
       def doSpecialActivity(op: InsurgentOp): Boolean = {
@@ -4021,7 +4349,10 @@ object Bot {
 
   // ---------------------------------------------------------------
   object Trung_VC_V extends TrungCard(VC, "V", activationNumber = 2) {
-
+    
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
         val agitateRoll      = rollDice(2)
@@ -4031,10 +4362,6 @@ object Bot {
         (canTax && VC_Bot.taxActivity()) || VC_Bot.subvertActivity()
 
       }
-
-      // ------------------------------------------------------------
-      // Front Operation
-      // ------------------------------------------------------------
 
       if (VC_Bot.undergroundAtNoActiveOpposition) {
         if (rollDice(3) <= game.availablePieces.totalOf(VCPieces)) {
@@ -4051,6 +4378,9 @@ object Bot {
         TrungDraw
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       val (operation, ambushed) = if (VC_Bot.threePlusGuerrillasWithUSTroopsNoVCBase)
         VC_Bot.attackOp(params, activationNumber)
@@ -4069,15 +4399,15 @@ object Bot {
 
   // ---------------------------------------------------------------
   object Trung_VC_W extends TrungCard(VC, "W", activationNumber = 2) {
-
+    
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
         (game.patronage >= 17 && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
       }
 
-      // ------------------------------------------------------------
-      // Front Operation
-      // ------------------------------------------------------------
       val undergroundWithUSTroops = game.spaces exists { sp=>
         sp.pieces.has(VCGuerrillas_U) && sp.pieces.has(USTroops)
       }
@@ -4094,6 +4424,9 @@ object Bot {
       }
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       val (operation, ambushed) = if (VC_Bot.undergroundAtNoActiveOpposition)
         (VC_Bot.terrorOp(params, activationNumber), false)
@@ -4112,6 +4445,9 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_VC_X extends TrungCard(VC, "X", activationNumber = 2) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
         (rollDice(2) > game.agitateTotal && VC_Bot.taxActivity()) || VC_Bot.subvertActivity()
@@ -4132,6 +4468,9 @@ object Bot {
       }
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
         val ambushCandidates = marchAmbushCandidates(VC)
@@ -4144,9 +4483,6 @@ object Bot {
         canAmbush || (canSubvert && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
       }
 
-      // ------------------------------------------------------------
-      // Back Operation
-      // ------------------------------------------------------------
       VC_Bot.marchOp(params, activationNumber) match {
         case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity())
         case None    => TrungNoOp
@@ -4158,6 +4494,9 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_VC_Y extends TrungCard(VC, "Y", activationNumber = 2) {
 
+    // ------------------------------------------------------------
+    //Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       if (rollDice(3) > game.availablePieces.totalOf(VCPieces))
         TrungDraw
@@ -4175,6 +4514,9 @@ object Bot {
     }
 
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
         val canSubvert       = game.patronage >= 17
@@ -4182,9 +4524,6 @@ object Bot {
         (canSubvert && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
       }
 
-      // ------------------------------------------------------------
-      // Back Operation
-      // ------------------------------------------------------------
       VC_Bot.rallyOp(params, activationNumber) match {
         case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity())
         case None    => TrungNoOp
@@ -4195,16 +4534,15 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_VC_Z extends TrungCard(VC, "Z", activationNumber = 2) {
 
+    // ------------------------------------------------------------
+    // Front Operation
+    // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
         val canSubvert       = game.patronage >= 17
 
         (canSubvert && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
       }
-
-      // ------------------------------------------------------------
-      // Front Operation
-      // ------------------------------------------------------------
 
       val numVCGuerrillas = (sp: Space) => sp.pieces.totalOf(VCGuerrillas)
       val vcGuerrillasOnMap = game totalOnMap numVCGuerrillas
@@ -4224,6 +4562,9 @@ object Bot {
       }
     }
 
+    // ------------------------------------------------------------
+    // Back Operation
+    // ------------------------------------------------------------
     //  NOTE:  This flip side is only executed if the Special Activity
     //         from the front side has already been attempted.
     //         If the Special Activity was done and we cannot find

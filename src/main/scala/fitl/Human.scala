@@ -220,7 +220,7 @@ object Human {
     val cost = if (coupRound)
         (if (nguyenCaoKy) 4 else if (blowtorch) 1 else 3)
     else
-        (if (blowtorch) 1 else if (nguyenCaoKy) 4 else 3)
+        (if (nguyenCaoKy) 4 else 3)
     val maxLevel    = if (faction == US && capabilityInPlay(CORDS_Shaded)) PassiveSupport else ActiveSupport
     val sp          = game.getSpace(name)
     val maxShift    = ((maxLevel.value - sp.support.value) max 0) min 2
@@ -251,7 +251,7 @@ object Human {
         false
       else {
         val shift = (num - sp.terror) max 0
-        log()
+        println()
         decreaseResources(ARVN, num * cost)
         removeTerror(name, num min sp.terror)
         increaseSupport(name, shift)
@@ -1769,6 +1769,7 @@ object Human {
   //    US Training may pacify in 2 Training spaces (cost is unchanged)
   // CORDS_Shaded
   //    US Training may pacify only to PassiveSupport (Not ActiveSupport)
+  // RVN_Leader_DuongVanMinh - Each ARVN Train operation adds +5 bonus Aid
   // RVN_Leader_NguyenCaoKy - US/ARVN pacification costs 4 resources per Terror/Level
   def executeTrain(faction: Faction, params: Params): Unit = {
     val specialActivities = if (faction == US)
@@ -1783,6 +1784,7 @@ object Human {
     var selectedSpaces      = List.empty[String]
     var arvnPlacedIn        = List.empty[String]
     var pacifySpaces        = List.empty[String]
+    val duongVanMinh        = faction == ARVN && isRVNLeader(RVN_Leader_DuongVanMinh)
     val nguyenCaoKy         = isRVNLeader(RVN_Leader_NguyenCaoKy)
     val isCandidate = (sp: Space) => {
       val valid = if (faction == ARVN) !sp.isLoC && !sp.nvaControlled
@@ -1982,6 +1984,14 @@ object Human {
 
     logOpChoice(faction, Train, notes)
 
+    if (duongVanMinh) {
+      if (isRVNLeader(RVN_Leader_DuongVanMinh)) {
+        log(s"\nLeader: $RVN_Leader_DuongVanMinh effect triggers")
+        log(separator())
+        increaseUsAid(5)
+      }
+    }
+
     selectTrainSpace()
     if (selectedSpaces.nonEmpty)
       promptFinalAction() // Pacify, Place base, Xfer Patronage to ARVN resources
@@ -2057,7 +2067,7 @@ object Human {
 
     def moveCubesFrom(srcName: String): Unit = {
         val src            = game.getSpace(srcName)
-        val destCandidates = getPatrolDestinations(srcName)
+        val destCandidates = getPatrolDestinations(srcName).toList.sorted
         val eligible       = patrolCubes(src)
 
         println(s"\nMoving Patrol cubes out of $srcName")

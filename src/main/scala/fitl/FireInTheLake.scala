@@ -355,9 +355,9 @@ object FireInTheLake {
   def isInSouthVietnam(name: String) = !isOutsideSouth(name)
   
   //  A cube can move onto adjacent LOCs/Cities and keep moving via adjacent LOCs/Cities until
-  //  Return a sequence of all spaces that can be reached from the given space by patrolling cubes.
   //  it reaches a space with an insurgent piece.
-  def getPatrolDestinations(srcName: String): Seq[String] = {
+  //  Return a sequence of all spaces that can be reached from the given space by patrolling cubes.
+  def getPatrolDestinations(srcName: String): Set[String] = {
     
     @tailrec def getDests(candidates: Set[String], destinations: Set[String]): Set[String] = {
       if (candidates.isEmpty)
@@ -374,7 +374,7 @@ object FireInTheLake {
       }          
     }
     
-    spaceNames(spaces(getDests(Set(srcName), Set.empty).toList))
+    getDests(Set(srcName), Set.empty)
   }
   
   

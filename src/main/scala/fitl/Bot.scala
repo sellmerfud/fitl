@@ -140,7 +140,7 @@ object Bot {
   // The front and back of each card are treated a seperate
   // entities internally.
 
-  abstract class TrungCard(val faction: Faction, val id: String, val activationNumber: Int) {
+  abstract class TrungCard(val faction: Faction, val id: String, val actNum: Int) {
 
     def display(ident: String) = s"Trung: $faction - $ident"
     override def toString() = display(id)
@@ -158,7 +158,7 @@ object Bot {
   // Add a march actiation number function to all NVA Trung cards
   // to override the cards activation number when the trail is a 4
   trait NVATrung extends TrungCard {
-    def marchActivationNumber = if (game.trail == TrailMax) 1 else activationNumber
+    def marchActNum = if (game.trail == TrailMax) 1 else actNum
   }  
 
   def logOpChoice(faction: Faction, op: Operation, notes: TraversableOnce[String] = Nil): Unit = {
@@ -181,19 +181,19 @@ object Bot {
 
   // Make an activation roll
   // and return true if it is a success
-  def makeActivationRoll(faction: Faction, activationNumber: Int): Boolean ={
+  def makeActivationRoll(faction: Faction, actNum: Int): Boolean ={
     val die     = d6
-    val success = die > activationNumber
+    val success = die > actNum
 
-    log(s"\n$faction activation roll against activation number of $activationNumber")
+    log(s"\n$faction activation roll against activation number of $actNum")
     log(separator())
     log(s"Die roll: $die [${if (success) "Success!" else "Failure"}]")
     success
   }
 
   // Convenience method
-  def checkActivation(faction: Faction, needRoll: Boolean, activationNumber: Int): Boolean = {
-    needRoll == false || makeActivationRoll(faction, activationNumber)
+  def checkActivation(faction: Faction, needRoll: Boolean, actNum: Int): Boolean = {
+    needRoll == false || makeActivationRoll(faction, actNum)
   }
 
   def sweepEffective(faction: Faction, name: String): Boolean = {
@@ -249,7 +249,7 @@ object Bot {
   def ambushActivity(faction: Faction, 
                      ambushCandidates: List[String],
                      op: Operation,
-                     activationNumber: Int,
+                     actNum: Int,
                      checkFirst: Boolean): (Set[String], Boolean) = {
     var ambushSpaces     = Set.empty[String]
     var mainForceBnsUsed = false
@@ -262,7 +262,7 @@ object Bot {
 
     def activateOK() = {
       val needActivation = op == Attack && (checkFirst || ambushSpaces.nonEmpty)
-      checkActivation(faction, needActivation, activationNumber)
+      checkActivation(faction, needActivation, actNum)
     }
 
     // Return true if we can continue the attack (ie. No activation roll failure)
@@ -376,16 +376,19 @@ object Bot {
     }
   }
 
-  def vulnerableInsurgents(sp: Space) = {
-    val forces = sp.pieces.totalOf(NVATroops::ActiveGuerrillas)
-    val bases  = if (sp.pieces.has(UndergroundGuerrillas))
-      0
+  def vulnerableBases(pieces: Pieces) = {
+    if (pieces.has(UndergroundGuerrillas))
+      Pieces()
     else
-      sp.pieces.totalOf(InsurgentBases)
-    forces + bases
+      pieces.only(InsurgentBases)
   }
 
-  //  Assault firepower of the sapce plus any modifiers for
+  def vulnerableInsurgents(pieces: Pieces) = {
+    val forces = pieces.only(NVATroops::ActiveGuerrillas)
+    forces + vulnerableBases(pieces)
+  }
+
+  //  Assault firepower of the space plus any modifiers for
   //  capabilities, momentum, etc.
   def usFirepower(sp: Space) = {
     val firepower = sp.assaultFirepower(US)
@@ -458,7 +461,7 @@ object Bot {
 
   val COINFirepowerLessThanVulnerable = new BooleanPriority[Space](
     "COIN Firepower < vulnerable enemies where US pieces",
-    sp => sp.pieces.has(USPieces) && coinFirepower(sp) < vulnerableInsurgents(sp)
+    sp => sp.pieces.has(USPieces) && coinFirepower(sp) < vulnerableInsurgents(sp.pieces).total
   )
 
   val HasUSBase = new BooleanPriority[Space](
@@ -855,6 +858,24 @@ object Bot {
 
     (deadForces + deadBases)
   }
+
+  //  If a Tunneled base is "vulnerable" is to be removed,
+  //  we stop removing pieces.
+  //  Roll a 1d6, 1-3 no effect, 4-6 remove tunnel marker
+  //  Return all pieces that should be removed, true if we need to
+  //  roll a die for Tunnel marker removal.
+  def selectRemoveEnemyInsurgentBasesLast(pieces: Pieces, num: Int): (Pieces, Boolean) = {
+    val insurgentTunnels = pieces.only(InsurgentTunnels)
+    val insurgentBases  = pieces.only(InsurgentNonTunnels)
+    val insurgentForces = vulnerableInsurgents(pieces)
+    val numForces       = num min insurgentForces.total
+    val deadForces      = selectEnemyRemovePlaceActivate(insurgentForces, numForces)
+    val numBases        = ((num - deadForces.total) max 0) min insurgentBases.total
+    val deadBases       = selectEnemyRemovePlaceActivate(insurgentBases, numBases)
+    val checkTunnel     = num > numForces + numBases && insurgentTunnels.nonEmpty
+
+    (deadForces + deadBases, checkTunnel)
+  }
   // Function to make code clearer to read
   // just an alias for selectEnemyRemovePlaceActivate()
   def selectFriendlyToPlaceOrMove(pieces: Pieces, num: Int): Pieces = {
@@ -1044,7 +1065,7 @@ object Bot {
     import params._
     val desc = "Keep COIN firepower >= vulnerable enemy"
     val firepower  = coinFirepower(origin)
-    val vulnerable = vulnerableInsurgents(origin)
+    val vulnerable = vulnerableInsurgents(origin.pieces).total
 
     if (firepower >= vulnerable) {
       
@@ -1459,7 +1480,7 @@ object Bot {
     import params._
     val desc = "Get COIN Firepower equal to vulnerable enemies"
 
-    val numVulnerable = vulnerableInsurgents(dest)
+    val numVulnerable = vulnerableInsurgents(dest.pieces).total
       
     def movePieces(num: Int): Pieces = {
       if (num == candidates.total)
@@ -1826,7 +1847,8 @@ object Bot {
     (faction, dest.isLoC) match {
       case (US|ARVN, true)  => numCoin < numInsurgent
       case (NVA|VC,  true)  => numInsurgent <= numCoin
-      case (US|ARVN, false) => !dest.coinControlled && coinFirepower(dest) < vulnerableInsurgents(dest)
+      case (US|ARVN, false) => !dest.coinControlled && 
+                               coinFirepower(dest) < vulnerableInsurgents(dest.pieces).total
       case (NVA,     false) => !dest.nvaControlled
       case (VC,      false) => dest.coinControlled || dest.nvaControlled
     }
@@ -2048,6 +2070,45 @@ object Bot {
   // ================================================================
   object US_Bot {
 
+    def any2PlusPopNotAtActiveSupportWithCoinControlUsPieces: Boolean =
+      game.nonLocSpaces exists { sp =>
+        sp.population >= 2          &&
+        sp.support != ActiveSupport &&
+        sp.coinControlled           &&
+        sp.pieces.has(USPieces)
+      }
+
+    def twoOrMoreSpacesWithSupportAndUndergroundGuerrillas: Boolean =
+      game.nonLocSpaces exists { sp =>
+        sp.population > 0           &&
+        sp.support > Neutral        &&
+        sp.pieces.has(UndergroundGuerrillas)
+      }
+
+    def usPiecesWith4PlusNVATroopsOrVulnerableBase: Boolean =
+      game.spaces exists { sp =>
+        sp.pieces.has(USPieces) &&
+        (sp.pieces.totalOf(NVATroops) > 3 ||
+         (sp.pieces.has(InsurgentBases) && !sp.pieces.has(UndergroundGuerrillas)))
+      }
+
+    // All routes from Can Tho to Hue blocked and Shaded M-48 not in effect
+    def allLocRoutesCanTho_HueBlockedAndNoShadedM48: Boolean =
+      !capabilityInPlay(M48Patton_Shaded) && !getPatrolDestinations(CanTho).contains(Hue)
+
+    def usPiecesWithVulnerableEnemies: Boolean =
+      game.spaces exists { sp =>
+        sp.pieces.has(USPieces) && vulnerableInsurgents(sp.pieces).nonEmpty
+      }
+
+    def allUSBasesinSouthWithUSTroopsNoNVATroops: Boolean = {
+      val candidates = game.nonLocSpaces filter { sp =>
+        isInSouthVietnam(sp.name) && sp.pieces.has(USBase)
+      }
+
+      candidates forall (sp => sp.pieces.has(USTroops) && !sp.pieces.has(NVATroops))
+    }
+
     // US Spaces Priorities: Shift Toward Active Support
     def pickSpaceTowardActiveSupport(candidates: List[Space]): Space = {
 
@@ -2174,6 +2235,66 @@ object Bot {
   // ================================================================
   object ARVN_Bot {
 
+    //  If we are tracking ARVN resources, then after passing an activation
+    //  roll we must also make sure that there are sufficient ARVN resources
+    //  to pay for the operation.
+    def checkARVNActivation(needRoll: Boolean, actNum: Int, free: Boolean) = 
+      checkActivation(ARVN, needRoll, actNum) &&
+      (free || !game.trackResources(ARVN) || game.arvnResources >= 3)
+
+    def arvnAssaultResult(sp: Space): Space = {
+      val num            = arvnFirepower(sp) min vulnerableInsurgents(sp.pieces).total
+      val (newPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, num)
+      sp.copy(pieces = newPieces)
+    }
+
+    val arvnAssaultWouldAddCoinControl = (sp: Space) =>
+      !sp.coinControlled && arvnAssaultResult(sp).coinControlled
+
+    def arvnAssaultWouldAddCoinControlToASpace: Boolean =
+      game.nonLocSpaces exists arvnAssaultWouldAddCoinControl
+
+    def arvnAssaultWouldUnblockCanTo_Hue: Boolean = {      
+      allLocRoutesCanTho_HueBlocked && {
+        val blockedLocs         = game.locSpaces filter (sp => sp.pieces.has(InsurgentForces))
+        val assaultWouldUnblock = (sp: Space) => {
+          // The allLocRoutesCanTho_HueBlocked function works on
+          // on the current game state, so make safe copy
+          val savedGameState = game        
+          game               = game.updateSpace(arvnAssaultResult(sp))
+          val unblocked      = !allLocRoutesCanTho_HueBlocked
+          game               = savedGameState
+          unblocked
+        }
+
+        blockedLocs exists assaultWouldUnblock
+      }
+    }
+
+    def arvnAssaultWouldAddControlOrUnblockCanTo_Hue: Boolean = {
+      arvnAssaultWouldAddCoinControlToASpace ||
+      arvnAssaultWouldUnblockCanTo_Hue
+    }
+
+    def fiveArvnTroopPlusRangesInAnySpace: Boolean =
+      game.spaces exists { sp => sp.pieces.totalOf(ARVNTroops::Rangers) >= 5 }
+
+    def any2PopSpaceWithMoreArvnCubesThanUsCubes: Boolean =
+      game.nonLocSpaces exists { sp =>
+        sp.population == 2 &&
+        sp.pieces.totalOf(ARVNCubes) > sp.pieces.totalOf(USTroops)
+      }
+
+        // All routes from Can Tho to Hue blocked
+    def allLocRoutesCanTho_HueBlocked: Boolean =
+       !getPatrolDestinations(CanTho).contains(Hue)
+  
+    def nvaBaseOrNvaControlAt2PlusPop: Boolean =
+      game.nonLocSpaces exists { sp =>
+        sp.population >= 2 &&
+        (sp.pieces.has(NVABases) || sp.nvaControlled)
+      }
+
     // ARVN Spaces Priorities: Shift Toward Passive Support
     def pickSpaceTowardPassiveSupport(candidates: List[Space]): Space = {
 
@@ -2280,6 +2401,159 @@ object Bot {
       bestCandidate(candidates, priorities)
     }
 
+    //  -------------------------------------------------------------
+    //  Implement the ARVN Train instructions from the ARVN Trung cards.
+    //  1. Place all available Rangers
+    //  2. Place cubes
+    //  3. Place 1 Base in a 2-Pop Province with no COIN Base
+    //     (losing no COIN control)
+    //     OR
+    //     Remove terror and shift toward Passive Suport for max 1d3
+    //
+    // RVN_Leader_DuongVanMinh - Each ARVN Train operation adds +5 bonus Aid
+    // RVN_Leader_NguyenCaoKy  - US/ARVN pacification costs 4 resources per Terror/Level
+    def trainOp(params: Params, actNum: Int): Option[CoinOp] = {
+      val nguyenCaoKy         = isRVNLeader(RVN_Leader_NguyenCaoKy)
+      var trainSpaces  = Set.empty[String]
+      val maxTrain     = params.maxSpaces getOrElse NO_LIMIT
+      def trained      = trainSpaces.nonEmpty
+      def canTrain     = trainSpaces.size < maxTrain &&
+                         checkARVNActivation(trained, actNum, params.free)
+      val canTrainRangers = (sp: Space) => !(trainSpaces(sp.name) || sp.nvaControlled)
+      val canTrainCubes   = (sp: Space) => 
+        !(trainSpaces(sp.name) || sp.nvaControlled) &&
+        (sp.isCity || sp.pieces.has(CoinBases))
+
+      // Return true if we can continue training
+      // ie.  Did not fail activation or run out of resources
+      def trainToPlaceRangers(candidates: List[Space]): Boolean = {
+        if (game.availablePieces.has(Rangers) && candidates.nonEmpty) {
+          if (canTrain) {
+            val sp      = pickSpacePlaceCubesRangers(candidates)
+            val num     = game.availablePieces.totalOf(Rangers) min 2
+            val toPlace = Pieces(rangers_U = num)
+
+            log(s"\n$ARVN selects ${sp.name} for Train")
+            log(separator())
+            placePieces(sp.name, toPlace)
+            trainSpaces += sp.name
+            trainToPlaceRangers(candidates filterNot (_.name == sp.name))
+          }
+          else
+            false  // Failed activation or out of ARVN resources
+        }
+        else
+          true  // No failed activattion, just ran out of candidates
+      }
+
+      // Return true if we can continue training
+      // ie.  Did not fail activation or run out of resources
+      def trainToPlaceCubes(candidates: List[Space]): Boolean = {
+        if (game.availablePieces.has(ARVNCubes) && candidates.nonEmpty) {
+          if (canTrain) {
+            val sp      = pickSpacePlaceCubesRangers(candidates)
+            val cubes   = game.availablePieces.only(ARVNCubes)
+            val toPlace = selectFriendlyToPlaceOrMove(cubes, cubes.total min 6)
+
+            log(s"\n$ARVN selects ${sp.name} for Train")
+            log(separator())
+            placePieces(sp.name, toPlace)
+            trainSpaces += sp.name
+            trainToPlaceRangers(candidates filterNot (_.name == sp.name))
+          }
+          else
+            false  // Failed activation or out of ARVN resources
+        }
+        else
+          true  // No failed activattion, just ran out of candidates
+      }
+
+      def placeARVNBase(): Boolean = {
+        val baseCandidates = game.nonLocSpaces filter { sp =>
+          !sp.nvaControlled                &&
+          sp.isProvince                    &&
+          sp.population == 2               &&
+          sp.totalBases < 2                &&
+          !sp.pieces.has(CoinBases)        &&
+          sp.pieces.totalOf(ARVNCubes) > 2 &&
+          (!sp.coinControlled ||    // Cannot lose COIN control
+          sp.pieces.totalOf(CoinPieces) - 3 > sp.pieces.totalOf(InsurgentPieces))
+        }
+
+        var placedBase = false
+        if (game.availablePieces.has(ARVNBase) && baseCandidates.nonEmpty) {
+          val sp = pickSpacePlaceBases(baseCandidates)
+          val mustPay = game.trackResources(ARVN) && !trainSpaces(sp.name)
+          // If we have not already trained in this space and we are
+          // tracking ARVN resources, make sure there is cash in the bank.
+          if (!mustPay || game.arvnResources >= 3) {
+            val toRemove = selectFriendlyRemoval(sp.pieces.only(ARVNCubes), 3)
+
+            if (trainSpaces(sp.name))
+              log(s"\n$ARVN selects ${sp.name} for Train")
+            else
+              log(s"\n$ARVN will place a base in ${sp.name}")
+            log(separator())
+
+            if (mustPay)
+              decreaseResources(ARVN, 3)
+              
+            loggingControlChanges {
+              removeToAvailable(sp.name, toRemove)
+              placePieces(sp.name, Pieces(arvnBases = 1))
+            }
+            trainSpaces += sp.name  // In case we did not train there previously
+            placedBase = true
+          }
+        }
+        placedBase
+      }
+
+      def pacifyOneSpace(): Unit = {
+        val baseRate   = if (isRVNLeader(RVN_Leader_NguyenCaoKy)) 4 else 3
+        val costEach   = if (game.trackResources(ARVN)) baseRate else 0
+        val candidates = trainSpaces.toList map game.getSpace filter { sp =>
+          sp.coinControlled &&
+          sp.pieces.has(ARVNTroops)   &&
+          sp.pieces.has(ARVNPolice)   &&
+          sp.support < PassiveSupport
+        }
+
+        if (candidates.nonEmpty && game.arvnResources >= costEach) {
+          val sp = pickSpaceTowardPassiveSupport(candidates)
+          val numCanPay = if (costEach == 0) NO_LIMIT else game.arvnResources / costEach
+          val maxShift  = (PassiveSupport.value - sp.support.value) min 2
+          val maxPacify = ((sp.terror + maxShift) min d3) min numCanPay
+          val numTerror = maxPacify min sp.terror
+          val numShift  = (maxPacify - numTerror) min maxShift
+
+          log(s"\nPacifying in ${sp.name}")
+          log(separator())
+          decreaseResources(ARVN, (numTerror + numShift) * costEach)
+          removeTerror(sp.name, numTerror)
+          increaseSupport(sp.name, numShift)
+        }
+      }
+
+      logOpChoice(ARVN, Train)
+      trainToPlaceRangers(game.nonLocSpaces filter canTrainRangers) &&
+      trainToPlaceCubes(game.nonLocSpaces filter canTrainCubes) 
+      if (!placeARVNBase()) 
+        pacifyOneSpace()
+
+      if (trained) {
+        if (isRVNLeader(RVN_Leader_DuongVanMinh)) {
+          log(s"\nLeader: $RVN_Leader_DuongVanMinh effect triggers")
+          log(separator())
+          increaseUsAid(5)
+        }
+        Some(Train)
+      }
+      else {
+        logNoOp(ARVN, Train)
+        None
+      }
+    }
   }
 
 
@@ -2499,12 +2773,12 @@ object Bot {
     //  Mo_McNamaraLine - prohibits trail improvement by rally
     //  AAA_Unshaded    - Rally that Improves Trail may select 1 space only
     //  SA2s_Shaded     - NVA Rally improves Trail 2 boxes instead of 1
-    def rallyOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
+    def rallyOp(params: Params, actNum: Int): Option[InsurgentOp] = {
       var rallySpaces      = Set.empty[String]
       val cadres       = capabilityInPlay(Cadres_Shaded)
       val maxRally     = params.maxSpaces getOrElse NO_LIMIT
       def rallied      = rallySpaces.nonEmpty
-      def canRally     = rallySpaces.size < maxRally && checkActivation(NVA, rallied, activationNumber)
+      def canRally     = rallySpaces.size < maxRally && checkActivation(NVA, rallied, actNum)
       val canRallyBase = (sp: Space) => {
         !rallySpaces(sp.name)       &&
         sp.support < PassiveSupport &&
@@ -2513,34 +2787,47 @@ object Bot {
       }
       val canRallyGuerrillas = (sp: Space) => { !rallySpaces(sp.name) && sp.support < PassiveSupport }
 
-      def rallyToPlaceBase(candidates: List[Space]): Unit = {
-        if (game.availablePieces.has(NVABase) && candidates.nonEmpty && canRally) {
-          val sp       = pickSpacePlaceBases(candidates)
-          val toRemove = selectFriendlyRemoval(sp.pieces.only(NVAGuerrillas), 2)
-          log(s"\n$NVA selects ${sp.name} for Rally")
-          log(separator())
-          loggingControlChanges {
-            removeToAvailable(sp.name, toRemove)
-            placePieces(sp.name, Pieces(nvaBases = 1))
+      //  Return true if we can continue (no failed activation roll)
+      def rallyToPlaceBase(candidates: List[Space]): Boolean = {
+        if (game.availablePieces.has(NVABase) && candidates.nonEmpty) {
+          if (canRally) {
+            val sp       = pickSpacePlaceBases(candidates)
+            val toRemove = selectFriendlyRemoval(sp.pieces.only(NVAGuerrillas), 2)
+            log(s"\n$NVA selects ${sp.name} for Rally")
+            log(separator())
+            loggingControlChanges {
+              removeToAvailable(sp.name, toRemove)
+              placePieces(sp.name, Pieces(nvaBases = 1))
+            }
+            rallySpaces = rallySpaces + sp.name
+            rallyToPlaceBase(candidates filterNot (_.name == sp.name))
           }
-          rallySpaces = rallySpaces + sp.name
-          rallyToPlaceBase(candidates filterNot (_.name == sp.name))
+          false // Failed activation
         }
+        else
+          true  // No failed activation, just ran out of candidates
       }
       
-      def rallyToPlaceGuerrillas(candidates: List[Space]): Unit = {
-        if (game.availablePieces.has(NVAGuerrillas_U) && candidates.nonEmpty && canRally) {
-          val sp         = pickSpacePlaceGuerrillas(candidates)
-          val numToPlace = if (sp.pieces.has(NVABases))
-            (sp.pieces.totalOf(NVABases) + game.trail) min game.availablePieces.totalOf(NVAGuerrillas_U)
-          else
-            1
-          log(s"\n$NVA selects ${sp.name} for Rally")
-          log(separator())
-          placePieces(sp.name, Pieces(nvaGuerrillas_U = numToPlace))
-          rallySpaces = rallySpaces + sp.name
-          rallyToPlaceGuerrillas(candidates filterNot (_.name == sp.name))
+      //  Return true if we can continue (no failed activation roll)
+      def rallyToPlaceGuerrillas(candidates: List[Space]): Boolean = {
+        if (game.availablePieces.has(NVAGuerrillas_U) && candidates.nonEmpty) {
+          if (canRally) {
+            val sp         = pickSpacePlaceGuerrillas(candidates)
+            val numToPlace = if (sp.pieces.has(NVABases))
+              (sp.pieces.totalOf(NVABases) + game.trail) min game.availablePieces.totalOf(NVAGuerrillas_U)
+            else
+              1
+            log(s"\n$NVA selects ${sp.name} for Rally")
+            log(separator())
+            placePieces(sp.name, Pieces(nvaGuerrillas_U = numToPlace))
+            rallySpaces = rallySpaces + sp.name
+            rallyToPlaceGuerrillas(candidates filterNot (_.name == sp.name))
+          }
+          false // Failed activation
         }
+        else
+          true  // No failed activation, just ran out of candidates
+
       }
 
       def improveTrailForFree():  Unit = {
@@ -2563,7 +2850,7 @@ object Bot {
 
 
       logOpChoice(NVA, Rally)
-      rallyToPlaceBase(game.nonLocSpaces filter canRallyBase)
+      rallyToPlaceBase(game.nonLocSpaces filter canRallyBase) &&
       rallyToPlaceGuerrillas(game.nonLocSpaces filter canRallyGuerrillas)
       improveTrailForFree()
 
@@ -2583,7 +2870,7 @@ object Bot {
     //       to the most NVA Guerrillas (Optional)
     //    3. Select spaces using March Destinations
     //  -------------------------------------------------------------
-    def marchOp(params: Params, activationNumber: Int, withLoC: Boolean, withLaosCambodia: Boolean): Option[InsurgentOp] = {
+    def marchOp(params: Params, actNum: Int, withLoC: Boolean, withLaosCambodia: Boolean): Option[InsurgentOp] = {
       // Select a LoC march destination candidate
       // Once we have marched to one LoC successfully we are done.
       val nextLoCCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
@@ -2616,7 +2903,7 @@ object Bot {
           isInLaosCambodia(sp.name) &&
           (spaces(getNVAAdjacent(sp.name)) exists (_.pieces.has(NVAGuerrillas)))
         val candidates = game.locSpaces filter qualifies
-        lazy val activationOK = checkActivation(NVA, needActivation, activationNumber)
+        lazy val activationOK = checkActivation(NVA, needActivation, actNum)
         
         if (!lastWasSuccess && candidates.nonEmpty && activationOK)
           Some(bestCandidate(candidates, LaosCambodiaPriorities).name)
@@ -2626,7 +2913,7 @@ object Bot {
 
       val nextGenericCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
         val candidates        = game.spaces filterNot (sp => prohibited.contains(sp.name))
-        lazy val activationOK = checkActivation(NVA, needActivation, activationNumber)
+        lazy val activationOK = checkActivation(NVA, needActivation, actNum)
 
         if (candidates.nonEmpty && activationOK)
           Some(NVA_Bot.pickSpaceMarchDest(candidates).name)
@@ -2671,7 +2958,7 @@ object Bot {
     //  PT76_Unshaded  - If Attack, then NVA must first remove 1 Troop (if one is present)
     //  PT76_Shaded    - In one attack space remove 1 enemy per NVA Troop
     //  -------------------------------------------------------------
-    def attackOp(params: Params, activationNumber: Int, addAmbush: Boolean): (Option[InsurgentOp], Boolean) = {
+    def attackOp(params: Params, actNum: Int, addAmbush: Boolean): (Option[InsurgentOp], Boolean) = {
       val threePlusGuerrillasNoVCBase = (sp: Space) => {
         sp.pieces.totalOf(VCGuerrillas) > 2 &&
         !sp.pieces.has(VCBases)
@@ -2684,7 +2971,7 @@ object Bot {
       // Return true if we can continue attacking (ie. did not fail and activation roll)
       def nextAttack(candidates: List[Space], useTroops: Boolean, needActivation: Boolean): Boolean = {
         if (candidates.nonEmpty) {
-          if (checkActivation(NVA, needActivation, activationNumber)) {
+          if (checkActivation(NVA, needActivation, actNum)) {
             val sp         = pickSpaceRemoveReplace(candidates)
 
             val guerrillas = sp.pieces.only(NVAGuerrillas)
@@ -2768,7 +3055,7 @@ object Bot {
         })
         val (ambushSpaces: Set[String], canContinue) = {
           if (ambushCandidates.nonEmpty)
-            ambushActivity(NVA, ambushCandidates, Attack, activationNumber, checkFirst = attackSpaces.nonEmpty)
+            ambushActivity(NVA, ambushCandidates, Attack, actNum, checkFirst = attackSpaces.nonEmpty)
           else
             (Set.empty, true)
         }
@@ -2805,7 +3092,7 @@ object Bot {
     //  Bruce Mansfield clarified that NVA Bot should not make
     //  an activation roll after conducting Terror on a LoC.
     //  -------------------------------------------------------------
-    def terrorOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
+    def terrorOp(params: Params, actNum: Int): Option[InsurgentOp] = {
       val isCandidate = (sp: Space) => {
         (sp.pieces.has(NVAGuerrillas_U) || sp.pieces.has(NVATroops)) &&
         ((sp.isLoC && sp.terror == 0 && sp.printedEconValue > 0) ||
@@ -2813,7 +3100,7 @@ object Bot {
       }
 
       def nextTerror(candidates: List[Space], needActivation: Boolean): Unit = {
-        if (candidates.nonEmpty && checkActivation(VC, needActivation, activationNumber)) {
+        if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
           val sp = pickSpacePlaceTerror(candidates)
 
             log(s"\n$NVA selects ${sp.name} for Terror")
@@ -2848,7 +3135,7 @@ object Bot {
     //  Mo_TyphoonKate     - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
     //  Mo_McNamaraLine    - prohibits infiltrate
     //  Mo_559TransportGrp - Infiltrate is max 1 space
-//  -------------------------------------------------------------
+    //  -------------------------------------------------------------
     def infiltrateActivity(needDiceRoll: Boolean, replaceVCBase: Boolean): Boolean = {
       var infiltrateSpaces = Set.empty[String]
       val limited          = momentumInPlay(Mo_TyphoonKate) || momentumInPlay(Mo_559TransportGrp)
@@ -3167,13 +3454,13 @@ object Bot {
     //                - Remove Terror then Shift upt to two levels
     //                  toward Active Opposition up to Agitate Total
     //  -------------------------------------------------------------
-    def rallyOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
+    def rallyOp(params: Params, actNum: Int): Option[InsurgentOp] = {
       var rallySpaces  = Set.empty[String]
       var agitated     = false  // Using Cadres
       val cadres       = capabilityInPlay(Cadres_Shaded)
       val maxRally     = params.maxSpaces getOrElse NO_LIMIT
       def rallied      = rallySpaces.nonEmpty
-      def canRally     = rallySpaces.size < maxRally && checkActivation(VC, rallied, activationNumber)
+      def canRally     = rallySpaces.size < maxRally && checkActivation(VC, rallied, actNum)
       val canRallyBase = (sp: Space) => {
         !rallySpaces(sp.name)       &&
         sp.support < PassiveSupport &&
@@ -3201,59 +3488,80 @@ object Bot {
         }
       }
 
-      def rallyToPlaceBase(candidates: List[Space]): Unit = {
-        if (game.availablePieces.has(VCBase) && candidates.nonEmpty && canRally) {
-          val sp       = pickSpacePlaceBases(candidates)
-          val hadBase  = sp.pieces.has(VCBases)
-          val toRemove = selectFriendlyRemoval(sp.pieces.only(VCGuerrillas), 2)
-          log(s"\n$VC selects ${sp.name} for Rally")
-          log(separator())
-          loggingControlChanges {
-            removeToAvailable(sp.name, toRemove)
-            placePieces(sp.name, Pieces(vcBases = 1))
+      // Return true if we can continue (no failed activation)
+      def rallyToPlaceBase(candidates: List[Space]): Boolean = {
+        if (game.availablePieces.has(VCBase) && candidates.nonEmpty) {
+          if (canRally) {
+            val sp       = pickSpacePlaceBases(candidates)
+            val hadBase  = sp.pieces.has(VCBases)
+            val toRemove = selectFriendlyRemoval(sp.pieces.only(VCGuerrillas), 2)
+            log(s"\n$VC selects ${sp.name} for Rally")
+            log(separator())
+            loggingControlChanges {
+              removeToAvailable(sp.name, toRemove)
+              placePieces(sp.name, Pieces(vcBases = 1))
+            }
+            rallySpaces = rallySpaces + sp.name
+            if (hadBase)
+              tryCadresAgitate(sp)
+            rallyToPlaceBase(candidates filterNot (_.name == sp.name))
           }
-          rallySpaces = rallySpaces + sp.name
-          if (hadBase)
-            tryCadresAgitate(sp)
-          rallyToPlaceBase(candidates filterNot (_.name == sp.name))
+          else
+            false // Failed activation or max spaces rallied
         }
+        else
+          true  // No failed activation, ran out of candidates
       }
       
-      def rallyToPlaceGuerrillas(candidates: List[Space]): Unit = {
-        if (game.availablePieces.has(VCGuerrillas_U) && candidates.nonEmpty && canRally) {
-          val sp         = pickSpacePlaceGuerrillas(candidates)
-          val hadBase    = sp.pieces.has(VCBases)
-          val numToPlace = if (hadBase)
-            (sp.pieces.totalOf(VCBases) + sp.population) min game.availablePieces.totalOf(VCGuerrillas_U)
+      // Return true if we can continue (no failed activation)
+      def rallyToPlaceGuerrillas(candidates: List[Space]): Boolean = {
+        if (game.availablePieces.has(VCGuerrillas_U) && candidates.nonEmpty) {
+          if (canRally) {
+            val sp         = pickSpacePlaceGuerrillas(candidates)
+            val hadBase    = sp.pieces.has(VCBases)
+            val numToPlace = if (hadBase)
+              (sp.pieces.totalOf(VCBases) + sp.population) min game.availablePieces.totalOf(VCGuerrillas_U)
+            else
+              1
+            log(s"\n$VC selects ${sp.name} for Rally")
+            log(separator())
+            placePieces(sp.name, Pieces(vcGuerrillas_U = numToPlace))
+            rallySpaces = rallySpaces + sp.name
+            if (hadBase)
+              tryCadresAgitate(sp)
+            rallyToPlaceGuerrillas(candidates filterNot (_.name == sp.name))
+          }
           else
-            1
-          log(s"\n$VC selects ${sp.name} for Rally")
-          log(separator())
-          placePieces(sp.name, Pieces(vcGuerrillas_U = numToPlace))
-          rallySpaces = rallySpaces + sp.name
-          if (hadBase)
-            tryCadresAgitate(sp)
-          rallyToPlaceGuerrillas(candidates filterNot (_.name == sp.name))
+            false // Failed activation or max spaces rallied
         }
+        else
+          true  // No failed activation, ran out of candidates
       }
 
-      def rallyToFlipGuerrillas(candidates: List[Space]): Unit = {
-        if (candidates.nonEmpty && canRally) {
-          val sp = bestCandidate(candidates, MostActiveGuerrillas)
-
-          log(s"\n$VC selects ${sp.name} for Rally")
-          log(separator())
-          hidePieces(sp.name, sp.pieces.only(VCGuerrillas_A))
-          rallySpaces = rallySpaces + sp.name
-          // We know the space already had a base
-          tryCadresAgitate(sp)
-          rallyToFlipGuerrillas(candidates filterNot (_.name == sp.name))
+      // Return true if we can continue (no failed activation)
+      def rallyToFlipGuerrillas(candidates: List[Space]): Boolean = {
+        if (candidates.nonEmpty) {
+          if (canRally) {
+            val sp = bestCandidate(candidates, MostActiveGuerrillas)
+  
+            log(s"\n$VC selects ${sp.name} for Rally")
+            log(separator())
+            hidePieces(sp.name, sp.pieces.only(VCGuerrillas_A))
+            rallySpaces = rallySpaces + sp.name
+            // We know the space already had a base
+            tryCadresAgitate(sp)
+            rallyToFlipGuerrillas(candidates filterNot (_.name == sp.name))
+          }
+          else
+            false // Failed activation or max spaces rallied
         }
+        else
+          true  // No failed activation, ran out of candidates
       }
 
       logOpChoice(VC, Rally)
-      rallyToPlaceBase(game.nonLocSpaces filter canRallyBase)
-      rallyToPlaceGuerrillas(game.nonLocSpaces filter canRallyGuerrillas)
+      rallyToPlaceBase(game.nonLocSpaces filter canRallyBase)             &&
+      rallyToPlaceGuerrillas(game.nonLocSpaces filter canRallyGuerrillas) &&
       rallyToFlipGuerrillas(game.nonLocSpaces filter canFlipGuerrillas)
 
       if (rallied)
@@ -3270,7 +3578,7 @@ object Bot {
     //    1. Select 2 LoCs adjacent to most underground VC guerrillas
     //    2. Select spaces using March Destinations
     //  -------------------------------------------------------------
-    def marchOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
+    def marchOp(params: Params, actNum: Int): Option[InsurgentOp] = {
 
       val nextLoCCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
         val LocPriorities = List(
@@ -3298,7 +3606,7 @@ object Bot {
       val nextGenericCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
         lazy val candidates    = game.spaces filterNot (sp => prohibited.contains(sp.name))
 
-        if (candidates.nonEmpty && checkActivation(VC, needActivation, activationNumber)) 
+        if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) 
           Some(VC_Bot.pickSpaceMarchDest(candidates).name)
         else
           None
@@ -3326,14 +3634,14 @@ object Bot {
     //  Return Some(Attack) if we attack/ambush at least one space
     //         true if we included the ambush special activity
     //  -------------------------------------------------------------
-    def attackOp(params: Params, activationNumber: Int): (Option[InsurgentOp], Boolean) = {
+    def attackOp(params: Params, actNum: Int): (Option[InsurgentOp], Boolean) = {
       val threePlusGuerrillasNoVCBase = (sp: Space) => {
         sp.pieces.totalOf(VCGuerrillas) > 2 &&
         !sp.pieces.has(VCBases)
       }
         
       def nextAttack(candidates: List[Space], needActivation: Boolean): Unit = {
-        if (candidates.nonEmpty && checkActivation(VC, needActivation, activationNumber)) {
+        if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
           val sp         = pickSpaceRemoveReplace(candidates)
           val guerrillas = sp.pieces.only(VCGuerrillas)
           val coinPieces = sp.pieces.only(CoinPieces)
@@ -3364,7 +3672,7 @@ object Bot {
       logOpChoice(VC, Attack)
       val ambushCandidates = spaceNames(game.spaces filter canAmbushFrom(VC))
       val (ambushSpaces: Set[String], canContinue) = if (params.specialActivity && ambushCandidates.nonEmpty)
-        ambushActivity(VC, ambushCandidates, Attack, activationNumber, checkFirst = false)
+        ambushActivity(VC, ambushCandidates, Attack, actNum, checkFirst = false)
       else
         (Set.empty, true)
 
@@ -3393,7 +3701,7 @@ object Bot {
     //    VC Base - where 2+ Undergound Guerrillas
     //    Loc     - no activation number roll
     //  -------------------------------------------------------------
-    def terrorOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
+    def terrorOp(params: Params, actNum: Int): Option[InsurgentOp] = {
 
       val isCandidate = (sp: Space) => {
         val needed = if (sp.pieces.has(VCBases)) 2 else 1
@@ -3403,7 +3711,7 @@ object Bot {
       }
 
       def nextTerror(candidates: List[Space], needActivation: Boolean): Unit = {
-        if (candidates.nonEmpty && checkActivation(VC, needActivation, activationNumber)) {
+        if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
           val sp = pickSpacePlaceTerror(candidates)
 
             log(s"\n$VC selects ${sp.name} for Terror")
@@ -3723,7 +4031,7 @@ object Bot {
   // US Trung Cards
   // ================================================================
 
-  object Trung_US_A extends TrungCard(US, "A", activationNumber = 3) {
+  object Trung_US_A extends TrungCard(US, "A", actNum = 3) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3743,7 +4051,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_US_B extends TrungCard(US, "B", activationNumber = 3) {
+  object Trung_US_B extends TrungCard(US, "B", actNum = 3) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3763,7 +4071,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_US_C extends TrungCard(US, "C", activationNumber = 3) {
+  object Trung_US_C extends TrungCard(US, "C", actNum = 3) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3783,7 +4091,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_US_D extends TrungCard(US, "D", activationNumber = 3) {
+  object Trung_US_D extends TrungCard(US, "D", actNum = 3) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3803,7 +4111,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_US_E extends TrungCard(US, "E", activationNumber = 3) {
+  object Trung_US_E extends TrungCard(US, "E", actNum = 3) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3823,7 +4131,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_US_F extends TrungCard(US, "F", activationNumber = 3) {
+  object Trung_US_F extends TrungCard(US, "F", actNum = 3) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3847,7 +4155,7 @@ object Bot {
   // ARVN Trung Cards
   // ================================================================
 
-  object Trung_ARVN_G extends TrungCard(ARVN, "G", activationNumber = 3) {
+  object Trung_ARVN_G extends TrungCard(ARVN, "G", actNum = 3) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3867,7 +4175,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_ARVN_H extends TrungCard(ARVN, "H", activationNumber = 3) {
+  object Trung_ARVN_H extends TrungCard(ARVN, "H", actNum = 3) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3887,7 +4195,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_ARVN_J extends TrungCard(ARVN, "J", activationNumber = 3) {
+  object Trung_ARVN_J extends TrungCard(ARVN, "J", actNum = 3) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3907,7 +4215,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_ARVN_K extends TrungCard(ARVN, "K", activationNumber = 3) {
+  object Trung_ARVN_K extends TrungCard(ARVN, "K", actNum = 3) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3927,7 +4235,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_ARVN_L extends TrungCard(ARVN, "L", activationNumber = 3) {
+  object Trung_ARVN_L extends TrungCard(ARVN, "L", actNum = 3) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3947,7 +4255,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_ARVN_M extends TrungCard(ARVN, "M", activationNumber = 3) {
+  object Trung_ARVN_M extends TrungCard(ARVN, "M", actNum = 3) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3971,7 +4279,7 @@ object Bot {
   // NVA Trung Cards
   // ================================================================
 
-  object Trung_NVA_N extends TrungCard(NVA, "N", activationNumber = 2) with NVATrung {
+  object Trung_NVA_N extends TrungCard(NVA, "N", actNum = 2) with NVATrung {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -3982,7 +4290,7 @@ object Bot {
       else if (!NVA_Bot.sixTroopsWithCOINTroopsOrBase)
         flipCard(params)
       else {
-        val (operation, ambushed) = NVA_Bot.attackOp(params, activationNumber, addAmbush = params.specialActivity)
+        val (operation, ambushed) = NVA_Bot.attackOp(params, actNum, addAmbush = params.specialActivity)
 
         operation match {
           case Some(_) if ambushed => TrungComplete(true)
@@ -3999,13 +4307,13 @@ object Bot {
       if (NVA_Bot.eightTroopsOutsideSouth) {
         val infiltrated = params.specialActivity && NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false)
 
-        NVA_Bot.marchOp(params, marchActivationNumber, withLoC = true, withLaosCambodia = false) match {
+        NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false) match {
           case Some(_) => TrungComplete(infiltrated)
           case None    => TrungNoOp
         }
       }
       else {
-        NVA_Bot.rallyOp(params, activationNumber) match {
+        NVA_Bot.rallyOp(params, actNum) match {
           case Some(_) => 
             val infiltrated = params.specialActivity &&
                               NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false)
@@ -4019,7 +4327,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_NVA_P extends TrungCard(NVA, "P", activationNumber = 2) with NVATrung {
+  object Trung_NVA_P extends TrungCard(NVA, "P", actNum = 2) with NVATrung {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -4033,9 +4341,9 @@ object Bot {
         val bombarded = params.specialActivity && NVA_Bot.bombardActivity()
 
         val operation = if (NVA_Bot.sixTroopsWithCOINTroopsOrBase)
-          NVA_Bot.attackOp(params, activationNumber, addAmbush = false)
+          NVA_Bot.attackOp(params, actNum, addAmbush = false)
         else
-          NVA_Bot.marchOp(params, marchActivationNumber, withLoC = false, withLaosCambodia = false)
+          NVA_Bot.marchOp(params, marchActNum, withLoC = false, withLaosCambodia = false)
 
         operation match {
           case Some(_) => TrungComplete(bombarded)
@@ -4049,7 +4357,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       if (rollDice(2) <= game.availablePieces.totalOf(NVAGuerrillas)) {
-        NVA_Bot.rallyOp(params, activationNumber) match {
+        NVA_Bot.rallyOp(params, actNum) match {
           case Some(_) =>
             val infiltrated = params.specialActivity && 
                               NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = true)
@@ -4062,7 +4370,7 @@ object Bot {
       else {
         val infiltrated = params.specialActivity &&
                           NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false)
-        NVA_Bot.marchOp(params, marchActivationNumber, withLoC = false, withLaosCambodia = false) match {
+        NVA_Bot.marchOp(params, marchActNum, withLoC = false, withLaosCambodia = false) match {
           case Some(_) => TrungComplete(infiltrated)
           case None    => TrungNoOp
         }
@@ -4071,7 +4379,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_NVA_Q extends TrungCard(NVA, "Q", activationNumber = 2) with NVATrung {
+  object Trung_NVA_Q extends TrungCard(NVA, "Q", actNum = 2) with NVATrung {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -4085,7 +4393,7 @@ object Bot {
       else if (!NVA_Bot.sixTroopsWithCOINTroopsOrBase)
         flipCard(params)
       else {
-        val (operation, ambushed) = NVA_Bot.attackOp(params, activationNumber, addAmbush = params.specialActivity)
+        val (operation, ambushed) = NVA_Bot.attackOp(params, actNum, addAmbush = params.specialActivity)
         val bombarded = operation.nonEmpty && !ambushed && NVA_Bot.bombardActivity()
         operation match {
           case Some(_) if ambushed => TrungComplete(true)
@@ -4099,7 +4407,7 @@ object Bot {
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      NVA_Bot.rallyOp(params, activationNumber) match {
+      NVA_Bot.rallyOp(params, actNum) match {
         case Some(_) if params.specialActivity =>
           val didSpecial = NVA_Bot.infiltrateActivity(needDiceRoll = true, replaceVCBase = true) ||
                            NVA_Bot.bombardActivity()
@@ -4115,7 +4423,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_NVA_R extends TrungCard(NVA, "R", activationNumber = 2) with NVATrung {
+  object Trung_NVA_R extends TrungCard(NVA, "R", actNum = 2) with NVATrung {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -4129,7 +4437,7 @@ object Bot {
         val infiltrated = params.specialActivity &&
                           NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = true)
 
-        NVA_Bot.marchOp(params, marchActivationNumber, withLoC = true, withLaosCambodia = true) match {
+        NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true) match {
           case Some(_) => TrungComplete(infiltrated)
           case None    => TrungNoOp
         }
@@ -4141,7 +4449,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       if (game.nonLocSpaces exists (sp => sp.support > Neutral && sp.pieces.has(NVAGuerrillas_U))) {
-        NVA_Bot.terrorOp(params, activationNumber) match {
+        NVA_Bot.terrorOp(params, actNum) match {
           case Some(_) =>
             val bombarded = params.specialActivity && NVA_Bot.bombardActivity()
             TrungComplete(bombarded)
@@ -4156,12 +4464,12 @@ object Bot {
           val canAmbush        = ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
         
           if (canAmbush)
-            ambushActivity(NVA, ambushCandidates, March, activationNumber, false)
+            ambushActivity(NVA, ambushCandidates, March, actNum, false)
           
           canAmbush || NVA_Bot.bombardActivity()
         }
 
-        NVA_Bot.marchOp(params, marchActivationNumber, withLoC = true, withLaosCambodia = true) match {
+        NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true) match {
           case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity())
           case None    => TrungNoOp
         }
@@ -4170,7 +4478,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_NVA_S extends TrungCard(NVA, "S", activationNumber = 2) with NVATrung {
+  object Trung_NVA_S extends TrungCard(NVA, "S", actNum = 2) with NVATrung {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -4184,7 +4492,7 @@ object Bot {
       else if (!guerrillaCheck && !trailCheck)
         flipCard(params)
       else {
-        NVA_Bot.rallyOp(params, activationNumber) match {
+        NVA_Bot.rallyOp(params, actNum) match {
           case Some(_) if (params.specialActivity) =>
             val didSpecial = NVA_Bot.infiltrateActivity(needDiceRoll = true, replaceVCBase = true) ||
                              NVA_Bot.bombardActivity()
@@ -4209,16 +4517,16 @@ object Bot {
         val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
         
         if (canAmbush)
-          ambushActivity(VC, ambushCandidates, op, activationNumber, false)
+          ambushActivity(VC, ambushCandidates, op, actNum, false)
 
         canAmbush || NVA_Bot.bombardActivity()
       }
 
 
       val (operation, ambushed) = if (NVA_Bot.sixTroopsWithCOINPieces)
-        NVA_Bot.attackOp(params, activationNumber, addAmbush = params.specialActivity)
+        NVA_Bot.attackOp(params, actNum, addAmbush = params.specialActivity)
       else
-        (NVA_Bot.marchOp(params, marchActivationNumber, withLoC = true, withLaosCambodia = true), false)
+        (NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true), false)
 
       operation match {
         case Some(Attack) if ambushed => TrungComplete(true)
@@ -4229,7 +4537,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_NVA_T extends TrungCard(NVA, "T", activationNumber = 2) with NVATrung {
+  object Trung_NVA_T extends TrungCard(NVA, "T", actNum = 2) with NVATrung {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -4240,7 +4548,7 @@ object Bot {
       else if (!NVA_Bot.sixTroopsWithCOINTroopsOrBase)
         flipCard(params)
       else {
-        val (operation, ambushed) = NVA_Bot.attackOp(params, activationNumber, addAmbush = params.specialActivity)
+        val (operation, ambushed) = NVA_Bot.attackOp(params, actNum, addAmbush = params.specialActivity)
 
         operation match {
           case Some(_) if ambushed => TrungComplete(true)
@@ -4260,7 +4568,7 @@ object Bot {
         (game.nonLocSpaces count underGroundWithSupport) > 1
       
       if (undergroundIn2PlusSpacesWithSupport) {
-        NVA_Bot.terrorOp(params, activationNumber) match {
+        NVA_Bot.terrorOp(params, actNum) match {
           case Some(_) => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
           case None    => TrungNoOp
         }
@@ -4271,7 +4579,7 @@ object Bot {
           (NVA_Bot.infiltrateActivity(needDiceRoll = true, replaceVCBase = true) ||
            NVA_Bot.bombardActivity())
 
-        NVA_Bot.marchOp(params, marchActivationNumber, withLoC = true, withLaosCambodia = false) match {
+        NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false) match {
           case Some(_) => TrungComplete(didSpecial)
           case None    => TrungNoOp
         }
@@ -4284,7 +4592,7 @@ object Bot {
   // VC Trung Cards
   // ================================================================
 
-  object Trung_VC_U extends TrungCard(VC, "U", activationNumber = 2) {
+  object Trung_VC_U extends TrungCard(VC, "U", actNum = 2) {
     
     // ------------------------------------------------------------
     // Front Operation
@@ -4303,7 +4611,7 @@ object Bot {
 
         if (VC_Bot.undergroundAtNoActiveOpposition) {
 
-          VC_Bot.terrorOp(params, activationNumber) match {
+          VC_Bot.terrorOp(params, actNum) match {
             case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity)
             case None    => TrungNoOp
           }
@@ -4327,7 +4635,7 @@ object Bot {
         val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
         
         if (canAmbush)
-          ambushActivity(VC, ambushCandidates, op, activationNumber, false)
+          ambushActivity(VC, ambushCandidates, op, actNum, false)
 
         canAmbush || (canTax && VC_Bot.taxActivity()) || VC_Bot.subvertActivity()
       }
@@ -4339,9 +4647,9 @@ object Bot {
       botLog(s"Dice roll: $dice, available VC pieces: ${game.availablePieces.totalOf(VCPieces)}")
 
       val operation = if (dice <= game.availablePieces.totalOf(VCPieces))
-        VC_Bot.rallyOp(params, activationNumber)
+        VC_Bot.rallyOp(params, actNum)
       else
-        VC_Bot.marchOp(params, activationNumber)
+        VC_Bot.marchOp(params, actNum)
 
       operation match {
         case Some(op) => TrungComplete(params.specialActivity && doSpecialActivity(op))
@@ -4351,7 +4659,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_VC_V extends TrungCard(VC, "V", activationNumber = 2) {
+  object Trung_VC_V extends TrungCard(VC, "V", actNum = 2) {
     
     // ------------------------------------------------------------
     // Front Operation
@@ -4369,7 +4677,7 @@ object Bot {
       if (VC_Bot.undergroundAtNoActiveOpposition) {
         if (rollDice(3) <= game.availablePieces.totalOf(VCPieces)) {
 
-          VC_Bot.rallyOp(params, activationNumber) match {
+          VC_Bot.rallyOp(params, actNum) match {
             case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity)
             case None    => TrungNoOp
           }
@@ -4386,9 +4694,9 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       val (operation, ambushed) = if (VC_Bot.threePlusGuerrillasWithUSTroopsNoVCBase)
-        VC_Bot.attackOp(params, activationNumber)
+        VC_Bot.attackOp(params, actNum)
       else
-        (VC_Bot.terrorOp(params, activationNumber), false)
+        (VC_Bot.terrorOp(params, actNum), false)
 
       operation match {
         case Some(Attack) => TrungComplete(ambushed)
@@ -4401,7 +4709,7 @@ object Bot {
 
 
   // ---------------------------------------------------------------
-  object Trung_VC_W extends TrungCard(VC, "W", activationNumber = 2) {
+  object Trung_VC_W extends TrungCard(VC, "W", actNum = 2) {
     
     // ------------------------------------------------------------
     // Front Operation
@@ -4420,7 +4728,7 @@ object Bot {
       else if (rollDice(3) > game.availablePieces.totalOf(VCPieces))
         flipCard(params)
       else {
-        VC_Bot.rallyOp(params, activationNumber) match {
+        VC_Bot.rallyOp(params, actNum) match {
           case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity())
           case None    => TrungNoOp
         }
@@ -4432,9 +4740,9 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       val (operation, ambushed) = if (VC_Bot.undergroundAtNoActiveOpposition)
-        (VC_Bot.terrorOp(params, activationNumber), false)
+        (VC_Bot.terrorOp(params, actNum), false)
       else
-        VC_Bot.attackOp(params, activationNumber)
+        VC_Bot.attackOp(params, actNum)
 
       operation match {
         case Some(Attack) => TrungComplete(ambushed)
@@ -4446,7 +4754,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_VC_X extends TrungCard(VC, "X", activationNumber = 2) {
+  object Trung_VC_X extends TrungCard(VC, "X", actNum = 2) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -4464,7 +4772,7 @@ object Bot {
       else if (rollDice(3) > game.availablePieces.totalOf(VCPieces))
         flipCard(params)
       else {
-        VC_Bot.rallyOp(params, activationNumber) match {
+        VC_Bot.rallyOp(params, actNum) match {
           case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity())
           case None    => TrungNoOp
         }
@@ -4481,12 +4789,12 @@ object Bot {
         val canSubvert       = game.patronage >= 17
 
         if (canAmbush)
-          ambushActivity(VC, ambushCandidates, March, activationNumber, false)
+          ambushActivity(VC, ambushCandidates, March, actNum, false)
 
         canAmbush || (canSubvert && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
       }
 
-      VC_Bot.marchOp(params, activationNumber) match {
+      VC_Bot.marchOp(params, actNum) match {
         case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity())
         case None    => TrungNoOp
       }
@@ -4495,7 +4803,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_VC_Y extends TrungCard(VC, "Y", activationNumber = 2) {
+  object Trung_VC_Y extends TrungCard(VC, "Y", actNum = 2) {
 
     // ------------------------------------------------------------
     //Front Operation
@@ -4506,7 +4814,7 @@ object Bot {
       else if (!VC_Bot.threePlusGuerrillasWithUSTroopsNoVCBase)
         flipCard(params)
       else {
-        val (operation, ambushed) = VC_Bot.attackOp(params, activationNumber)
+        val (operation, ambushed) = VC_Bot.attackOp(params, actNum)
 
         operation match {
           case Some(_) if ambushed => TrungComplete(true)
@@ -4527,7 +4835,7 @@ object Bot {
         (canSubvert && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
       }
 
-      VC_Bot.rallyOp(params, activationNumber) match {
+      VC_Bot.rallyOp(params, actNum) match {
         case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity())
         case None    => TrungNoOp
       }
@@ -4535,7 +4843,7 @@ object Bot {
   }
 
   // ---------------------------------------------------------------
-  object Trung_VC_Z extends TrungCard(VC, "Z", activationNumber = 2) {
+  object Trung_VC_Z extends TrungCard(VC, "Z", actNum = 2) {
 
     // ------------------------------------------------------------
     // Front Operation
@@ -4556,7 +4864,7 @@ object Bot {
         val specialDone = params.specialActivity && doSpecialActivity()
 
         if (game.spaces exists (sp => numVCGuerrillas(sp) >= 3))
-          VC_Bot.marchOp(params, activationNumber) match {
+          VC_Bot.marchOp(params, actNum) match {
             case Some(_) => TrungComplete(true)
             case None    => TrungNoOp
           }
@@ -4575,9 +4883,9 @@ object Bot {
     //         return TrungComplete(true)
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       val operation = if (VC_Bot.undergroundAtNoActiveOpposition)
-        VC_Bot.terrorOp(params, activationNumber)
+        VC_Bot.terrorOp(params, actNum)
       else
-        VC_Bot.marchOp(params, activationNumber)
+        VC_Bot.marchOp(params, actNum)
 
       if (operation.nonEmpty || specialDone)
         TrungComplete(specialDone)

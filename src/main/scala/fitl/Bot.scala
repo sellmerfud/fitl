@@ -2801,6 +2801,9 @@ object Bot {
     //  -------------------------------------------------------------
     //  Implement the NVA Terror Instructions from the NVA Trung cards.
     //  Select spaces using Place Terror
+    //  Note:
+    //  Bruce Mansfield clarified that NVA Bot should not make
+    //  an activation roll after conducting Terror on a LoC.
     //  -------------------------------------------------------------
     def terrorOp(params: Params, activationNumber: Int): Option[InsurgentOp] = {
       val isCandidate = (sp: Space) => {
@@ -2823,7 +2826,7 @@ object Bot {
             if (!sp.isLoC && sp.support > Neutral)
               decreaseSupport(sp.name, 1)
 
-          nextTerror(candidates filterNot (_.name == sp.name), true)
+          nextTerror(candidates filterNot (_.name == sp.name), needActivation = !sp.isLoC)
         }
       }
 

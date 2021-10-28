@@ -786,6 +786,27 @@ object FireInTheLake {
       collection.foldLeft(Pieces()) { (pieces, t) => pieces.add(1, t) }
   }
 
+
+  // Used during a turn to keep track of pieces that have already moved
+  // in each space.
+  // For patrol,  we add pieces to a moving group if they have terminated
+  // movement in a space with Insurgent pieces.  This lets us know that
+  // those pieces cannot continue moving.
+  class MovingGroups() {
+    // Map Space Name, to Pieces in that space that cannot move.
+    var groups: Map[String, Pieces] = Map.empty.withDefaultValue(Pieces())
+
+    def reset(): Unit = groups = Map.empty.withDefaultValue(Pieces())
+    def apply(name: String): Pieces = groups(name)
+    def add(name: String, pieces: Pieces): Unit = groups += name -> (groups(name) + pieces)
+    def remove(name: String, pieces: Pieces): Unit = groups += name -> (groups(name) - pieces)
+
+    def spaces = groups.keys.toSet
+    def toList = groups.toList.sortBy(_._1)
+    def allPieces = toList.foldLeft(Pieces()) { (all, group) => all + group._2 }
+    def size   = groups.size
+  }
+
   // Convenience function
   // Allows us to use `space.usTroops` in place of `space.pieces.usTroops`
   // implicit def spacePieces(sp: Space): Pieces = sp.pieces
@@ -1470,10 +1491,12 @@ object FireInTheLake {
     lazy val availablePieces = ForcePool - allPiecesOnMap.normalized - casualties.normalized - outOfPlay.normalized
     // piecesToPlace are either on the map or available (not casualties or out of play)
     // Does not include US troops or bases
-    lazy val piecesToPlace = (allPiecesOnMap.normalized + availablePieces).except(USTroops::USBase::Nil)
+    lazy val piecesToPlace    = (allPiecesOnMap.normalized + availablePieces).except(USTroops::USBase::Nil)
     lazy val currentRvnLeader = rvnLeaders.head
-    lazy val locSpaces = spaces filter (_.isLoC)
-    lazy val nonLocSpaces = spaces filterNot (_.isLoC)
+    lazy val locSpaces        = spaces filter (_.isLoC)
+    lazy val nonLocSpaces     = spaces filterNot (_.isLoC)
+    lazy val citySpaces       = (spaces filter (_.isCity))
+    lazy val patrolSpaces     = locSpaces ::: citySpaces
 
     val agitateTotal = vcResources
 
@@ -2748,6 +2771,29 @@ object FireInTheLake {
     log(s"\nRemove a tunnel marker from a ${base.singular} in $spaceName")
   }
 
+  //  Used by both Human and Bot Patrol commands
+  //  to carry out the effect of the shaded M48 Patton capability
+  def performM48Patton_Shaded(movedCubes: MovingGroups): Unit = {
+    if (capabilityInPlay(M48Patton_Shaded) && movedCubes.size > 0) {
+      val (name, toRemove) = if (game.isHuman(NVA)) {
+        println(s"\nNVA removes two cubes that moved [$M48Patton_Shaded]")
+        val choices = movedCubes.toList map (x => x._1 -> x._1)
+
+        val name = askMenu(choices, "Remove cubes from which space:", allowAbort = false).head
+        val sp   = game.getSpace(name)
+        val num  = movedCubes(name).total min 2
+        val toRemove = askPieces(movedCubes(name), num, prompt = Some("Select cubes to remove"), allowAbort = false)
+        (name, toRemove)
+      }
+      else {
+        val candidates = spaces(movedCubes.toList map (_._1))
+        val sp         = Bot.NVA_Bot.pickSpaceRemoveReplace(candidates)
+        val toRemove   = Bot.selectEnemyRemovePlaceActivate(movedCubes(sp.name), 2)
+        (sp.name, toRemove)
+      }
+      removePieces(name, toRemove, Some(s"NVA removes two cubes that moved [$M48Patton_Shaded]"))
+    }
+  }
 
   // Return list of spaces that have COIN pieces that can be reached
   // from the given ambush space.

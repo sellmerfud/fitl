@@ -111,24 +111,6 @@ object Human {
     def cancelled() = specialTaken = false
   }
 
-  // Used during a turn to keep track of pieces that have already moved
-  // in each space.
-  // For patrol,  we add pieces to a moving group if they have terminated
-  // movement in a space with Insurgent pieces.  This lets us know that
-  // those pieces cannot continue moving.
-  class MovingGroups() {
-    // Map Space Name, to Pieces in that space that cannot move.
-    var groups: Map[String, Pieces] = Map.empty.withDefaultValue(Pieces())
-
-    def apply(name: String): Pieces = groups(name)
-    def add(name: String, pieces: Pieces): Unit = groups += name -> (groups(name) + pieces)
-    def remove(name: String, pieces: Pieces): Unit = groups += name -> (groups(name) - pieces)
-
-    def spaces = groups.keys.toSet
-    def toList = groups.toList.sortBy(_._1)
-    def allPieces = toList.foldLeft(Pieces()) { (all, group) => all + group._2 }
-    def size   = groups.size
-  }
 
   // TODO:  Perhaps this can be shared with the Bot code
   //        Would have to also put MovingGroups class in shared trait
@@ -2184,14 +2166,8 @@ object Human {
       selectCubesToMove()
       activateGuerrillasOnLOCs()
       assaultOneLOC()
-      if (pattonShaded && movedCubes.size > 0) {
-        // TODO:
-        // NVABot.removeEnemyPieces(2, movedCubes.toList)
-        println()
-        println(separator(char = '='))
-        println(s"$M48Patton_Shaded for NVA Bot has not been implemented!")
-        println(separator(char = '='))
-      }
+      if (pattonShaded && movedCubes.size > 0)
+        performM48Patton_Shaded(movedCubes)
     }
     else
       log(s"There are not enough ARVN resources (${game.arvnResources}) to Patrol")

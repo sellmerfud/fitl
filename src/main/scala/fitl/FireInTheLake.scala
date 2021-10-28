@@ -2751,24 +2751,38 @@ object FireInTheLake {
     }
   }
 
-  def addTunnelMarker(spaceName: String, base: PieceType): Unit = {
+  def addTunnelMarker(spaceName: String, bases: Pieces): Unit = {
     val sp = game.getSpace(spaceName)
-    assert(base == VCBase || base == NVABase, s"addTunnelMarker() called with invalid type: $base")
-    assert(sp.pieces.has(base), s"addTunnelMarker() $spaceName does not contain a $base")
-    val tunnel = if (base == VCBase) VCTunnel else NVATunnel
-    val updated = sp.copy(pieces = sp.pieces.remove(1, base).add(1, tunnel))
-    game = game.updateSpace(updated)
-    log(s"\nAdd a tunnel marker to a ${base.singular} in $spaceName")
+    val onlyBases = bases.explode() forall InsurgentNonTunnels.contains
+    assert(onlyBases, s"addTunnelMarker() called with non insurgent bases")
+    assert(sp.pieces.contains(bases), s"addTunnelMarker() $spaceName does not contain $bases")
+
+    val tunnels = bases.explode().foldLeft(Pieces()) { (p, b) =>
+      val tunnelType = if (b == NVABase) NVATunnel else VCTunnel
+      p.add(1, tunnelType)
+    }
+
+    val newPieces = sp.pieces - bases + tunnels
+    game = game.updateSpace(sp.copy(pieces = newPieces))
+    for (desc <- bases.descriptions)
+      log(s"Add a tunnel marker to ${desc} in $spaceName")
   }
 
-  def removeTunnelMarker(spaceName: String, tunnel: PieceType): Unit = {
+  def removeTunnelMarker(spaceName: String, tunnels: Pieces): Unit = {
     val sp = game.getSpace(spaceName)
-    assert(tunnel == VCTunnel || tunnel == NVATunnel, s"removeTunnelMarker() called with invalid type: $tunnel")
-    assert(sp.pieces.has(tunnel), s"removeTunnelMarker() $spaceName does not contain a $tunnel")
-    val base = if (tunnel == VCTunnel) VCBase else NVABase
-    val updated = sp.copy(pieces = sp.pieces.remove(1, tunnel).add(1, base))
-    game = game.updateSpace(updated)
-    log(s"\nRemove a tunnel marker from a ${base.singular} in $spaceName")
+    val onlyTunnels = tunnels.explode() forall InsurgentTunnels.contains
+    assert(onlyTunnels, s"removeTunnelMarker() called with non tunnels")
+    assert(sp.pieces.contains(tunnels), s"removeTunnelMarker() $spaceName does not contain $tunnels")
+    
+    val bases = tunnels.explode().foldLeft(Pieces()) { (p, t) =>
+      val baseType = if (t == NVATunnel) NVABase else VCBase
+      p.add(1, baseType)
+    }
+
+    val newPieces = sp.pieces - tunnels + bases
+    game = game.updateSpace(sp.copy(pieces = newPieces))
+    for (desc <- tunnels.descriptions)
+      log(s"Remove a tunnel marker from ${desc} in $spaceName")
   }
 
   //  Used by both Human and Bot Patrol commands

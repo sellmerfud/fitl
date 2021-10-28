@@ -104,6 +104,7 @@ object Bot {
   // The Bots will never move pieces out of a space that has been
   // selected as a move destination.
   private var moveDestinations = Set.empty[String]
+  private var transportDestinations = Set.empty[String]
 
   // Keeps track of all pieces that actually moved
   // during March/Sweep/Patrol/Transport/Air Lift..
@@ -162,7 +163,7 @@ object Bot {
     log(separator())
     for (note <- notes)
       log(note)
-}
+  }
 
   // Make an activation roll
   // and return true if it is a success
@@ -202,6 +203,17 @@ object Bot {
   def checkActivation(faction: Faction, needRoll: Boolean, actNum: Int): Boolean = {
     needRoll == false || makeActivationRoll(faction, actNum)
   }
+
+  val CanTho_Hue_Routes = Set(
+    Hue, DaNang, Kontum, QuiNhon, CamRahn, AnLoc, Saigon, CanTho, LOC_Hue_DaNang,
+    LOC_DaNang_DakTo, LOC_DaNang_QuiNhon, LOC_Kontum_DakTo, LOC_Kontum_QuiNhon,
+    LOC_Kontum_BanMeThuot, LOC_QuiNhon_CamRanh, LOC_CamRanh_DaLat, LOC_BanMeThuot_DaLat,
+    LOC_Saigon_CamRanh, LOC_Saigon_DaLat, LOC_Saigon_AnLoc_BanMeThuot, LOC_Saigon_CanTho
+  )
+
+        // All routes from Can Tho to Hue blocked
+  def allLocRoutesCanTho_HueBlocked: Boolean = !getPatrolDestinations(CanTho).contains(Hue)
+  
 
   def sweepEffective(faction: Faction, name: String): Boolean = {
     val sp = game.getSpace(name)
@@ -332,6 +344,112 @@ object Bot {
       (ambushSpaces, canContinue)
     }
   }
+
+
+  //  Perform a US/AVRN assault in the given space.
+  //  Important! This function assumes that the any activation roll has
+  //             already been satisfied and that if this is an ARVN asasult
+  //             that requires resources that the resource are available!
+  def performAssault(faction: Faction, name: String, params: Params): Unit = {
+    val remove1BaseFirst   = faction == US && capabilityInPlay(Abrams_Unshaded)
+    val remove1Underground = faction == US && capabilityInPlay(SearchAndDestroy_Unshaded)
+    val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
+
+    val sp          = game.getSpace(name)
+    def pieces      = game.getSpace(name).pieces  // Always get fresh instance
+    val baseFirst   = remove1BaseFirst && pieces.has(InsurgentNonTunnels) && !pieces.has(UndergroundGuerrillas)
+    val underground = remove1Underground && pieces.has(UndergroundGuerrillas)
+    val totalLosses = sp.assaultFirepower(faction) + (if (params.assaultRemovesTwoExtra) 2 else 0)
+    var killedPieces = Pieces()
+    def remaining   = totalLosses - killedPieces.total
+
+    // Log all control changes at the end of the assault
+    loggingControlChanges {
+      log(s"\n$faction assaults in $name")
+      log(separator())
+
+      if (faction == ARVN && !params.free && game.trackResources(ARVN)) {
+        if (momentumInPlay(Mo_BodyCount))
+          log(s"\nARVN Assault costs zero resources [Momentum: $Mo_BodyCount]")
+        else
+          decreaseResources(ARVN, 3)
+      }
+
+      log(s"The assault inflicts ${amountOf(totalLosses, "hit")}")
+
+      // Abrams unshaded
+      if (remaining > 0 && baseFirst) {
+        log(s"\nRemove a base first [$Abrams_Unshaded]")
+        val removed = selectEnemyRemovePlaceActivate(pieces.only(InsurgentNonTunnels), 1)
+        removeToAvailable(name, removed)
+        killedPieces = killedPieces + removed
+      }
+
+      // Search and Destory unshaded
+      // Even if the remaining hits is zero, we will remove an underground
+      // guerilla.  But if there are hits remainin, the it counts toward
+      // those hits.
+      val killedUnderground = if (underground) {
+        log(s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]")
+        val removed = selectEnemyRemovePlaceActivate(pieces.only(UndergroundGuerrillas), 1)
+        removeToAvailable(name, removed)
+        if (remaining > 0) {
+          killedPieces = killedPieces + removed  // Counts against total hits
+          Pieces()
+        }
+        else
+          removed  // Will be added to killedPieces later
+      }
+      else
+        Pieces()
+
+      // Remove exposed insurgent pieces, check for tunnel marker removal
+      val (killedExposed, affectedTunnel) = selectRemoveEnemyInsurgentBasesLast(pieces, remaining)
+      killedPieces = killedPieces + killedExposed
+      // Add any removed underground guerrilla that did NOT count toward remaining hits above
+      killedPieces = killedPieces + killedUnderground
+      
+      if (killedPieces.isEmpty)
+        log("\nNo insurgemnt pieces were removed in the assault")
+      else {
+        removePieces(name, killedPieces)
+        if (affectedTunnel.nonEmpty)
+          removeTunnelMarker(name, affectedTunnel)
+      }
+
+      // Body Count momentum
+      if (momentumInPlay(Mo_BodyCount) && killedPieces.totalOf(Guerrillas) > 0) {
+        log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]")
+        increaseUsAid(3 * killedPieces.totalOf(Guerrillas))
+      }
+
+      // Each removed base adds +6 aid
+      if (faction == ARVN && killedPieces.totalOf(InsurgentNonTunnels) > 0) {
+        log(s"\nEach insurgent base removed adds +6 Aid")
+        increaseUsAid(6 * killedPieces.totalOf(InsurgentNonTunnels))
+      }
+      
+      // Cobras_Shaded
+      //    Eash US assault space, 1 US Troop to Casualties on die roll of 1-3
+      if (faction == US && pieces.has(USTroops) && capabilityInPlay(Cobras_Shaded)) {
+        val die = d6
+        val success = die < 4
+        log(s"\nCheck for loss of US Troop [$Cobras_Shaded]")
+        log(s"Die roll is: ${die} [${if (success) "Troop eliminated" else "No effect"}]")
+        if (success) {
+          removeToCasualties(name, Pieces(usTroops = 1))
+        }
+      }
+
+      // SearchAndDestroy_Shaded
+      //    Each US and ARVN assault Province shifts support one level toward Active Opposition
+      if (searchDestroy && sp.isProvince && sp.population > 0 && sp.support != ActiveOpposition) {
+        log(s"\nEach assault shifts support toward Active Opposition [$SearchAndDestroy_Shaded]")
+        decreaseSupport(name, 1)
+      }
+    }
+  }
+
 
   // Type used for checking conditions in the
   // space selection and move priorities tables
@@ -866,22 +984,41 @@ object Bot {
     (deadForces + deadBases)
   }
 
+  //  Removes NVA Troops first, followed by active guerrillas
+  //  then if no underground guerrillas remain, bases.
   //  If a Tunneled base is "vulnerable" is to be removed,
   //  we stop removing pieces.
   //  Roll a 1d6, 1-3 no effect, 4-6 remove tunnel marker
-  //  Return all pieces that should be removed, true if we need to
-  //  roll a die for Tunnel marker removal.
-  def selectRemoveEnemyInsurgentBasesLast(pieces: Pieces, num: Int): (Pieces, Boolean) = {
+  //  Return all pieces that should be removed, 
+  //  also return a max of one Tunneled Base if its marker should be removed.
+  def selectRemoveEnemyInsurgentBasesLast(pieces: Pieces, num: Int): (Pieces, Pieces) = {
+    val insurgentBases   = pieces.only(InsurgentNonTunnels)
     val insurgentTunnels = pieces.only(InsurgentTunnels)
-    val insurgentBases  = pieces.only(InsurgentNonTunnels)
-    val insurgentForces = vulnerableInsurgents(pieces)
-    val numForces       = num min insurgentForces.total
-    val deadForces      = selectEnemyRemovePlaceActivate(insurgentForces, numForces)
-    val numBases        = ((num - deadForces.total) max 0) min insurgentBases.total
-    val deadBases       = selectEnemyRemovePlaceActivate(insurgentBases, numBases)
-    val checkTunnel     = num > numForces + numBases && insurgentTunnels.nonEmpty
+    var deadPieces       = Pieces()
+    var affectedTunnel   = Pieces()
+    def numRemaining     = num - deadPieces.total
 
-    (deadForces + deadBases, checkTunnel)
+    def removeForces(types: TraversableOnce[PieceType]): Unit = if (numRemaining > 0) {
+      val candidates = pieces.only(types)
+      val num = numRemaining min candidates.total
+      deadPieces = deadPieces + selectEnemyRemovePlaceActivate(candidates, num)
+    }
+
+    removeForces(NVATroops::Nil)
+    removeForces(ActiveGuerrillas)
+
+    // Check for base/tunnel marker removal
+    if (!pieces.has(UndergroundGuerrillas)) {
+      if (numRemaining > 0 && insurgentBases.nonEmpty) {
+        val numBases = numRemaining min insurgentBases.total
+        deadPieces = deadPieces + selectEnemyRemovePlaceActivate(insurgentBases, num)
+      }
+
+      if (numRemaining > 0 && insurgentTunnels.nonEmpty)
+        affectedTunnel = selectEnemyRemovePlaceActivate(insurgentTunnels, 1)
+    }
+
+    (deadPieces, affectedTunnel)
   }
   // Function to make code clearer to read
   // just an alias for selectEnemyRemovePlaceActivate()
@@ -2264,42 +2401,31 @@ object Bot {
     def arvnAssaultWouldAddCoinControlToASpace: Boolean =
       game.nonLocSpaces exists arvnAssaultWouldAddCoinControl
 
-    val assaultInSpaceWouldUnblockCanTho_Hue = (sp: Space) => 
-      allLocRoutesCanTho_HueBlocked && {
-      // The allLocRoutesCanTho_HueBlocked function works on
-      // on the current game state, so make safe copy
-      val savedGameState = game        
-      game               = game.updateSpace(arvnAssaultResult(sp))
-      val unblocked      = !allLocRoutesCanTho_HueBlocked
-      game               = savedGameState
-      unblocked
-    }
+    // Is space on the Can Tho - Hue route and would
+    // an assault remove all insurgent pieces
+    val assaultInWouldUnblockAlongCanTho_HueRoute = (sp: Space) => 
+      CanTho_Hue_Routes(sp.name)    &&
+      sp.pieces.has(InsurgentForces) &&
+      !arvnAssaultResult(sp).pieces.has(InsurgentForces)
 
-    def arvnAssaultWouldUnblockCanTo_Hue(candidates: TraversableOnce[Space]): Boolean = {
-      allLocRoutesCanTho_HueBlocked && {
-        val blocked = candidates filter (sp => sp.pieces.has(InsurgentForces))
-        blocked exists assaultInSpaceWouldUnblockCanTho_Hue
-      }
-    }
+    // Return true if an assault on one of the spaces
+    def arvnAssaultWouldUnblockCanTo_HueRouteSpace(candidates: TraversableOnce[Space]): Boolean =
+        candidates exists assaultInWouldUnblockAlongCanTho_HueRoute
 
     def arvnAssaultWouldAddControlOrUnblockCanTo_Hue: Boolean = {
       arvnAssaultWouldAddCoinControlToASpace ||
-      arvnAssaultWouldUnblockCanTo_Hue(game.patrolSpaces)
+      arvnAssaultWouldUnblockCanTo_HueRouteSpace(game.patrolSpaces)
     }
 
     def fiveArvnTroopPlusRangesInAnySpace: Boolean =
       game.spaces exists { sp => sp.pieces.totalOf(ARVNTroops::Rangers) >= 5 }
 
-    def any2PopSpaceWithMoreArvnCubesThanUsCubes: Boolean =
+    def any2PopSpaceWithSupportAndMoreArvnCubesThanUsCubes: Boolean =
       game.nonLocSpaces exists { sp =>
         sp.population == 2 &&
         sp.pieces.totalOf(ARVNCubes) > sp.pieces.totalOf(USTroops)
       }
 
-        // All routes from Can Tho to Hue blocked
-    def allLocRoutesCanTho_HueBlocked: Boolean =
-       !getPatrolDestinations(CanTho).contains(Hue)
-  
     def nvaBaseOrNvaControlAt2PlusPop: Boolean =
       game.nonLocSpaces exists { sp =>
         sp.population >= 2 &&
@@ -2446,6 +2572,9 @@ object Bot {
 
             log(s"\n$ARVN selects ${sp.name} for Train")
             log(separator())
+            if (game.trackResources(ARVN))
+              decreaseResources(ARVN, 3)
+
             placePieces(sp.name, toPlace)
             trainSpaces += sp.name
             trainToPlaceRangers(candidates filterNot (_.name == sp.name))
@@ -2468,6 +2597,8 @@ object Bot {
 
             log(s"\n$ARVN selects ${sp.name} for Train")
             log(separator())
+            if (game.trackResources(ARVN))
+              decreaseResources(ARVN, 3)
             placePieces(sp.name, toPlace)
             trainSpaces += sp.name
             trainToPlaceRangers(candidates filterNot (_.name == sp.name))
@@ -2574,12 +2705,12 @@ object Bot {
     //
     //  M48Patton_Shaded - After US/ARVN patrol NVA removes up to 2 cubes that moved (US to casualties)
     //  Mo_BodyCount     - Cost=0 AND +3 Aid per guerrilla removed
-    def patrolOp(params: Params, actNum: Int): Option[CoinOp] = {
+    def patrolOp(params: Params): Option[CoinOp] = {
       if (momentumInPlay(Mo_BodyCount) || !game.trackResources(ARVN) || game.arvnResources >= 3 ) {
         // Select a LoC Patrol destination candidate
         // ARVN Patrol never needs an activation roll
         val nextPatrolCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
-          val candidates = game.locSpaces filter (sp => !prohibited(sp.name))
+          val candidates = game.patrolSpaces filter (sp => !prohibited(sp.name))
           
           // No need to check activation since we are only trying LoCs
           if (candidates.nonEmpty)
@@ -2603,7 +2734,7 @@ object Bot {
         else {
           val unblockCandidates = spaceNames(game.locSpaces filter { sp =>
             arvnAssaultEffective(sp) &&
-            assaultInSpaceWouldUnblockCanTho_Hue(sp)
+            assaultInWouldUnblockAlongCanTho_HueRoute(sp)
           })
           val genericCandidates = spaceNames(game.locSpaces filter arvnAssaultEffective)
 
@@ -2621,6 +2752,121 @@ object Bot {
       }
       else
         None
+    }
+
+    //  -------------------------------------------------------------
+    //  Implement the ARVN Sweep instructions from the ARVN Trung cards.
+    //  1. Use Move Priorities
+    //     If Shaded Booby Traps then sweep in max 2 spaces
+    //  Cobras_Unshaded   - 2 US/ARVN sweep spaces each remove 1 Active untunneled enemy
+    //                               (troops then  guerrillas then bases)
+    //  BoobyTraps_Shaded - Each sweep space, VC afterward removes 1 sweeping troop on
+    //                      a roll 1-3 (US to casualties)
+    def sweepOp(params: Params, actNum: Int): Option[CoinOp] = {
+      None
+    }
+
+
+    //  Always called first, so no activation needed.
+    //  Mo_BodyCount      - Cost=0 AND +3 Aid per guerrilla removed
+    //  Mo_GeneralLansdale - Assault prohibited
+    //  Returns the name of the space where assault occurred
+    def assaultOneSpaceOpMostFirepower(params: Params): Option[String] = {
+      // We do not check for activation because this will alwasy
+      // be called for the first assault.  But we still need to check
+      // resource availability.
+      val hasCash = (params.free || !game.trackResources(ARVN) || game.arvnResources >= 3)
+      if (momentumInPlay((Mo_GeneralLansdale)) || !hasCash)
+        None
+      else {
+        val candidates = game.spaces filter { sp => arvnAssaultEffective(sp) }
+        if (candidates.nonEmpty) {
+          val MostFirepower = List(new HighestScore[Space]("Most ARVN Firepower", arvnFirepower))
+          val sp = bestCandidate(candidates, MostFirepower)
+
+          logOpChoice(ARVN, Assault)
+          performAssault(ARVN, sp.name, params)
+          Some(sp.name)
+        }
+        else
+          None
+      }
+    }
+
+    //  -------------------------------------------------------------
+    //  Implement the ARVN Assault instructions from the ARVN Trung cards.
+    //  1. Assault in 1 space with most ARVN Firepower (optional)
+    //  2. Assault using Remove Priorities.
+    //
+    //  Mo_BodyCount      - Cost=0 AND +3 Aid per guerrilla removed
+    //  Mo_GeneralLansdale - Assault prohibited
+    def assaultOp(params: Params, actNum: Int, previousAssaults: Set[String] = Set.empty): Option[CoinOp] = {
+      if (momentumInPlay((Mo_GeneralLansdale)))
+        None
+      else {
+        val assaultSpaces = Set.empty[String]
+        val maxAssault    = params.maxSpaces getOrElse NO_LIMIT
+
+        def nextAssault(): Unit = {
+          val free           = params.free || momentumInPlay(Mo_BodyCount)
+          val check          = previousAssaults.nonEmpty || assaultSpaces.nonEmpty
+          lazy val activated = checkARVNActivation(check, actNum, free)
+          lazy val candidates = game.spaces filter { sp =>
+            !previousAssaults(sp.name) && !assaultSpaces(sp.name) && arvnAssaultEffective(sp)
+          }
+
+          if (previousAssaults.size + assaultSpaces.size < maxAssault && candidates.nonEmpty && activated) {
+            val sp = pickSpaceRemoveReplace(candidates)
+
+            if (previousAssaults.isEmpty && assaultSpaces.isEmpty)
+              logOpChoice(ARVN, Assault)
+            performAssault(ARVN, sp.name, params)
+            nextAssault()
+          }
+        }
+
+        nextAssault()
+        if (assaultSpaces.nonEmpty)
+          Some(Assault)
+        else
+          None
+      }
+    }
+
+    def governActivity(): Boolean = false
+    def transportActivity(): Boolean = false
+    def raidActivity(): Boolean = {
+      val inPlaceCandidates  = ARVN_Bot.raidWithInPlaceCandidates
+      val adjacentCandidates = ARVN_Bot.raidWithInPlaceCandidates
+      false
+    }
+
+    // Underground guerrillas can be targeted, Tunnels cannot and
+    // base only if no other Insurgent pieces exist
+    val hasRaidTarget = (sp: Space) => 
+      sp.pieces.has(InsurgentForces) ||
+      (sp.pieces.has(InsurgentNonTunnels) && !sp.pieces.has(InsurgentTunnels))
+
+    val hasAdjacentUndergroundRangers = (sp: Space) =>
+      spaces(getAdjacent(sp.name)) exists (_.pieces.has(Rangers_U))
+
+    def raidWithInPlaceCandidates: List[Space] =
+      game.spaces filter (sp => hasRaidTarget(sp) && sp.pieces.has(Rangers_U))
+
+    def raidAdjacentCandidates: List[Space] = {
+      game.spaces filter (sp => hasRaidTarget(sp) && hasAdjacentUndergroundRangers(sp))
+    }
+
+    // If Transport special activity was used,  then Armored Cavalry (unshaded)
+    // allows ARVN to free assault in one Transport destination
+    def armoredCavalryAssault(): Unit = {
+      val candidates = spaces(transportDestinations) filter arvnAssaultEffective
+      // General Landsdale prohibits assault
+      if (capabilityInPlay(ArmoredCavalry_Unshaded) && !momentumInPlay(Mo_GeneralLansdale) && candidates.nonEmpty) {
+        val sp = pickSpaceRemoveReplace(candidates)    
+        log(s"\n$ArmoredCavalry_Unshaded triggers a free Assault")
+        performAssault(ARVN, sp.name, Params(free = true))
+      }
     }
   }
 
@@ -3269,7 +3515,7 @@ object Bot {
             removeToAvailable(sp.name, vcPiece)
             placePieces(sp.name, Pieces(nvaBases = 1))
             if (nvaType == NVATunnel)
-                addTunnelMarker(sp.name, NVABase)
+                addTunnelMarker(sp.name, Pieces(nvaBases = 1))
             infiltrateSpaces += sp.name
           }
         }
@@ -3976,7 +4222,8 @@ object Bot {
   }
 
   def initTurnVariables(): Unit = {
-    moveDestinations = Set.empty
+    moveDestinations      = Set.empty
+    transportDestinations = Set.empty
     movedPieces.reset()
   }
 
@@ -4229,16 +4476,41 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      if (rollDice(3) > game.availablePieces.totalOf(ARVNPieces))
+        TrungDraw
+      else if (!ARVN_Bot.arvnAssaultWouldAddControlOrUnblockCanTo_Hue)
+        flipCard(params)
+      else {
+        ARVN_Bot.assaultOneSpaceOpMostFirepower(params) match {
+          case Some(firstName) =>
+            val transported = ARVN_Bot.transportActivity()
+            // Now try other assaults
+            ARVN_Bot.assaultOp(params, actNum, Set(firstName))
+            ARVN_Bot.armoredCavalryAssault()
+            TrungComplete(transported)
+
+          case None =>
+            TrungNoOp
+        }
+      }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecial(): Boolean =
+        ARVN_Bot.governActivity() || 
+        ARVN_Bot.transportActivity()
+
+      ARVN_Bot.trainOp(params, actNum) match {
+        case Some(_) =>
+          val didSpecial = params.specialActivity && doSpecial()
+          ARVN_Bot.armoredCavalryAssault()
+          TrungComplete(didSpecial)
+
+        case None => TrungNoOp
+      }
     }
   }
 
@@ -4249,16 +4521,38 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      if (!ARVN_Bot.fiveArvnTroopPlusRangesInAnySpace)
+        TrungDraw
+      else {
+        val transported = params.specialActivity && ARVN_Bot.transportActivity()
+
+        if (ARVN_Bot.arvnAssaultWouldAddControlOrUnblockCanTo_Hue) {
+          ARVN_Bot.assaultOp(params, actNum)
+          ARVN_Bot.armoredCavalryAssault()
+          TrungComplete(transported)
+        }
+        else
+          flipCard(params, transported) // Let back of card know if we did Transport activity
+      }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      // Special Activity (Transport) is selected on the Front of the card!
+      val operation = if (rollDice(3) <= game.availablePieces.totalOf(ARVNPieces))
+        ARVN_Bot.trainOp(params, actNum)
+      else
+        ARVN_Bot.assaultOp(params, actNum)
+
+      operation match {
+        case Some(_) =>
+          ARVN_Bot.armoredCavalryAssault()
+          TrungComplete(specialDone)
+
+        case None => TrungNoOp
+      } 
     }
   }
 
@@ -4268,17 +4562,44 @@ object Bot {
     // ------------------------------------------------------------
     // Front Operation
     // ------------------------------------------------------------
-    def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+    def executeFront(params: Params): TrungResult = {      
+      if (!ARVN_Bot.any2PopSpaceWithSupportAndMoreArvnCubesThanUsCubes)
+        TrungDraw
+      else if (rollDice(3) > game.availablePieces.totalOf(ARVNPieces))
+        flipCard(params)
+      else {
+        ARVN_Bot.trainOp(params, actNum) match {
+          case Some(_) if params.specialActivity =>
+            TrungComplete(ARVN_Bot.governActivity() || ARVN_Bot.transportActivity())
+
+          case Some(_) => TrungComplete(false)
+          case None    => TrungNoOp
+        }
+      }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecial(op: CoinOp): Boolean =
+        (op == Patrol && ARVN_Bot.governActivity()) ||
+        ARVN_Bot.raidActivity()                     ||
+        ARVN_Bot.transportActivity()
+        
+      val operation = if (allLocRoutesCanTho_HueBlocked)
+        ARVN_Bot.patrolOp(params)
+      else
+        ARVN_Bot.sweepOp(params, actNum)
+
+      operation match {
+        case Some(op) =>
+          val didSpecial = params.specialActivity && doSpecial(op)
+          ARVN_Bot.armoredCavalryAssault()
+          TrungComplete(didSpecial)
+
+        case None => TrungNoOp
+      }
     }
   }
 
@@ -4289,16 +4610,47 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      if (game.arvnPoints < 42)
+        TrungDraw
+      else if (!allLocRoutesCanTho_HueBlocked)
+        flipCard(params)
+      else {
+        val didSpecial = params.specialActivity &&
+          (ARVN_Bot.governActivity() ||
+           ARVN_Bot.raidActivity     ||
+           ARVN_Bot.transportActivity())
+
+        ARVN_Bot.patrolOp(params) match {
+          case Some(_) =>
+            ARVN_Bot.armoredCavalryAssault()
+            TrungComplete(didSpecial)
+          
+          case None => TrungNoOp
+        }
+      }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecial(op: CoinOp): Boolean =
+        (op == Train && ARVN_Bot.governActivity()) ||
+        ARVN_Bot.transportActivity()
+
+      val operation = if (ARVN_Bot.arvnAssaultWouldAddCoinControlToASpace)
+        ARVN_Bot.assaultOp(params, actNum)
+      else
+        ARVN_Bot.trainOp(params, actNum)
+
+      operation match {
+        case Some(op) =>
+          val didSpecial = params.specialActivity && doSpecial(op)
+          ARVN_Bot.armoredCavalryAssault()
+          TrungComplete(didSpecial)
+
+        case None => TrungNoOp
+      }
     }
   }
 
@@ -4309,16 +4661,41 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      if (!ARVN_Bot.nvaBaseOrNvaControlAt2PlusPop)
+        TrungDraw
+      else if (rollDice(3) > game.availablePieces.totalOf(ARVNPieces))
+        flipCard(params)
+      else {
+        ARVN_Bot.trainOp(params, actNum) match {
+          case Some(_) =>
+            val didSpecial = params.specialActivity &&
+              (ARVN_Bot.governActivity() || ARVN_Bot.transportActivity())
+            ARVN_Bot.armoredCavalryAssault()
+            TrungComplete(didSpecial)
+        
+          case None => TrungNoOp
+        }
+      }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      val operation = if (ARVN_Bot.arvnAssaultWouldAddControlOrUnblockCanTo_Hue)
+        ARVN_Bot.assaultOp(params, actNum)
+      else
+        ARVN_Bot.sweepOp(params, actNum)
+
+      operation match {
+        case Some(_) =>
+          val didSpecial = params.specialActivity &&
+            (ARVN_Bot.raidActivity() || ARVN_Bot.transportActivity())
+          ARVN_Bot.armoredCavalryAssault()
+          TrungComplete(didSpecial)
+        
+        case None => TrungNoOp
+      }
     }
   }
 
@@ -4329,8 +4706,21 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      if (game.nvaPoints < 14)
+        TrungDraw
+      else if (rollDice(3) > game.availablePieces.totalOf(ARVNPieces))
+        flipCard(params)
+      else {
+        ARVN_Bot.trainOp(params, actNum) match {
+          case Some(_) =>
+            val didSpecial = params.specialActivity &&
+              (ARVN_Bot.transportActivity() || ARVN_Bot.governActivity())
+            ARVN_Bot.armoredCavalryAssault()
+            TrungComplete(didSpecial)
+
+          case None => TrungNoOp
+        }
+      }
     }
 
     // ------------------------------------------------------------

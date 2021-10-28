@@ -184,7 +184,7 @@ object Human {
           if (success) {
             val prompt = "\nRemove tunnel marker"
             val tunnel = askPieces(pieces, 1, InsurgentTunnels, Some(prompt))
-            removeTunnelMarker(name, tunnel.explode().head)
+            removeTunnelMarker(name, tunnel)
           }
         }
       }
@@ -347,14 +347,17 @@ object Human {
   // If Transport special activity was used,  then Armored Cavalry (unshaded)
   // allows ARVN to free assault in one Transport destination
   def armoredCavalryAssault(): Unit = {
-    val isCandidate = (sp: Space) => sp.pieces.has(InsurgentPieces) &&sp.pieces.has(ARVNCubes)
-    val candidates = spaceNames(Special.transportDestinations map game.getSpace filter isCandidate)
-
-    if (candidates.nonEmpty && askYorN(s"\nDo you wish to perform a free assault in 1 transport destinaion via [$ArmoredCavalry_Unshaded]? (y/n) ")) {
-        val name = askCandidate("Free Assault in which space: ", candidates)
-
-        log(s"\n$ArmoredCavalry_Unshaded triggers a free Assault")
-        performAssault(name, ARVN, Params(free = true))
+    // General Landsdale prohibits assault
+    if (capabilityInPlay(ArmoredCavalry_Unshaded) && !momentumInPlay(Mo_GeneralLansdale)) {
+      val isCandidate = (sp: Space) => sp.pieces.has(InsurgentPieces) &&sp.pieces.has(ARVNCubes)
+      val candidates = spaceNames(Special.transportDestinations map game.getSpace filter isCandidate)
+  
+      if (candidates.nonEmpty && askYorN(s"\nDo you wish to perform a free assault in 1 transport destinaion via [$ArmoredCavalry_Unshaded]? (y/n) ")) {
+          val name = askCandidate("Free Assault in which space: ", candidates)
+  
+          log(s"\n$ArmoredCavalry_Unshaded triggers a free Assault")
+          performAssault(ARVN, name, Params(free = true))
+      }
     }
   }
 
@@ -591,10 +594,12 @@ object Human {
       })
 
       val maxAdvise = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
+      val canAdvise = Special.selectedSpaces.size < maxAdvise
 
-      val canSweep   = Special.selectedSpaces.size < maxAdvise && sweepCandidates.nonEmpty
-      val canAssault = Special.selectedSpaces.size < maxAdvise && assaultCandidates.nonEmpty
-      val canSpecial = Special.selectedSpaces.size < maxAdvise && specialForcesCandidates.nonEmpty
+      val canSweep   = canAdvise && sweepCandidates.nonEmpty
+      val canAssault = canAdvise && !momentumInPlay(Mo_GeneralLansdale) &&
+                                    assaultCandidates.nonEmpty
+      val canSpecial = canAdvise && specialForcesCandidates.nonEmpty
       val choices = List(
         choice(canSweep,   "sweep",   "Sweep a space with ARVN forces"),
         choice(canAssault, "assault", "Assault a space with ARVN forces"),
@@ -617,7 +622,7 @@ object Human {
 
         case "assault" =>
           askCandidateOrBlank("ARVN Assault in which space: ", assaultCandidates) foreach { name =>
-            performAssault(name, ARVN, params.copy(free = true))
+            performAssault(ARVN, name, params.copy(free = true))
             Special.selectedSpaces = Special.selectedSpaces + name
           }
           nextAdviseSpace()
@@ -1292,7 +1297,7 @@ object Human {
             ensurePieceTypeAvailable(NVABase, 1)
             placePieces(name, Pieces(nvaBases = 1))
             if (nvaType == NVATunnel)
-              addTunnelMarker(name, NVABase)
+              addTunnelMarker(name, Pieces(nvaBases = 1))
           }
           else {
             removeToAvailable(name, vcPiece)
@@ -1985,8 +1990,7 @@ object Human {
 
     // If Transport special activity was used,  then Armored Cavalry (unshaded)
     // allows ARVN to free assault in one Transport destination
-    if (capabilityInPlay(ArmoredCavalry_Unshaded) && Special.transportDestinations.nonEmpty)
-      armoredCavalryAssault()
+    armoredCavalryAssault()
   }
 
   // Cap_M48Patton (shaded)
@@ -2130,7 +2134,7 @@ object Human {
               assaultRemovesTwoExtra = pattonUshaded,
               free                   = true)
             val name = askSimpleMenu(candidates, "\nAssault in which LOC:").head
-            performAssault(name, faction, assaultParams)
+            performAssault(faction, name, assaultParams)
 
           case "special" =>
             executeSpecialActivity(faction, params, specialActivities)
@@ -2165,7 +2169,8 @@ object Human {
 
       selectCubesToMove()
       activateGuerrillasOnLOCs()
-      assaultOneLOC()
+      if (!momentumInPlay(Mo_GeneralLansdale))
+        assaultOneLOC()
       if (pattonShaded && movedCubes.size > 0)
         performM48Patton_Shaded(movedCubes)
     }
@@ -2178,8 +2183,7 @@ object Human {
 
     // If Transport special activity was used,  then Armored Cavalry (unshaded)
     // allows ARVN to free assault in one Transport destination
-    if (capabilityInPlay(ArmoredCavalry_Unshaded) && Special.transportDestinations.nonEmpty)
-      armoredCavalryAssault()
+    armoredCavalryAssault()
   }
 
 
@@ -2341,9 +2345,7 @@ object Human {
 
 
   //  Perform an assault in the given space.
-  //
-  //  If US add an ARVN assault.
-  def performAssault(name: String, faction: Faction, params: Params): Unit = {
+  def performAssault(faction: Faction, name: String, params: Params): Unit = {
     val remove1BaseFirst   = faction == US && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = faction == US && capabilityInPlay(SearchAndDestroy_Unshaded)
     val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
@@ -2372,8 +2374,8 @@ object Human {
 
       // Abrams unshaded
       if (remaining > 0 && baseFirst) {
-        val prompt = s"\nRemove a base first [$Abrams_Unshaded]"
-        val removed = askPieces(pieces, 1, InsurgentNonTunnels, Some(prompt))
+        log(s"\nRemove a base first [$Abrams_Unshaded]")
+        val removed = askPieces(pieces, 1, InsurgentNonTunnels)
         removeToAvailable(name, removed)
         killedPieces = killedPieces + removed
       }
@@ -2383,8 +2385,8 @@ object Human {
       // guerilla.  But if there are hits remainin, the it counts toward
       // those hits.
       val killedUnderground = if (underground) {
-        val prompt = s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]"
-        val removed = askPieces(pieces, 1, UndergroundGuerrillas, Some(prompt))
+        log(s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]")
+        val removed = askPieces(pieces, 1, UndergroundGuerrillas)
         removeToAvailable(name, removed)
         if (remaining > 0) {
           killedPieces = killedPieces + removed  // Counts against total hits
@@ -2408,7 +2410,7 @@ object Human {
       }
 
       // Each removed base adds +6 aid
-      if (killedPieces.totalOf(InsurgentNonTunnels) > 0) {
+      if (faction == ARVN && killedPieces.totalOf(InsurgentNonTunnels) > 0) {
         log(s"\nEach insurgent base removed adds +6 Aid")
         increaseUsAid(6 * killedPieces.totalOf(InsurgentNonTunnels))
 
@@ -2419,7 +2421,7 @@ object Human {
 
       // Cobras_Shaded
       //    Eash US assault space, 1 US Troop to Casualties on die roll of 1-3
-      if (faction == US && capabilityInPlay(Cobras_Shaded)) {
+      if (faction == US && pieces.has(USTroops) && capabilityInPlay(Cobras_Shaded)) {
         val die = d6
         val success = die < 4
         log(s"\nCheck for loss of US Troop [$Cobras_Shaded]")
@@ -2524,7 +2526,7 @@ object Human {
             }
             else
               params
-            performAssault(name, faction, assaultParams)
+            performAssault(faction, name, assaultParams)
 
             val canFollowup = faction == US &&
                               addedARVNAssault == false &&
@@ -2534,7 +2536,7 @@ object Human {
 
             if (canFollowup && askYorN(s"Follow up with ARVN assault in $name? (y/n) ")) {
               log(s"\nUS adds a follow up ARVN asault in $name")
-              performAssault(name, ARVN, params)
+              performAssault(ARVN, name, params)
             }
             assaultSpaces = assaultSpaces :+ name
           }

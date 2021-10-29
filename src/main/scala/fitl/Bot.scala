@@ -44,6 +44,7 @@ import scala.language.implicitConversions
 import FUtil.Pathname
 import FireInTheLake._
 import java.nio.file.AtomicMoveNotSupportedException
+import scala.annotation.meta.param
 
 object Bot {
 
@@ -103,8 +104,9 @@ object Bot {
   // Used to keep track of moveDestinations during and operation
   // The Bots will never move pieces out of a space that has been
   // selected as a move destination.
-  private var moveDestinations = Set.empty[String]
-  private var transportDestinations = Set.empty[String]
+  // We use a vector to keep the spaces in priority order
+  private var moveDestinations      = Vector.empty[String]
+  private var transportDestinations = Vector.empty[String]
 
   // Keeps track of all pieces that actually moved
   // during March/Sweep/Patrol/Transport/Air Lift..
@@ -241,6 +243,28 @@ object Bot {
       canAmbushFrom(faction)(sp)
     })
   }
+
+    // Ask the user if they wish to use the Cobras capability
+  // in the space.
+  // (Part of a Sweep operation)
+  def checkUnshadedCobras(name: String): Boolean = {
+    val sp         = game.getSpace(name)
+    val isPossible = capabilityInPlay(Cobras_Unshaded) &&
+                     (sp.pieces.has(NVATroops::ActiveGuerrillas) ||
+                     (!sp.pieces.has(UndergroundGuerrillas) && sp.pieces.has(InsurgentNonTunnels)))
+
+    if (isPossible) {
+      val (deadPiece, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, 1)
+
+      log(s"\nUsing $Cobras_Unshaded")
+      log(separator())
+      removeToAvailable(name, deadPiece)
+      true
+    }
+    else
+      false
+  }
+
 
   //  -------------------------------------------------------------
   //  NVA and VC Ambush Activity
@@ -1957,7 +1981,7 @@ object Bot {
     moveTypes: Set[PieceType],
     previousOrigins: Set[String]): Option[String] = {
 
-    val prohibited = (name: String) => moveDestinations(name) || previousOrigins(name)
+    val prohibited = (name: String) => moveDestinations.contains(name) || previousOrigins(name)
     val adjacentNames = if (faction == NVA)
       NVA_Bot.getNVAAdjacent(destName) filterNot prohibited
     else
@@ -2146,7 +2170,7 @@ object Bot {
             }
             //  The dest space can no longer be considered for
             //  a destination or for an origin
-            moveDestinations = moveDestinations + destName
+            moveDestinations = moveDestinations :+ destName
           }
           else
             botLog(s"\nNo pieces moved from $originName to $destName")
@@ -2162,7 +2186,7 @@ object Bot {
     // ----------------------------------------
     def tryDestination(lastWasSuccess: Boolean, needActivationRoll: Boolean, notReachable: Set[String]): Boolean = {
       if (moveDestinations.size < maxDest) {
-        getNextDestination(lastWasSuccess, needActivationRoll, moveDestinations ++ notReachable) match {
+        getNextDestination(lastWasSuccess, needActivationRoll, moveDestinations.toSet ++ notReachable) match {
           case None => // No more destinations
             needActivationRoll  // Return so subsequent calls will know if activation is needed
 
@@ -2172,7 +2196,7 @@ object Bot {
             // pause()
             val dest = game.getSpace(destName)
 
-            if (action == Sweep && !moveDestinations(destName) && sweepEffective(faction, destName)) {
+            if (action == Sweep && !moveDestinations.contains(destName) && sweepEffective(faction, destName)) {
               // If this is a sweep operation and no cubes were
               // able to move into the destination, but there are
               // sufficient existing cubes in the destination to
@@ -2180,11 +2204,11 @@ object Bot {
               // add the destName to the moveDestinations
               // to allow the Sweep operation to perform a
               // Sweep in Place.
-              moveDestinations = moveDestinations + destName
+              moveDestinations = moveDestinations :+ destName
               log(s"\n$faction selects $destName to Sweep in Place")
             }
 
-            if (moveDestinations(destName)) {
+            if (moveDestinations.contains(destName)) {
               // Since the last move was successful we must determine if an
               // activation roll is necessary to continue.
               val needActivationRoll = faction match {
@@ -2776,7 +2800,59 @@ object Bot {
     //  BoobyTraps_Shaded - Each sweep space, VC afterward removes 1 sweeping troop on
     //                      a roll 1-3 (US to casualties)
     def sweepOp(params: Params, actNum: Int): Option[CoinOp] = {
-      None
+      // If Shaded Cobras limit spaces to 2 unless this is a limOp
+      // If we are tracking ARVN resources then we must also ensure
+      // that we don't select more spaces that we can pay for.
+      val mustPay = game.trackResources(ARVN) && !params.free
+      val maxAfford: Option[Int] = if (mustPay) Some(game.arvnResources / 3) else None
+      val maxTraps: Option[Int]  = if (capabilityInPlay(BoobyTraps_Shaded)) Some(2) else None
+      val maxSweep = (maxAfford.toList ::: maxTraps.toList ::: params.maxSpaces.toList).sorted.headOption
+      // Keep track of the first two spaces since they will be the highest priority
+      // These will be used for the Unshaded cobras capability
+      if (maxSweep.nonEmpty && maxSweep.get == 0)
+        None  // Cannot afford to do any sweeping!
+      else {  
+        val nextSweepCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
+          val candidates = game.nonLocSpaces filterNot (sp => sp.isNorthVietnam || prohibited(sp.name))
+
+          // Since a destination may get tossed out if there are not troops that can reach it
+          // we don't use checkARVNActivation() because we don't want to pay for a space that
+          // does not get used.  Instead we will pay for all of the selected destinations at the end
+          // of the operation.
+          lazy val activationOK = checkActivation(ARVN, needActivation, actNum)
+  
+          if (candidates.nonEmpty && activationOK)
+            Some(pickSpaceSweepTransportDest(candidates).name)
+          else
+            None
+        }
+  
+        logOpChoice(ARVN, Sweep)
+        movePiecesToDestinations(ARVN, Sweep, Set(ARVNTroops), false, maxSweep)(nextSweepCandidate)
+        val maxCobras = 2  // Unshaded cobras can be used in up to 2 spaces
+        var numCobras = 0
+        if (moveDestinations.nonEmpty) {
+          // Activate guerrillas in each sweep destination
+          for (name <- moveDestinations) {
+            activateGuerrillasForSweep(name, ARVN)
+            checkShadedBoobyTraps(name, ARVN)
+            if (numCobras < maxCobras && checkUnshadedCobras(name))
+              numCobras += 1 
+          }
+  
+          // Finally pay for the operation of applicable
+          if (mustPay) {
+            log(s"\nARVN pays for ${amountOf(moveDestinations.size, "sweep destination")}")
+            log(separator())
+            decreaseResources(ARVN, moveDestinations.size * 3)
+          }
+          Some(Sweep)
+        }
+        else {
+          logNoOp(ARVN, Sweep)
+          None
+        }
+      }
     }
 
 
@@ -4270,8 +4346,8 @@ object Bot {
   }
 
   def initTurnVariables(): Unit = {
-    moveDestinations      = Set.empty
-    transportDestinations = Set.empty
+    moveDestinations      = Vector.empty
+    transportDestinations = Vector.empty
     movedPieces.reset()
   }
 

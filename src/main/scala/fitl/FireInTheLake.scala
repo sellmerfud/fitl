@@ -442,6 +442,52 @@ object FireInTheLake {
     override def toString() = plural
   }
 
+  // Used by both Human and Bot code
+  def sweepSources(destName: String, faction: Faction, alreadyMoved: MovingGroups): List[Space] = {
+    val troopType = if (faction == US) USTroops else ARVNTroops
+    game.spaces filter { sp =>
+      val movableTroops = sp.pieces - alreadyMoved(sp.name)
+      !sp.isNorthVietnam           &&
+      sp.name != destName          &&
+      movableTroops.has(troopType) &&
+      adjacentForSweep(sp.name, destName)
+    }
+  }
+
+  def activateGuerrillasForSweep(name: String, faction: Faction): Unit = {
+    val sp = game.getSpace(name)
+    val num = sp.sweepActivations(faction) min sp.pieces.totalOf(UndergroundGuerrillas)
+    if (num > 0) {
+      log(s"\nActivating guerrillas in $name")
+      log(separator())
+      val guerrillas = askPieces(sp.pieces, num, UndergroundGuerrillas)
+      revealPieces(name, guerrillas)
+    }
+  }
+
+  // During a sweep operation, if Shaded Booby Traps is in effect
+  // VC removes one sweeping troop on a d6 roll of 1-3
+  def checkShadedBoobyTraps(name: String, faction: Faction): Unit = {
+    val troopType = if (faction == US) USTroops else ARVNTroops
+    val sp        = game.getSpace(name)
+
+    if (capabilityInPlay(BoobyTraps_Shaded) && sp.pieces.has(troopType)) {
+      //  Roll a d6.  On a 1-3, remove one of the sweeping factions troops.
+      //  ARVN to available, US to casualties
+      log(s"\nResolving $BoobyTraps_Shaded in $name")
+      log(separator())
+      val die = d6
+      val success = die < 4
+      val status = if (success) "Success" else "Failure"
+      log(s"Die roll: $die  [$status]")
+      (die < 4) match {
+        case true if faction == US => removeToCasualties(name, Pieces(usTroops = 1))
+        case true                  => removeToAvailable(name, Pieces(nvaTroops = 1))
+        case false                 => log("No troop is removed")
+      }
+    }
+  }
+
   object PieceType {
     def apply(name: String): PieceType = AllPieceTypes find (_.name == name) getOrElse {
       throw new IllegalArgumentException(s"Invalid name for PieceType: $name")

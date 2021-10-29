@@ -111,21 +111,6 @@ object Human {
     def cancelled() = specialTaken = false
   }
 
-
-  // TODO:  Perhaps this can be shared with the Bot code
-  //        Would have to also put MovingGroups class in shared trait
-  def sweepSources(destName:String, faction: Faction, alreadyMoved: MovingGroups): List[String] = {
-    val troopType = if (faction == US) USTroops else ARVNTroops
-    val srcSpaces = (game.spaces
-                     filter { sp =>
-                       !sp.isNorthVietnam &&
-                       sp.name != destName &&
-                       (sp.pieces - alreadyMoved(sp.name)).has(troopType) &&
-                       adjacentForSweep(sp.name, destName)
-                     })
-    spaceNames(srcSpaces)
-  }
-
   // Return the number of exposed insurgent pieces
   // Bases are only included if there are not hidden guerrillas
   def numExposedInsurgents(pieces: Pieces): Int = {
@@ -289,35 +274,6 @@ object Human {
     }
   }
 
-
-  def activateGuerrillasForSweep(name: String, faction: Faction): Unit = {
-    val sp = game.getSpace(name)
-    val num = sp.sweepActivations(faction) min sp.pieces.totalOf(UndergroundGuerrillas)
-    val troopType = if (faction == US) USTroops else ARVNTroops
-    if (num > 0) {
-      log(s"\nActivating guerrillas in $name")
-      log(separator())
-      val guerrillas = askPieces(sp.pieces, num, UndergroundGuerrillas)
-      revealPieces(name, guerrillas)
-
-      if (capabilityInPlay(BoobyTraps_Shaded) && sp.pieces.has(troopType)) {
-        //  Roll a d6.  On a 1-3, remove one of the sweeping factions troops.
-        //  ARVN to available, US to casualties
-        log(s"\nResolving $BoobyTraps_Shaded in $name")
-        log(separator())
-        val die = d6
-        val success = die < 4
-        val status = if (success) "Success" else "Failure"
-        log(s"Die roll: $die  [$status]")
-        (die < 4) match {
-          case true if faction == US => removeToCasualties(name, Pieces(usTroops = 1))
-          case true                  => removeToAvailable(name, Pieces(nvaTroops = 1))
-          case false                 => log("No troop is removed")
-        }
-      }
-    }
-  }
-
   // Ask the user if they wish to use the Cobras capability
   // in the space.
   // (Part of a Sweep operation)
@@ -329,7 +285,7 @@ object Human {
 
     if (isPossible && askYorN(s"Do you wish to use the Cobras capability in $name? (y/n) ")) {
       log(s"\nUsing $Cobras_Unshaded")
-
+      log(separator())
       val deadPiece = if (sp.pieces.has(NVATroops))
         Pieces(nvaTroops = 1)
       else if (sp.pieces.has(ActiveGuerrillas))
@@ -615,6 +571,7 @@ object Human {
         case "sweep" =>
           askCandidateOrBlank("ARVN Sweep in which space: ", sweepCandidates) foreach { name =>
             activateGuerrillasForSweep(name, ARVN)
+            checkShadedBoobyTraps(name, ARVN)
             doCobrasUnshaded(name)
             Special.selectedSpaces = Special.selectedSpaces + name
           }
@@ -2210,7 +2167,7 @@ object Human {
     def canSpecial = Special.allowed
 
     def moveTroopsTo(destName: String): Unit = {
-      val candidates = sweepSources(destName, faction, alreadyMoved)
+      val candidates = spaceNames(sweepSources(destName, faction, alreadyMoved))
       val choices = (candidates map (name => name -> name)) :+ ("finished" -> s"Finished moving troops to $destName")
 
       askMenu(choices, s"\nMove troops to $destName from:").head match {
@@ -2306,6 +2263,7 @@ object Human {
           case "all" | "rest" =>
             for (name <- candidates) {
               activateGuerrillasForSweep(name, faction)
+              checkShadedBoobyTraps(name, faction)
               activatedSpaces = activatedSpaces + name
             }
 
@@ -2315,6 +2273,7 @@ object Human {
 
           case name =>
             activateGuerrillasForSweep(name, faction)
+            checkShadedBoobyTraps(name, faction)
             activatedSpaces = activatedSpaces + name
             activateGuerrillas()
         }

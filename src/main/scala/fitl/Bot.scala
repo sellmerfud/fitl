@@ -2432,6 +2432,19 @@ object Bot {
         (sp.pieces.has(NVABases) || sp.nvaControlled)
       }
 
+    // If Transport special activity was used,  then Armored Cavalry (unshaded)
+    // allows ARVN to free assault in one Transport destination
+    // Will only trigger if an transport special activity has take place.
+    def armoredCavalryAssault(): Unit = {
+      val candidates = spaces(transportDestinations) filter arvnAssaultEffective
+      // General Landsdale prohibits assault
+      if (capabilityInPlay(ArmoredCavalry_Unshaded) && !momentumInPlay(Mo_GeneralLansdale) && candidates.nonEmpty) {
+        val sp = pickSpaceRemoveReplace(candidates)    
+        log(s"\n$ArmoredCavalry_Unshaded triggers a free Assault")
+        performAssault(ARVN, sp.name, Params(free = true))
+      }
+    }
+
     // ARVN Spaces Priorities: Shift Toward Passive Support
     def pickSpaceTowardPassiveSupport(candidates: List[Space]): Space = {
 
@@ -2833,40 +2846,75 @@ object Bot {
       }
     }
 
+    // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
     def governActivity(): Boolean = false
+
+    // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
     def transportActivity(): Boolean = false
+
+    // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
     def raidActivity(): Boolean = {
-      val inPlaceCandidates  = ARVN_Bot.raidWithInPlaceCandidates
-      val adjacentCandidates = ARVN_Bot.raidWithInPlaceCandidates
-      false
-    }
+      val maxRaid = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
+      // Underground guerrillas can be targeted, Tunnels cannot and
+      // base only if no other Insurgent pieces (forces?) exist
+      val hasRaidTarget = (sp: Space) => 
+        sp.pieces.has(InsurgentForces) || sp.pieces.has(InsurgentNonTunnels)
 
-    // Underground guerrillas can be targeted, Tunnels cannot and
-    // base only if no other Insurgent pieces exist
-    val hasRaidTarget = (sp: Space) => 
-      sp.pieces.has(InsurgentForces) ||
-      (sp.pieces.has(InsurgentNonTunnels) && !sp.pieces.has(InsurgentTunnels))
+      val canRemoveBase = (sp: Space) =>
+        sp.pieces.totalOf(InsurgentForces) < 2 &&
+        sp.pieces.has(InsurgentNonTunnels)
 
-    val hasAdjacentUndergroundRangers = (sp: Space) =>
-      spaces(getAdjacent(sp.name)) exists (_.pieces.has(Rangers_U))
+      val hasAdjacentUndergroundRangers = (sp: Space) =>
+        spaces(getAdjacent(sp.name)) exists (_.pieces.has(Rangers_U))
 
-    def raidWithInPlaceCandidates: List[Space] =
-      game.spaces filter (sp => hasRaidTarget(sp) && sp.pieces.has(Rangers_U))
+      val MoveRangerPriorities = List(
+        new BooleanPriority[Space]("Not with vulnerable base", (!canRemoveBase(_))),
+        new BooleanPriority[Space]("Not with vulnerable force", (!hasRaidTarget(_)))
+      )
+      var raidSpaces = Set.empty[String]
 
-    def raidAdjacentCandidates: List[Space] = {
-      game.spaces filter (sp => hasRaidTarget(sp) && hasAdjacentUndergroundRangers(sp))
-    }
+      def nextRaid(candidates: List[Space]): Unit = {
+        if (raidSpaces.size < maxRaid && candidates.nonEmpty) {
+          val baseCandidates = candidates filter canRemoveBase
+          val sp = if (baseCandidates.nonEmpty)
+            pickSpaceRemoveReplace(baseCandidates, raid = true)
+          else
+            pickSpaceRemoveReplace(candidates, raid = true)
+  
+          val forcesPresent = sp.pieces.only(InsurgentForces)
+          val basesPresent  = sp.pieces.only(InsurgentNonTunnels)
+          val numForces     = 2 min forcesPresent.total
+          val numBases      = (2 - numForces) min basesPresent.total
+          val deadForces    = selectEnemyRemovePlaceActivate(forcesPresent, numForces)
+          val deadBases     = selectEnemyRemovePlaceActivate(basesPresent, numBases)
+          val uRanger       = Pieces(rangers_U = 1)
 
-    // If Transport special activity was used,  then Armored Cavalry (unshaded)
-    // allows ARVN to free assault in one Transport destination
-    def armoredCavalryAssault(): Unit = {
-      val candidates = spaces(transportDestinations) filter arvnAssaultEffective
-      // General Landsdale prohibits assault
-      if (capabilityInPlay(ArmoredCavalry_Unshaded) && !momentumInPlay(Mo_GeneralLansdale) && candidates.nonEmpty) {
-        val sp = pickSpaceRemoveReplace(candidates)    
-        log(s"\n$ArmoredCavalry_Unshaded triggers a free Assault")
-        performAssault(ARVN, sp.name, Params(free = true))
+          if (raidSpaces.isEmpty)
+            logSAChoice(ARVN, Raid)
+
+          log(s"\nARVN conducts raid in ${sp.name}")
+          log(separator())
+          // Move ranger in if necessary
+          if (!sp.pieces.has(Rangers_U)) {
+            val adjacent = spaces(getAdjacent(sp.name)) filter (_.pieces.has(Rangers_U))
+            val source = bestCandidate(adjacent, MoveRangerPriorities)
+            movePieces(uRanger, source.name, sp.name)
+          }
+          revealPieces(sp.name, uRanger)
+          removeToAvailable(sp.name, deadForces + deadBases)
+          nextRaid(candidates filterNot (_.name == sp.name))
+        }
       }
+
+      val raidInPlaceCandidates: List[Space] =
+        game.spaces filter (sp => !sp.isNorthVietnam && hasRaidTarget(sp) && sp.pieces.has(Rangers_U))
+
+      val raidAdjacentCandidates: List[Space] =
+        game.spaces filter (sp => !sp.isNorthVietnam && hasRaidTarget(sp) && hasAdjacentUndergroundRangers(sp))
+
+      nextRaid(raidInPlaceCandidates)
+      nextRaid(raidAdjacentCandidates)
+      raidSpaces.nonEmpty
     }
   }
 

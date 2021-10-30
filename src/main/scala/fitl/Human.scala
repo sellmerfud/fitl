@@ -1760,6 +1760,7 @@ object Human {
 
       askMenu(choices, s"\nTraining in $name:").head match {
         case "extra" =>
+          log(s"US places 1 ARVN Police with US Troops [$CombActionPlatoons_Unshaded]")
           ensurePieceTypeAvailable(ARVNPolice, 1)
           placePieces(name, Pieces().set(1, ARVNPolice))
 

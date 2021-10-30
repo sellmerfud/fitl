@@ -110,6 +110,7 @@ object Bot {
   private var transportOrigin       = Option.empty[String]
   // Used to enforce Govern/Advise restrictions
   private var trainingSpaces        = Set.empty[String]
+  private var adviseSpaces          = Set.empty[String]
 
   // Keeps track of all pieces that actually moved
   // during March/Sweep/Patrol/Transport/Air Lift..
@@ -2331,7 +2332,7 @@ object Bot {
     }
 
     // US Spaces Priorities: Place Cubes or Special Forces
-    def pickSpacePlaceCubes(candidates: List[Space], placingMovingUSTroops: Boolean = false): Space = {
+    def pickSpacePlaceCubesSpecialForces(candidates: List[Space], placingMovingUSTroops: Boolean = false): Space = {
 
       val priorities = List(
         filterIf(true,                  ProvinceWithUSBaseAndCubes),
@@ -2417,6 +2418,190 @@ object Bot {
       bestCandidate(candidates, priorities)
     }
 
+    //  -------------------------------------------------------------
+    //  Implement the US Train instructions from the US Trung cards.
+    //  1. IF (JFK/LBJ policy) Place ARVN cubes in 1 space
+    //  2. Place all available special forces
+    //  3. Place ARVN Cubes
+    //  - If unshaded Combined Action Platoons, get 1 ARVN Police to a space
+    //    with US Troops.  If none available, take on from the space with the
+    //    most Police that would not lose COIN control.
+    //  - IF Patronage >= 17, Select Saigon and transfer Patronage to ARVN resources.
+    //    Otherwise
+    //    Remove terror and shift toward Active Suport for max 1d3
+    //
+    //  CombActionPlatoons_Unshaded
+    //    US Training places (relocates) 1 added ARVN Police cube
+    //    in one of the Training spaces with US Troops.
+    //    Does not cost any added resources (if no Base/cubes placed in that space)
+    //  CORDS_Unshaded
+    //    US Training may pacify in 2 Training spaces (cost is unchanged)
+    //  CORDS_Shaded
+    //    US Training may pacify only to PassiveSupport (Not ActiveSupport)
+    //  RVN_Leader_NguyenCaoKy - US/ARVN pacification costs 4 resources per Terror/Level
+    def trainOp(params: Params, actNum: Int): Option[CoinOp] = {
+      val maxTrain     = params.maxSpaces getOrElse NO_LIMIT
+      var arvnOk        = true   // Until we fail an activation or run out of resources
+
+      def checkARVNActivation(): Unit = { arvnOk = makeActivationRoll(ARVN, actNum) }
+      def canPlaceARVN = arvnOk && (params.free || !game.trackResources(ARVN) || game.arvnResources >= 3)
+      def canTrain(arvn: Boolean) = trainingSpaces.size < maxTrain && (!arvn || canPlaceARVN)
+      def prohibited(sp: Space) = trainingSpaces(sp.name) || adviseSpaces(sp.name)
+      val irregCandidate = (sp: Space) => !(prohibited(sp) || sp.pieces.has(USPieces))
+      val arvnCandidate  = (sp: Space) => !(prohibited(sp) || sp.pieces.has(USBase))
+
+      def trainToPlaceCubes(once: Boolean): Unit = {
+        val candidates = game.nonLocSpaces filter arvnCandidate
+        if (canTrain(true) && game.availablePieces.has(ARVNCubes) && candidates.nonEmpty) {
+          val sp      = pickSpacePlaceCubesSpecialForces(candidates)
+          val avail   = game.availablePieces.only(ARVNCubes)
+          val num     = 6 min avail.total
+          val toPlace = selectFriendlyToPlaceOrMove(avail, num)
+
+          log(s"\n$ARVN selects ${sp.name} for Train")
+          log(separator())
+          if (game.trackResources(ARVN))
+            decreaseResources(ARVN, 3)
+          placePieces(sp.name, toPlace)
+          checkARVNActivation()
+          trainingSpaces += sp.name
+          if (!once)
+            trainToPlaceCubes(once = false)
+        }
+      }
+
+      def trainToPlaceRangers(): Unit = {
+        val candidates = game.nonLocSpaces filter arvnCandidate
+        if (canTrain(true) && game.availablePieces.has(Rangers) && candidates.nonEmpty) {
+          val sp      = pickSpacePlaceCubesSpecialForces(candidates)
+          val avail   = game.availablePieces.only(Rangers)
+          val num     = 2 min avail.total
+          val toPlace = selectFriendlyToPlaceOrMove(avail, num)
+
+          log(s"\n$ARVN selects ${sp.name} for Train")
+          log(separator())
+          if (game.trackResources(ARVN))
+            decreaseResources(ARVN, 3)
+          placePieces(sp.name, toPlace)
+          checkARVNActivation()
+          trainingSpaces += sp.name
+          trainToPlaceRangers()
+        }
+      }
+
+      def trainToPlaceIrregulars(): Unit = {
+        val candidates = game.nonLocSpaces filter irregCandidate
+        if (canTrain(false) && game.availablePieces.has(Irregulars) && candidates.nonEmpty) {
+          val sp      = pickSpacePlaceCubesSpecialForces(candidates)
+          val avail   = game.availablePieces.only(Irregulars)
+          val num     = 2 min avail.total
+          val toPlace = selectFriendlyToPlaceOrMove(avail, num)
+
+          log(s"\n$ARVN selects ${sp.name} for Train")
+          log(separator())
+          placePieces(sp.name, toPlace)
+          trainingSpaces += sp.name
+          trainToPlaceIrregulars()
+        }
+      }
+
+      def checkCombinesActionPlatoons(): Unit = {
+        if (capabilityInPlay(CombActionPlatoons_Unshaded)) {
+          val placePriorities = List( new HighestScore[Space]("Most Population", _.population) )
+          val placeCandidates = game.nonLocSpaces filter { sp =>
+            !sp.pieces.has(ARVNPolice) &&
+            sp.pieces.has(USTroops)    &&
+            sp.support < PassiveSupport
+          }
+          val dest = if (placeCandidates.nonEmpty)
+            Some(bestCandidate(placeCandidates, placePriorities))
+          else
+            None
+          val (placePolice, toAvail) = if (game.availablePieces.has(ARVNPolice))
+            (true, None)
+          else {
+            // Spaces with ARVN Police that would not lose control
+            // by removing one police cube
+            val removePriorities = List( new HighestScore[Space]("Most Police", _.pieces.totalOf(ARVNPolice)) )
+            val removeCandidates = game.spaces filter { sp =>
+              sp.pieces.has(ARVNPolice) &&
+              (!sp.coinControlled || sp.pieces.totalOf(CoinPieces) - 1 > sp.pieces.totalOf(InsurgentPieces))
+            }
+            if (removeCandidates.isEmpty)
+              (false, None)
+            else
+              (true, Some(bestCandidate(removeCandidates, removePriorities)))
+          }
+
+          if (dest.nonEmpty && placePolice) {
+            log(s"US places 1 ARVN Police with US Troops [$CombActionPlatoons_Unshaded]")
+            log(separator())
+            toAvail foreach { sp =>
+              removeToAvailable(sp.name, Pieces(arvnPolice = 1))
+            }
+            placePieces(dest.get.name, Pieces().set(1, ARVNPolice))
+          }
+        }
+      }
+
+      def pacifyOneSpace(): Unit = {
+        val baseRate   = if (isRVNLeader(RVN_Leader_NguyenCaoKy)) 4 else 3
+        val costEach   = if (game.trackResources(ARVN)) baseRate else 0
+        val candidates = game.nonLocSpaces filter { sp =>
+          !adviseSpaces(sp.name)  &&
+          (trainingSpaces(sp.name) || canTrain(false)) &&
+          sp.coinControlled       &&
+          sp.pieces.has(USPieces) &&
+          sp.support < ActiveSupport 
+        }
+
+        if (candidates.nonEmpty && game.arvnResources >= costEach) {
+          val sp = pickSpaceTowardActiveSupport(candidates)
+          val numCanPay = if (costEach == 0) NO_LIMIT else game.arvnResources / costEach
+          val maxShift  = (ActiveSupport.value - sp.support.value) min 2
+          val maxPacify = ((sp.terror + maxShift) min d3) min numCanPay
+          val numTerror = maxPacify min sp.terror
+          val numShift  = (maxPacify - numTerror) min maxShift
+
+          if (!trainingSpaces(sp.name)) {
+            log(s"\n$ARVN selects ${sp.name} for Train")
+            log(separator())
+            trainingSpaces += sp.name
+          }
+          log(s"\nPacifying in ${sp.name}")
+          log(separator())
+          decreaseResources(ARVN, (numTerror + numShift) * costEach)
+          removeTerror(sp.name, numTerror)
+          increaseSupport(sp.name, numShift)
+        }
+      }
+
+      logOpChoice(US, Train)
+      if (game.usPolicy == USPolicy_JFK || game.usPolicy == USPolicy_LBJ)
+        trainToPlaceCubes(once = true)
+
+      trainToPlaceRangers()
+      trainToPlaceIrregulars()
+      trainToPlaceCubes(once = false)
+      checkCombinesActionPlatoons()
+      if (game.patronage >= 17 && !adviseSpaces(Saigon) && (trainingSpaces(Saigon) || canTrain(false))) {
+        log(s"\nARVN selects Saigon to transfer Patronage to ARVN resources")
+        log(separator())
+        decreasePatronage(3)
+        increaseResources(ARVN, 3)
+        trainingSpaces += Saigon
+      }
+      else
+        pacifyOneSpace()
+
+      if (trainingSpaces.nonEmpty) {
+        Some(Train)
+      }
+      else {
+        logNoOp(US, Train)
+        None
+      }
+    }
   }
 
 
@@ -2609,14 +2794,14 @@ object Bot {
     // RVN_Leader_DuongVanMinh - Each ARVN Train operation adds +5 bonus Aid
     // RVN_Leader_NguyenCaoKy  - US/ARVN pacification costs 4 resources per Terror/Level
     def trainOp(params: Params, actNum: Int): Option[CoinOp] = {
-      val nguyenCaoKy         = isRVNLeader(RVN_Leader_NguyenCaoKy)
       val maxTrain     = params.maxSpaces getOrElse NO_LIMIT
       def trained      = trainingSpaces.nonEmpty
       def canTrain     = trainingSpaces.size < maxTrain &&
                          checkARVNActivation(trained, actNum, params.free)
-      val canTrainRangers = (sp: Space) => !(trainingSpaces(sp.name) || sp.nvaControlled)
+      def prohibited(sp: Space) = trainingSpaces(sp.name)
+      val canTrainRangers = (sp: Space) => !(prohibited(sp) || sp.nvaControlled)
       val canTrainCubes   = (sp: Space) => 
-        !(trainingSpaces(sp.name) || sp.nvaControlled) &&
+        !(prohibited(sp) || sp.nvaControlled) &&
         (sp.isCity || sp.pieces.has(CoinBases))
 
       // Return true if we can continue training
@@ -2712,7 +2897,7 @@ object Bot {
       def pacifyOneSpace(): Unit = {
         val baseRate   = if (isRVNLeader(RVN_Leader_NguyenCaoKy)) 4 else 3
         val costEach   = if (game.trackResources(ARVN)) baseRate else 0
-        val candidates = trainingSpaces.toList map game.getSpace filter { sp =>
+        val candidates = spaces(trainingSpaces) filter { sp =>
           sp.coinControlled &&
           sp.pieces.has(ARVNTroops)   &&
           sp.pieces.has(ARVNPolice)   &&

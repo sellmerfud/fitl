@@ -377,14 +377,41 @@ object FireInTheLake {
     getDests(Set(srcName), Set.empty)
   }
   
+    // Used by the Bot code,  we do not include the destName as
+  // an origin only spaces where something could move.
+  def getPatrolOrigins(destName: String): Set[String] = {
+
+    @tailrec def getTravelOrigins(travelSpaces: Set[String], origins: Set[String]): Set[String] = {
+      if (travelSpaces.isEmpty)
+        origins
+      else {
+        val name = travelSpaces.head
+        val sp   = game.getSpace(name)
+
+        // Enemy pieces stop movement and no movement through a province
+        if (sp.pieces.has(InsurgentPieces) || sp.isProvince)
+          getTravelOrigins(travelSpaces.tail, origins + name)
+        else {
+          val adjacent = getAdjacent(name) - NorthVietnam
+          val newTravelSpaces = (travelSpaces.tail ++ adjacent) -- origins
+          getTravelOrigins(newTravelSpaces, origins + name)
+        }
+      }
+    }
+
+    // Can always move from any adjacent space
+    getTravelOrigins(getAdjacent(destName) - NorthVietnam, Set.empty)
+  }
+
   
   //  Return a sequence of all spaces that can be reached from the given space by Transported pieces.
   //  A piece MAY move onto an adjacent LOC.  Then can continue moving through adjacent LOC/Cities.
   //  Finally MAY then move to an adjacent space (Never N. Vietnam)
-  //  It it ever enters a spcace with any Insurgent piece, then it must stop.
+  //  If it ever enters a spcace with any Insurgent piece, then it must stop.
   //  if RVN_Leader_NguyenKhanh is in play then only 1 LOC can be used
-  def getTransportDestinations(srcName: String): Seq[String] = {
-    val nguyen_khanh     = isRVNLeader(RVN_Leader_NguyenKhanh)  
+  //  Use by the Human code
+  def getTransportDestinations(srcName: String): Set[String] = {
+    val nguyen_khanh = isRVNLeader(RVN_Leader_NguyenKhanh)  
     
     @tailrec def getLocDests(locsCities: Set[String], destinations: Set[String]): Set[String] = {
       if (locsCities.isEmpty)
@@ -418,7 +445,40 @@ object FireInTheLake {
     // The first move must be onto a LOC (not City)
     val locDests = getLocDests(getAdjacentLOCs(srcName), Set.empty)
     
-    (immediateDests ++ locDests).toList.sorted
+    immediateDests ++ locDests
+  }
+
+  // Used by the Bot code,  we do not include the destName as
+  // an origin only spaces where something could move.
+  def getTransportOrigins(destName: String): Set[String] = {
+    val nguyen_khanh = isRVNLeader(RVN_Leader_NguyenKhanh)  
+
+    @tailrec def getTravelOrigins(travelSpaces: Set[String], usedLoC: Boolean, origins: Set[String]): Set[String] = {
+      if (travelSpaces.isEmpty)
+        origins
+      else {
+        val name = travelSpaces.head
+        val sp   = game.getSpace(name)
+
+        // Enemy pieces stop movement and no movement through a province
+        if (sp.pieces.has(InsurgentPieces) || sp.isProvince)
+          getTravelOrigins(travelSpaces.tail, usedLoC, origins + name)
+        else {
+          val adjacentSpaces = if (nguyen_khanh && (usedLoC || sp.isLoC))
+            getAdjacentNonLOCs(name) - NorthVietnam
+          else if (sp.isLoC)
+            getAdjacent(name) - NorthVietnam
+          else // it is a city, can only travel here from a LoC
+            getAdjacentLOCs(name)
+
+          val newTravelSpaces = (travelSpaces.tail ++ adjacentSpaces) -- origins
+          getTravelOrigins(newTravelSpaces, usedLoC || sp.isLoC, origins + name)
+        }
+      }
+    }
+
+    // Can always move from any adjacent space
+    getTravelOrigins(getAdjacent(destName) - NorthVietnam, false, Set.empty)
   }
 
   // A space is adjacent for sweep movement if it is truly adjacent to the destination
@@ -442,7 +502,13 @@ object FireInTheLake {
     override def toString() = plural
   }
 
-  // Used by both Human and Bot code
+  // Used by Bot code
+  // Spaces that can reach the destination for Sweeping
+  def getSweepOrigins(destName: String): Set[String] = {
+    (game.spaces filter (sp => adjacentForSweep(sp.name, destName)) map (_.name)).toSet
+  }
+
+  // Used by Human code
   def sweepSources(destName: String, faction: Faction, alreadyMoved: MovingGroups): List[Space] = {
     val troopType = if (faction == US) USTroops else ARVNTroops
     game.spaces filter { sp =>

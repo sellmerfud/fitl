@@ -107,6 +107,9 @@ object Bot {
   // We use a vector to keep the spaces in priority order
   private var moveDestinations      = Vector.empty[String]
   private var transportDestinations = Vector.empty[String]
+  private var transportOrigin       = Option.empty[String]
+  // Used to enforce Govern/Advise restrictions
+  private var trainingSpaces        = Set.empty[String]
 
   // Keeps track of all pieces that actually moved
   // during March/Sweep/Patrol/Transport/Air Lift..
@@ -165,6 +168,10 @@ object Bot {
     log(separator())
     for (note <- notes)
       log(note)
+  }
+
+    def logNoActivity(faction: Faction, sa: SpecialActivity): Unit = {
+      log(s"\nNo spaces found for $faction $sa")
   }
 
   // Make an activation roll
@@ -1068,11 +1075,13 @@ object Bot {
     faction: Faction,
     action: MoveAction,
     moveTypes: Set[PieceType],
+    maxPieces: Int, // Transport limits to 6 pieces per destination
     origCandidates: Pieces,  // The original set of pieces that may be kept/moved
     selected: Pieces = Pieces()) {  // Kept pieces or moving pieces
 
+    val candidates = origCandidates - selected
+    val maxCanMove = candidates.total min (maxPieces - selected.total)
     def addPieces(newPieces: Pieces) = copy(selected = selected + newPieces)
-    def candidates = origCandidates - selected
   }
 
   def logKept(params: MoveParams, heading: String, result: String): Unit = if (game.botLogging) {
@@ -1526,18 +1535,14 @@ object Bot {
     val numEnemy = dest.pieces.totalOf(InsurgentPieces)
       
     def movePieces(num: Int): Pieces = {
-      if (num == candidates.total)
-        candidates  // Move all that we have
-      else {
-        val toMove = selectFriendlyToPlaceOrMove(candidates, num)
-        // If our firepower is sufficent then we are done
-        val updated = dest.pieces + selected + toMove
+      val toMove = selectFriendlyToPlaceOrMove(candidates, num)
+      // If our firepower is sufficent then we are done
+      val updated = dest.pieces + selected + toMove
 
-        if (coinFirepower(dest.setPieces(updated)) >= numEnemy)
-          toMove
-        else  // Try again moving one more
-          movePieces(num + 1)
-      }
+      if (coinFirepower(dest.setPieces(updated)) >= numEnemy || num == maxCanMove)
+        toMove
+      else  // Try again moving one more
+        movePieces(num + 1)
     }
 
     // Start by see what happens if we don't move any
@@ -1555,21 +1560,18 @@ object Bot {
     val numEnemy = dest.pieces.totalOf(InsurgentPieces)
       
     def movePieces(num: Int): Pieces = {
-      if (num == candidates.total)
-        candidates  // Move all that we have
-      else {
-        val toMove = selectFriendlyToPlaceOrMove(candidates, num)
-        // If our firepower is sufficent then we are done
-        val updated = dest.pieces + selected + toMove
+      val toMove = selectFriendlyToPlaceOrMove(candidates, num)
+      // If our firepower is sufficent then we are done
+      val updated = dest.pieces + selected + toMove
 
-        if (arvnFirepower(dest.setPieces(updated)) >= numEnemy)
-          toMove
-        else  // Try again moving one more
-          movePieces(num + 1)
-      }
+      if (arvnFirepower(dest.setPieces(updated)) >= numEnemy || num == maxCanMove)
+        toMove
+      else  // Try again moving one more
+        movePieces(num + 1)
     }
 
-    // Start by see what happens if we don't move any
+
+    // Start by see what happens if we don't move any  
     val toMove    = movePieces(0)
     val newParams = params.addPieces(toMove)
       
@@ -1590,7 +1592,7 @@ object Bot {
       params
     }
     else {
-      val numMove   = numCoin + 1 - numGuerrillas
+      val numMove   = (numCoin + 1 - numGuerrillas) min maxCanMove
       val toMove    = selectFriendlyToPlaceOrMove(candidates.only(Guerrillas), numMove)
       val newParams = params.addPieces(toMove)
 
@@ -1635,7 +1637,8 @@ object Bot {
       params
     }
     else {
-      val toMove    = selectFriendlyToPlaceOrMove(candidates.only(CoinCubes), 3 - numCoinCubes)
+      val num       = (3 - numCoinCubes) min maxCanMove
+      val toMove    = selectFriendlyToPlaceOrMove(candidates.only(CoinCubes), num)
       val newParams = params.addPieces(toMove)
 
       logMoved(newParams, desc, s"move [${andList(toMove.descriptions)}]")
@@ -1651,18 +1654,14 @@ object Bot {
     val numVulnerable = vulnerableInsurgents(dest.pieces).total
       
     def movePieces(num: Int): Pieces = {
-      if (num == candidates.total)
-        candidates  // Move all that we have
-      else {
-        val toMove = selectFriendlyToPlaceOrMove(candidates, num)
-        // If our firepower is sufficent then we are done
-        val nowAtDest    = dest.pieces + selected + toMove
+      val toMove = selectFriendlyToPlaceOrMove(candidates, num)
+      // If our firepower is sufficent then we are done
+      val nowAtDest    = dest.pieces + selected + toMove
 
-        if (coinFirepower(dest.setPieces(nowAtDest)) >= numVulnerable)
-          toMove
-        else  // Try again moving one more
-          movePieces(num + 1)
-      }
+      if (coinFirepower(dest.setPieces(nowAtDest)) >= numVulnerable || num == maxCanMove)
+        toMove
+      else  // Try again moving one more
+        movePieces(num + 1)
     }
 
     // Start by see what happens if we don't move any
@@ -1698,7 +1697,8 @@ object Bot {
       params
     }
     else {
-      val toMove    = selectFriendlyToPlaceOrMove(candidates.only(USForces), needed - numUsForces)
+      val num       = (needed - numUsForces) min maxCanMove
+      val toMove    = selectFriendlyToPlaceOrMove(candidates.only(USForces), num)
       val newParams = params.addPieces(toMove)
 
       logMoved(newParams, desc, s"move [${andList(toMove.descriptions)}]")
@@ -1719,7 +1719,7 @@ object Bot {
       params
     }
     else {
-      val numMove   = nowAtDest.totalOf(InsurgentPieces) + 1 - nowAtDest.totalOf(CoinPieces) 
+      val numMove   = (nowAtDest.totalOf(InsurgentPieces) + 1 - nowAtDest.totalOf(CoinPieces)) min maxCanMove 
       val toMove    = selectFriendlyToPlaceOrMove(candidates, numMove)
       val newParams = params.addPieces(toMove)
 
@@ -1754,7 +1754,7 @@ object Bot {
       params
     }
     else {
-      val numMove   = nowAtDest.totalOf(NonNVAPieces) + 1 - nowAtDest.totalOf(NVAPieces)
+      val numMove   = (nowAtDest.totalOf(NonNVAPieces) + 1 - nowAtDest.totalOf(NVAPieces)) min maxCanMove
       val toMove    = selectFriendlyToPlaceOrMove(candidates, numMove)
       val newParams = params.addPieces(toMove)
 
@@ -1784,7 +1784,7 @@ object Bot {
       params
     }
     else {
-      val numMove   = 3 - nowAtDest.totalOf(FactionGuerrillas)
+      val numMove   = (3 - nowAtDest.totalOf(FactionGuerrillas)) min maxCanMove
       val toMove    = selectFriendlyToPlaceOrMove(candidates.only(FactionGuerrillas), numMove)
       val newParams = params.addPieces(toMove)
 
@@ -1832,7 +1832,7 @@ object Bot {
         params
       }
       else {
-        val numMove   = nowAtDest.totalOf(NonNVAPieces) + 1 - nowAtDest.totalOf(NVAPieces)
+        val numMove   = (nowAtDest.totalOf(NonNVAPieces) + 1 - nowAtDest.totalOf(NVAPieces)) min maxCanMove
         val toMove    = selectFriendlyToPlaceOrMove(candidates, numMove)
         val newParams = params.addPieces(toMove)
 
@@ -1888,7 +1888,7 @@ object Bot {
     val origin     = game.getSpace(originName)
     val dest       = game.getSpace(destName)
     val candidates = origin.pieces.only(moveTypes)
-    val params     = MoveParams(origin, dest, faction, action, moveTypes, candidates)
+    val params     = MoveParams(origin, dest, faction, action, moveTypes, NO_LIMIT, candidates)
     
     logKept(params, s"$faction is selecting pieces to keep in $originName", "")
     nextKeepPriority(keepPriorities, params)
@@ -1901,6 +1901,7 @@ object Bot {
                          faction: Faction,
                          action: MoveAction,
                          moveTypes: Set[PieceType],
+                         maxPieces: Int,
                          mustKeep: Pieces): Pieces = {
     val us        = faction == US
     val arvn      = faction == ARVN
@@ -1912,10 +1913,11 @@ object Bot {
     val dest      = game.getSpace(destName)
 
     def nextMovePriority(priorities: List[MovePriority], params: MoveParams): Pieces = {
+      val exhausted = params.maxCanMove == 0 || params.candidates.isEmpty
       priorities match {
-        case _ if params.candidates.isEmpty => params.selected
-        case Nil                            => params.selected
-        case priority::rest                 => nextMovePriority(rest, priority(params))
+        case Nil            => params.selected
+        case _ if exhausted => params.selected
+        case priority::rest => nextMovePriority(rest, priority(params))
       }      
     }
     
@@ -1942,7 +1944,7 @@ object Bot {
     if (candidates.isEmpty)
       candidates  // No pieces were found that can move
     else {
-      val params     = MoveParams(origin, dest, faction, action, moveTypes, candidates)
+      val params     = MoveParams(origin, dest, faction, action, moveTypes, maxPieces, candidates)
       
       logMoved(params, s"$faction is selecting pieces to move from $originName to $destName", "")
       nextMovePriority(movePriorities, params)
@@ -1963,11 +1965,12 @@ object Bot {
                  destName: String,
                  faction: Faction,
                  action: MoveAction,
-                 moveTypes: Set[PieceType]): Pieces = {
+                 moveTypes: Set[PieceType],
+                 maxPieces: Int): Pieces = {
   
     // First we determine which piece to keep in the origin space
     val toKeep = selectPiecesToKeep(originName, destName, faction, action, moveTypes)
-    selectPiecesToMove(originName, destName, faction, action, moveTypes, toKeep)
+    selectPiecesToMove(originName, destName, faction, action, moveTypes, maxPieces, toKeep)
   }
 
 
@@ -1981,24 +1984,31 @@ object Bot {
     moveTypes: Set[PieceType],
     previousOrigins: Set[String]): Option[String] = {
 
-    val prohibited = (name: String) => moveDestinations.contains(name) || previousOrigins(name)
-    val adjacentNames = if (faction == NVA)
-      NVA_Bot.getNVAAdjacent(destName) filterNot prohibited
-    else
-      getAdjacent(destName) filterNot prohibited
+    val candidateNames: Set[String] = action match {
+      case Sweep                   => getSweepOrigins(destName)
+      case Patrol                  => getPatrolOrigins(destName)
+      case Transport               => getTransportOrigins(destName)
+      case AirLift                 => Set.empty
+      case March if faction == NVA => NVA_Bot.getNVAAdjacent(destName)
+      case March                   => getAdjacent(destName)
+    }
+    
+    val isOrigin = (sp: Space) =>
+      sp.pieces.has(moveTypes) &&
+      !(moveDestinations.contains(sp.name) || previousOrigins(sp.name))
 
-    val adjacentSpaces = spaces(adjacentNames)
+    val candidates = spaces(candidateNames) filter isOrigin
     val priorities = List(
       new HighestScore[Space]( "Most Moveable Pieces", _.pieces.totalOf(moveTypes))
     )
 
     botLog(s"\nSelect origin space with moveable: [${andList(moveTypes.toList)}]")
     botLog(separator())
-    if (adjacentSpaces exists (_.pieces.has(moveTypes))) {
-      Some(bestCandidate(adjacentSpaces, priorities).name)
+    if (candidates.nonEmpty) {
+      Some(bestCandidate(candidates, priorities).name)
     }
     else {
-      botLog(s"No adjacent spaces with moveable pieces")
+      botLog(s"No reachable spaces with moveable pieces")
       None
     }
   }
@@ -2124,16 +2134,26 @@ object Bot {
     action: MoveAction,
     moveTypes: Set[PieceType],
     checkFirst: Boolean,   // True if we need to check activate before the first dest
-    maxDestinations: Option[Int] = None)(getNextDestination: MoveDestGetter): Boolean = {
+    maxPieces: Int = NO_LIMIT,  // Transport limits the number of pieces to 6 per destination
+    maxDests: Option[Int] = None)(getNextDestination: MoveDestGetter): Boolean = {
 
-    val maxDest = maxDestinations getOrElse NO_LIMIT
+    val maxDest = maxDests getOrElse NO_LIMIT
     // ----------------------------------------
     def tryOrigin(destName: String, previousOrigins: Set[String]): Unit = {
-      selectMoveOrigin(faction, destName, action, moveTypes, previousOrigins) match {
+      val origin = action match {
+        // Only one origin allowed for Transport
+        case Transport if previousOrigins.nonEmpty => None
+        // Use the same (single) origin from previous Transport destinations
+        case Transport if transportOrigin.nonEmpty => transportOrigin
+        // Select the top priority origin 
+        case _ => selectMoveOrigin(faction, destName, action, moveTypes, previousOrigins)
+      }
+
+      origin match {
         case None =>  // No more origin spaces, so we are finished
 
         case Some(originName) =>
-          val toMove = movePiecesFromOneOrigin(originName, destName, faction, action, moveTypes)
+          val toMove = movePiecesFromOneOrigin(originName, destName, faction, action, moveTypes, maxPieces)
           if (toMove.nonEmpty) {
             //  First time we move pieces to a dest log
             //  the selection of the destination space.
@@ -2192,10 +2212,12 @@ object Bot {
 
           case Some(destName) => 
             botLog(s"\n$faction Bot will attempt $action to $destName")
-            tryOrigin(destName, Set.empty)
-            // pause()
+            tryOrigin(destName, Set.empty)            // pause()
             val dest = game.getSpace(destName)
 
+            // If no pieces could be found to move into the destination then
+            // the destination will not have been added to the moveDestinations vector.
+            // If we are doing a Sweep, check to see if we can sweep in place.
             if (action == Sweep && !moveDestinations.contains(destName) && sweepEffective(faction, destName)) {
               // If this is a sweep operation and no cubes were
               // able to move into the destination, but there are
@@ -2588,14 +2610,13 @@ object Bot {
     // RVN_Leader_NguyenCaoKy  - US/ARVN pacification costs 4 resources per Terror/Level
     def trainOp(params: Params, actNum: Int): Option[CoinOp] = {
       val nguyenCaoKy         = isRVNLeader(RVN_Leader_NguyenCaoKy)
-      var trainSpaces  = Set.empty[String]
       val maxTrain     = params.maxSpaces getOrElse NO_LIMIT
-      def trained      = trainSpaces.nonEmpty
-      def canTrain     = trainSpaces.size < maxTrain &&
+      def trained      = trainingSpaces.nonEmpty
+      def canTrain     = trainingSpaces.size < maxTrain &&
                          checkARVNActivation(trained, actNum, params.free)
-      val canTrainRangers = (sp: Space) => !(trainSpaces(sp.name) || sp.nvaControlled)
+      val canTrainRangers = (sp: Space) => !(trainingSpaces(sp.name) || sp.nvaControlled)
       val canTrainCubes   = (sp: Space) => 
-        !(trainSpaces(sp.name) || sp.nvaControlled) &&
+        !(trainingSpaces(sp.name) || sp.nvaControlled) &&
         (sp.isCity || sp.pieces.has(CoinBases))
 
       // Return true if we can continue training
@@ -2613,7 +2634,7 @@ object Bot {
               decreaseResources(ARVN, 3)
 
             placePieces(sp.name, toPlace)
-            trainSpaces += sp.name
+            trainingSpaces += sp.name
             trainToPlaceRangers(candidates filterNot (_.name == sp.name))
           }
           else
@@ -2637,7 +2658,7 @@ object Bot {
             if (game.trackResources(ARVN))
               decreaseResources(ARVN, 3)
             placePieces(sp.name, toPlace)
-            trainSpaces += sp.name
+            trainingSpaces += sp.name
             trainToPlaceRangers(candidates filterNot (_.name == sp.name))
           }
           else
@@ -2662,13 +2683,13 @@ object Bot {
         var placedBase = false
         if (game.availablePieces.has(ARVNBase) && baseCandidates.nonEmpty) {
           val sp = pickSpacePlaceBases(baseCandidates)
-          val mustPay = game.trackResources(ARVN) && !trainSpaces(sp.name)
+          val mustPay = game.trackResources(ARVN) && !trainingSpaces(sp.name)
           // If we have not already trained in this space and we are
           // tracking ARVN resources, make sure there is cash in the bank.
           if (!mustPay || game.arvnResources >= 3) {
             val toRemove = selectFriendlyRemoval(sp.pieces.only(ARVNCubes), 3)
 
-            if (trainSpaces(sp.name))
+            if (trainingSpaces(sp.name))
               log(s"\n$ARVN selects ${sp.name} for Train")
             else
               log(s"\n$ARVN will place a base in ${sp.name}")
@@ -2681,7 +2702,7 @@ object Bot {
               removeToAvailable(sp.name, toRemove)
               placePieces(sp.name, Pieces(arvnBases = 1))
             }
-            trainSpaces += sp.name  // In case we did not train there previously
+            trainingSpaces += sp.name  // In case we did not train there previously
             placedBase = true
           }
         }
@@ -2691,7 +2712,7 @@ object Bot {
       def pacifyOneSpace(): Unit = {
         val baseRate   = if (isRVNLeader(RVN_Leader_NguyenCaoKy)) 4 else 3
         val costEach   = if (game.trackResources(ARVN)) baseRate else 0
-        val candidates = trainSpaces.toList map game.getSpace filter { sp =>
+        val candidates = trainingSpaces.toList map game.getSpace filter { sp =>
           sp.coinControlled &&
           sp.pieces.has(ARVNTroops)   &&
           sp.pieces.has(ARVNPolice)   &&
@@ -2759,7 +2780,7 @@ object Bot {
         logOpChoice(ARVN, Patrol)
         if (!momentumInPlay(Mo_BodyCount) && game.trackResources(ARVN))
           decreaseResources(ARVN, 3)
-        movePiecesToDestinations(ARVN, Patrol, ARVNCubes.toSet, false, params.maxSpaces)(nextPatrolCandidate)
+        movePiecesToDestinations(ARVN, Patrol, ARVNCubes.toSet, false, maxDests = params.maxSpaces)(nextPatrolCandidate)
         activateGuerrillasOnLOCs(ARVN)
         // Add an assault on one LoC.  If this was a LimOp then the LoC must
         // be the selected destination.  If none was selected then we can pick any one.
@@ -2828,7 +2849,7 @@ object Bot {
         }
   
         logOpChoice(ARVN, Sweep)
-        movePiecesToDestinations(ARVN, Sweep, Set(ARVNTroops), false, maxSweep)(nextSweepCandidate)
+        movePiecesToDestinations(ARVN, Sweep, Set(ARVNTroops), false, maxDests = maxSweep)(nextSweepCandidate)
         val maxCobras = 2  // Unshaded cobras can be used in up to 2 spaces
         var numCobras = 0
         if (moveDestinations.nonEmpty) {
@@ -2917,16 +2938,121 @@ object Bot {
         nextAssault()
         if (assaultSpaces.nonEmpty)
           Some(Assault)
-        else
+        else {
+          logNoOp(ARVN, Assault)
           None
+        }
       }
     }
 
-    // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
-    def governActivity(): Boolean = false
+    //  -------------------------------------------------------------
+    //  Implement the ARVN Govern instructions from the ARVN Trung cards.
+    //  In each space Add Patronage unless US Aid is zero and the space would
+    //  not add at least 2 Patronage.
+    //
+    //  Mo_TyphoonKate           - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
+    //  MandateOfHeaven_Shaded   - ARVN Govern is maximum 1 space
+    //  MandateOfHeaven_Unshaded - 1 Govern space may transfer Aid to Patronage without shifting support
+    //  RVN_Leader_YoungTurks    - Each ARVN Govern adds +2 Patronage
+    def governActivity(): Boolean = {
+      val maxGovern   = if (momentumInPlay(Mo_TyphoonKate) || capabilityInPlay(MandateOfHeaven_Shaded)) 1 else 2
+      var usedMandate = false
+      var governSpaces = Set.empty[String]
+      val prohibited = (sp: Space) => trainingSpaces(sp.name) || governSpaces(sp.name) || sp.name == Saigon
+      val isCandidate = (sp: Space) =>
+        !prohibited(sp)   &&
+        sp.population > 0 &&
+        sp.coinControlled &&
+        sp.support > Neutral
+      
+      def nextGovern(): Unit = {
+        val candidates = game.nonLocSpaces filter isCandidate
 
-    // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
-    def transportActivity(): Boolean = false
+        if (governSpaces.size < maxGovern && candidates.nonEmpty) {
+          val sp = pickSpaceGovern(candidates)
+
+          if (governSpaces.isEmpty)
+            logSAChoice(ARVN, Govern)
+
+          log(s"\nARVN Governs in ${sp.name} (population: ${sp.population})")
+          log(separator())
+          
+          val numPatronage = (game.usAid min sp.population)
+          if (game.usAid == 0 && numPatronage < 2) {
+            log("Add 3 times population value to Aid")
+            increaseUsAid(sp.population * 3)
+          }
+          else {
+            log("Transfer population value from Aid to Patronage")
+            decreaseUsAid(numPatronage)
+            increasePatronage(numPatronage)
+            if (capabilityInPlay(MandateOfHeaven_Unshaded) && !usedMandate) {
+              usedMandate = true
+              log(s"No shift in support. Used [$MandateOfHeaven_Unshaded]")
+            }
+            else
+              decreaseSupport(sp.name, 1)
+          }
+
+          //  Young turks always applies if in play
+          if (isRVNLeader(RVN_Leader_YoungTurks)) {
+            log(s"$RVN_Leader_YoungTurks leader effect triggers")
+            increasePatronage(2)
+          }
+
+          nextGovern()
+        }
+      }
+
+      nextGovern()
+      governSpaces.nonEmpty
+    }
+
+    //  -------------------------------------------------------------
+    //  Implement the ARVN Transport instructions from the ARVN Trung cards.
+    //  1. Use Move Priorities
+    //  Shaded Armored Cavalry is not handle here because it must happen
+    //  after the operation if complete.  It is called in the Trung card
+    //  execute functions.
+    //
+    // Mo_TyphoonKate          - prohibits air lift, transport, and bombard, all other special activities are max 1 space
+    // ArmoredCavalry_Shaded   - Transport Rangers only (NO TROOPS)
+    // RVN_Leader_NguyenKhanh  - Transport uses max 1 LOC space - Enforced by getTransportOrigins()
+    def transportActivity(): Boolean = {
+      var flippedARanger = false
+
+      if (momentumInPlay(Mo_TyphoonKate))
+        false  // Typhoon Kate prohibits transport
+      else {
+        val moveTypes: Set[PieceType] = 
+          if (capabilityInPlay(ArmoredCavalry_Shaded)) Rangers.toSet else ARVNForces.toSet
+
+        val nextTransportCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
+          val candidates = game.spaces filterNot (sp => sp.isNorthVietnam || prohibited(sp.name))
+
+          // No activation check for Transport
+          if (candidates.nonEmpty)
+            Some(pickSpaceSweepTransportDest(candidates).name)
+          else
+            None
+        }
+        
+        logSAChoice(ARVN, Transport)
+        movePiecesToDestinations(ARVN, Transport, moveTypes, false, maxPieces = 6)(nextTransportCandidate)
+
+        if (transportDestinations.isEmpty)
+          logNoActivity(ARVN, Transport)
+
+        // Flip all rangers underground
+        for (sp <- game.spaces; if sp.pieces.has(Rangers_A)) {
+          hidePieces(sp.name, sp.pieces.only(Rangers_A))
+          flippedARanger = true
+        }
+
+        transportDestinations.nonEmpty || flippedARanger
+      }
+    }
+      
 
     // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
     def raidActivity(): Boolean = {
@@ -3363,17 +3489,17 @@ object Bot {
       logOpChoice(NVA, March)
       // Never first need activation for LoCs
       if (withLoC)
-        movePiecesToDestinations(NVA, March, NVAForces.toSet, false, params.maxSpaces)(nextLoCCandidate)
+        movePiecesToDestinations(NVA, March, NVAForces.toSet, false, maxDests = params.maxSpaces)(nextLoCCandidate)
 
       // No need for first activation after LoCs
       // If we march to Laos/Cambodia then we will need first activate check
       // for the generic destinations
       val needActivate = if (withLaosCambodia)
-        movePiecesToDestinations(NVA, March, NVAForces.toSet, false, params.maxSpaces)(nextLaosCambodiaCandidate)
+        movePiecesToDestinations(NVA, March, NVAForces.toSet, false, maxDests = params.maxSpaces)(nextLaosCambodiaCandidate)
       else
         false
 
-      movePiecesToDestinations(NVA, March, NVAForces.toSet, needActivate, params.maxSpaces)(nextGenericCandidate)
+      movePiecesToDestinations(NVA, March, NVAForces.toSet, needActivate, maxDests = params.maxSpaces)(nextGenericCandidate)
 
       if (moveDestinations.nonEmpty)
         Some(March)
@@ -4051,9 +4177,9 @@ object Bot {
       }
 
       logOpChoice(VC, March)
-      movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, params.maxSpaces)(nextLoCCandidate)
+      movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, maxDests = params.maxSpaces)(nextLoCCandidate)
       // First activation check is always false since previos 0-2 spaces were LoCs
-      movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, params.maxSpaces)(nextGenericCandidate)
+      movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, maxDests = params.maxSpaces)(nextGenericCandidate)
 
       if (moveDestinations.nonEmpty)
         Some(March)
@@ -4348,6 +4474,8 @@ object Bot {
   def initTurnVariables(): Unit = {
     moveDestinations      = Vector.empty
     transportDestinations = Vector.empty
+    transportOrigin       = None
+    trainingSpaces        = Set.empty
     movedPieces.reset()
   }
 

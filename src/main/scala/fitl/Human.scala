@@ -934,13 +934,12 @@ object Human {
     val heaven_shaded   = capabilityInPlay(MandateOfHeaven_Shaded)
     val maxSpaces       = if (kate || heaven_shaded) 1 else 2
 
-    // Allow zero pop spaces if Young Turks is leader because
-    // player may want the +2 Patronage
     def isCandidate(sp: Space) = {
-        !sp.isLoC         &&
-        sp.coinControlled &&
-        sp.name != Saigon &&
-        (sp.population > 0 || young_turks) &&
+        !sp.isLoC            &&
+        sp.coinControlled    &&
+        sp.population > 0    &&
+        sp.support > Neutral &&
+        sp.name != Saigon    &&
         !Special.trainingSpaces(sp.name)
     }
 
@@ -962,9 +961,7 @@ object Human {
             val sp           = game.getSpace(name)
             val canPatronage = sp.population > 0 && sp.pieces.totalOf(ARVNCubes) > sp.pieces.totalOf(USTroops)
 
-            val action = if (sp.population == 0)  // Special case for Young Turks
-              "turks_only"
-            else if (!canPatronage)
+            val action = if (!canPatronage)
               "gain_aid"
             else {
               val choices = List(
@@ -981,31 +978,25 @@ object Human {
             log(separator())
             loggingPointsChanges {
               if (action == "xfer_patronage") {
-                val num = (game.patronage min sp.population)
+                val num = (game.usAid min sp.population)
                 log("Transfer population value from Aid to Patronage")
                 decreaseUsAid(num)
                 increasePatronage(num)
 
-                if (sp.population > 0 && sp.support != Neutral) {
-                  val skipShift = heaven_unshaded && !heaven_unshaded_used &&
-                       askYorN(s"Do you wish to use [$MandateOfHeaven_Unshaded] to avoid shifting support? (y/n) ")
+                val skipShift = heaven_unshaded && !heaven_unshaded_used &&
+                      askYorN(s"Do you wish to use [$MandateOfHeaven_Unshaded] to avoid shifting support? (y/n) ")
 
-                  if (skipShift)
-                    heaven_unshaded_used = true
-                  else {
-                    if (sp.support > Neutral)
-                      decreaseSupport(name, 1)
-                    else
-                      increaseSupport(name, 1)
-                  }
+                if (skipShift) {
+                  heaven_unshaded_used = true
+                  log(s"No shift in support. Used [$MandateOfHeaven_Unshaded]")
                 }
+                else
+                    decreaseSupport(name, 1)
               }
               else if (action == "gain_aid") {
                 log("Add 3 times population value to Aid")
                 increaseUsAid(sp.population * 3)
               }
-              else
-                log(s"$name has zero population.  Cannot gain Aid or transfer Aid to Patronage")
 
               //  Young turks always applies if in play
               if (young_turks) {
@@ -1065,7 +1056,7 @@ object Human {
     val numMovers      = askInt(s"\nMove how many $piecesName out of $srcName", 0, maxMovers)
     if (numMovers > 0) {
       var movingPieces   = askPieces(eligible, numMovers, prompt = Some(s"Selecting $piecesName to Transport"))
-      val destCandidates = getTransportDestinations(srcName)
+      val destCandidates = getTransportDestinations(srcName).toList.sorted
 
       def nextDestination(movers: Pieces, candidates: Seq[String]): Unit = {
         if (movers.nonEmpty) {

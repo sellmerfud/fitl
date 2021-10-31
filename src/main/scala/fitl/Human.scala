@@ -2472,6 +2472,7 @@ object Human {
                                     m48PattonSpaces.size < 2 &&
                                     !game.getSpace(name).isLowland &&
                                     askYorN(s"Remove 2 extra pieces in this Assault [$M48Patton_Unshaded]? (y/n) ")) {
+              log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
               m48PattonSpaces = name :: m48PattonSpaces
               params.copy(assaultRemovesTwoExtra = true)
             }

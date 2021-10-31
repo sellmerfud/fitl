@@ -273,6 +273,35 @@ object Bot {
       false
   }
 
+  def assaultFirepower(faction: Faction)(sp: Space): Int = {
+    faction match {
+      case US => usFirepower(sp)
+      case _  => arvnFirepower(sp)
+    }
+  }
+
+  def assaultEffective(faction: Faction)(sp: Space): Boolean = {
+    val firepower = faction match {
+      case US => usFirepower(sp)
+      case _  => arvnFirepower(sp)
+    }
+    (assaultFirepower(faction)(sp) min vulnerableInsurgents(sp.pieces).total) > 0
+  }
+
+  def assaultResult(faction: Faction)(sp: Space): Space = {
+    val num            = assaultFirepower(faction)(sp) min vulnerableInsurgents(sp.pieces).total
+    val (newPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, num)
+    sp.copy(pieces = newPieces)
+  }
+
+  // Is space on the Can Tho - Hue route and would
+  // an assault remove all insurgent pieces
+  def assaultInWouldUnblockAlongCanTho_HueRoute(faction: Faction)(sp: Space): Boolean = {
+    CanTho_Hue_Routes(sp.name)    &&
+    sp.pieces.has(InsurgentForces) &&
+    assaultResult(faction)(sp).pieces.totalOf(InsurgentForces) == 0
+  }
+
 
   //  -------------------------------------------------------------
   //  NVA and VC Ambush Activity
@@ -381,7 +410,7 @@ object Bot {
   //  Perform a US/AVRN assault in the given space.
   //  Important! This function assumes that the any activation roll has
   //             already been satisfied and that if this is an ARVN asasult
-  //             that requires resources that the resource are available!
+  //             that requires resources that the resources are available!
   def performAssault(faction: Faction, name: String, params: Params): Unit = {
     val remove1BaseFirst   = faction == US && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = faction == US && capabilityInPlay(SearchAndDestroy_Unshaded)
@@ -2602,6 +2631,68 @@ object Bot {
         None
       }
     }
+
+    //  -------------------------------------------------------------
+    //  Implement the US Patrol instructions from the US Trung cards.
+    //  1. Get COIN control in Saigon.
+    //  2. Select all LoCs with enemy pieces.
+    //  *  Assault using Remove Priorities.  First to unblock the route
+    //     from Can Tho to Hue if possible.  Otherwise at random.
+    //  -> US will not Patrol if M48Patton_Shaded is in effect.
+    //
+    //  M48Patton_Shaded - After US/ARVN patrol NVA removes up to 2 cubes that moved (US to casualties)
+    //  Mo_BodyCount     - Cost=0 AND +3 Aid per guerrilla removed
+    def patrolOp(params: Params): Option[CoinOp] = {
+      val maxPatrol = params.maxSpaces getOrElse NO_LIMIT
+      if (!capabilityInPlay(M48Patton_Shaded)) {
+        // Select a LoC Patrol destination candidate
+        // ARVN Patrol never needs an activation roll
+        val saigonCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
+          val sp = game.getSpace(Saigon)
+          if (sp.coinControlled) None else Some(Saigon)
+        }
+
+        val locPatrolCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
+          val candidates = game.locSpaces filter { sp =>
+            !prohibited(sp.name) &&
+            sp.pieces.has(InsurgentForces)
+          }
+          
+          if (candidates.nonEmpty)
+            Some(shuffle(candidates).head.name)
+          else
+            None
+        }
+
+        logOpChoice(US, Patrol)
+        movePiecesToDestinations(US, Patrol, Set(USTroops), false, maxDests = Some(1))(saigonCandidate)
+        if (moveDestinations.size < maxPatrol)
+          movePiecesToDestinations(US, Patrol, Set(USTroops), false)(locPatrolCandidate)
+        activateGuerrillasOnLOCs(US)
+
+        // Add an assault on one LoC.  If this was a LimOp then the LoC must
+        // be the selected destination.  If none was selected then we can pick any one.
+        val assaultLoC = if (params.limOpOnly)
+          moveDestinations.headOption filter { name =>
+            val sp = game.getSpace(name)
+            sp.isLoC && assaultEffective(US)(sp)
+          }
+        else {
+          val unblockCandidates = spaceNames(game.locSpaces filter { sp =>
+            assaultInWouldUnblockAlongCanTho_HueRoute(US)(sp)
+          })
+
+          shuffle(unblockCandidates).headOption
+        }
+
+        assaultLoC foreach { name =>
+          performAssault(US, name, Params(free = true))
+        }
+        Some(Patrol)
+      }
+      else
+        None
+    }
   }
 
 
@@ -2617,31 +2708,15 @@ object Bot {
       checkActivation(ARVN, needRoll, actNum) &&
       (free || !game.trackResources(ARVN) || game.arvnResources >= 3)
 
-    def arvnAssaultEffective(sp: Space): Boolean =
-      (arvnFirepower(sp) min vulnerableInsurgents(sp.pieces).total) > 0
-
-    def arvnAssaultResult(sp: Space): Space = {
-      val num            = arvnFirepower(sp) min vulnerableInsurgents(sp.pieces).total
-      val (newPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, num)
-      sp.copy(pieces = newPieces)
-    }
-
     val arvnAssaultWouldAddCoinControl = (sp: Space) =>
-      !sp.coinControlled && arvnAssaultResult(sp).coinControlled
+      !sp.coinControlled && assaultResult(ARVN)(sp).coinControlled
 
     def arvnAssaultWouldAddCoinControlToASpace: Boolean =
       game.nonLocSpaces exists arvnAssaultWouldAddCoinControl
 
-    // Is space on the Can Tho - Hue route and would
-    // an assault remove all insurgent pieces
-    val assaultInWouldUnblockAlongCanTho_HueRoute = (sp: Space) => 
-      CanTho_Hue_Routes(sp.name)    &&
-      sp.pieces.has(InsurgentForces) &&
-      !arvnAssaultResult(sp).pieces.has(InsurgentForces)
-
     // Return true if an assault on one of the spaces
     def arvnAssaultWouldUnblockCanTo_HueRouteSpace(candidates: TraversableOnce[Space]): Boolean =
-        candidates exists assaultInWouldUnblockAlongCanTho_HueRoute
+        candidates exists assaultInWouldUnblockAlongCanTho_HueRoute(ARVN)
 
     def arvnAssaultWouldAddControlOrUnblockCanTo_Hue: Boolean = {
       arvnAssaultWouldAddCoinControlToASpace ||
@@ -2667,7 +2742,7 @@ object Bot {
     // allows ARVN to free assault in one Transport destination
     // Will only trigger if an transport special activity has take place.
     def armoredCavalryAssault(): Unit = {
-      val candidates = spaces(transportDestinations) filter arvnAssaultEffective
+      val candidates = spaces(transportDestinations) filter assaultEffective(ARVN)
       // General Landsdale prohibits assault
       if (capabilityInPlay(ArmoredCavalry_Unshaded) && !momentumInPlay(Mo_GeneralLansdale) && candidates.nonEmpty) {
         val sp = pickSpaceRemoveReplace(candidates)    
@@ -2943,7 +3018,7 @@ object Bot {
     //  -------------------------------------------------------------
     //  Implement the ARVN Patrol instructions from the ARVN Trung cards.
     //  1. Use Move Priorities
-    //  2. Assault using Remove Priorities.  First to unblock the route
+    //  *  Assault using Remove Priorities.  First to unblock the route
     //     from Can Tho to Hue if possible.  Otherwise at random.
     //
     //  M48Patton_Shaded - After US/ARVN patrol NVA removes up to 2 cubes that moved (US to casualties)
@@ -2961,7 +3036,6 @@ object Bot {
           else
             None
         }
-
         logOpChoice(ARVN, Patrol)
         if (!momentumInPlay(Mo_BodyCount) && game.trackResources(ARVN))
           decreaseResources(ARVN, 3)
@@ -2972,21 +3046,20 @@ object Bot {
         val assaultLoC = if (params.limOpOnly)
           moveDestinations.headOption filter { name =>
             val sp = game.getSpace(name)
-            sp.isLoC && arvnAssaultEffective(sp)
+            sp.isLoC && assaultEffective(ARVN)(sp)
           }
         else {
           val unblockCandidates = spaceNames(game.locSpaces filter { sp =>
-            arvnAssaultEffective(sp) &&
-            assaultInWouldUnblockAlongCanTho_HueRoute(sp)
+            assaultEffective(ARVN)(sp) &&
+            assaultInWouldUnblockAlongCanTho_HueRoute(ARVN)(sp)
           })
-          val genericCandidates = spaceNames(game.locSpaces filter arvnAssaultEffective)
+          val genericCandidates = spaceNames(game.locSpaces filter assaultEffective(ARVN))
 
           shuffle(unblockCandidates).headOption orElse shuffle(genericCandidates).headOption
         }
 
         assaultLoC foreach { name =>
-          // TODO:  Assault in Loc
-          // ARV_Bot.assault(name)
+          performAssault(ARVN, name, Params(free = true))
         }
 
         if (capabilityInPlay(M48Patton_Shaded) && movedPieces.size > 0)
@@ -3074,7 +3147,7 @@ object Bot {
       if (momentumInPlay((Mo_GeneralLansdale)) || !hasCash)
         None
       else {
-        val candidates = game.spaces filter { sp => arvnAssaultEffective(sp) }
+        val candidates = game.spaces filter { sp => assaultEffective(ARVN)(sp) }
         if (candidates.nonEmpty) {
           val MostFirepower = List(new HighestScore[Space]("Most ARVN Firepower", arvnFirepower))
           val sp = bestCandidate(candidates, MostFirepower)
@@ -3107,7 +3180,7 @@ object Bot {
           val check          = previousAssaults.nonEmpty || assaultSpaces.nonEmpty
           lazy val activated = checkARVNActivation(check, actNum, free)
           lazy val candidates = game.spaces filter { sp =>
-            !previousAssaults(sp.name) && !assaultSpaces(sp.name) && arvnAssaultEffective(sp)
+            !previousAssaults(sp.name) && !assaultSpaces(sp.name) && assaultEffective(ARVN)(sp)
           }
 
           if (previousAssaults.size + assaultSpaces.size < maxAssault && candidates.nonEmpty && activated) {

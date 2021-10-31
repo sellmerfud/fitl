@@ -2693,6 +2693,54 @@ object Bot {
       else
         None
     }
+
+    //  -------------------------------------------------------------
+    //  Implement the US Sweep instructions from the US Trung cards.
+    //  1. Use Move Priorities
+    //  2. Sweep in place.
+    //  *  If Shaded Booby Traps then sweep in max 2 spaces
+    //  
+    //  Cobras_Unshaded - 2 US/ARVN sweep spaces each remove 1 Active untunneled enemy
+    //                               (troops then  guerrillas then bases)
+    //  CombActionPlatoons_Shaded - US may select max 2 spaces per sweep
+    //  BoobyTraps_Shaded - Each sweep space, VC afterward removes 1 sweeping troop on
+    //                      a roll 1-3 (US to casualties)
+    def sweepOp(params: Params, actNum: Int): Option[CoinOp] = {
+      // If Shaded Booby Traps then limit spaces to 2 unless this is a limOp
+      val maxTraps: Option[Int]  = if (capabilityInPlay(BoobyTraps_Shaded)) Some(2) else None
+      val maxSweep = (maxTraps.toList ::: params.maxSpaces.toList).sorted.headOption
+
+      val nextSweepCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
+        val candidates = game.nonLocSpaces filterNot (sp => sp.isNorthVietnam || prohibited(sp.name))
+
+        if (candidates.nonEmpty)
+          Some(pickSpaceSweepDest(candidates).name)
+        else
+          None
+      }
+
+      logOpChoice(US, Sweep)
+      movePiecesToDestinations(US, Sweep, Set(USTroops), false, maxDests = maxSweep)(nextSweepCandidate)
+      val maxCobras = 2  // Unshaded cobras can be used in up to 2 spaces
+      var numCobras = 0
+      if (moveDestinations.nonEmpty) {
+        // Activate guerrillas in each sweep destination
+        for (name <- moveDestinations) {
+          activateGuerrillasForSweep(name, US)
+          checkShadedBoobyTraps(name, US)
+          if (numCobras < maxCobras && checkUnshadedCobras(name))
+            numCobras += 1 
+        }
+
+        // Finally pay for the operation of applicable
+        Some(Sweep)
+      }
+      else {
+        logNoOp(US, Sweep)
+        None
+      }
+    }
+
   }
 
 
@@ -3079,15 +3127,14 @@ object Bot {
     //  BoobyTraps_Shaded - Each sweep space, VC afterward removes 1 sweeping troop on
     //                      a roll 1-3 (US to casualties)
     def sweepOp(params: Params, actNum: Int): Option[CoinOp] = {
-      // If Shaded Cobras limit spaces to 2 unless this is a limOp
+      // If Shaded Booby Traps then limit spaces to 2 unless this is a limOp
       // If we are tracking ARVN resources then we must also ensure
       // that we don't select more spaces that we can pay for.
       val mustPay = game.trackResources(ARVN) && !params.free
       val maxAfford: Option[Int] = if (mustPay) Some(game.arvnResources / 3) else None
       val maxTraps: Option[Int]  = if (capabilityInPlay(BoobyTraps_Shaded)) Some(2) else None
       val maxSweep = (maxAfford.toList ::: maxTraps.toList ::: params.maxSpaces.toList).sorted.headOption
-      // Keep track of the first two spaces since they will be the highest priority
-      // These will be used for the Unshaded cobras capability
+
       if (maxSweep.nonEmpty && maxSweep.get == 0)
         None  // Cannot afford to do any sweeping!
       else {  

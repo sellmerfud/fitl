@@ -2410,6 +2410,14 @@ object Bot {
         sp.pieces.has(USPieces)
       }
 
+    def any2PopNotAtActiveSupportWithCoinControlUsTroops: Boolean =
+      game.nonLocSpaces exists { sp =>
+        sp.population == 2          &&
+        sp.support != ActiveSupport &&
+        sp.coinControlled           &&
+        sp.pieces.has(USTroops)
+      }
+
     def twoOrMoreSpacesWithSupportAndUndergroundGuerrillas: Boolean =
       game.nonLocSpaces exists { sp =>
         sp.population > 0           &&
@@ -2424,6 +2432,11 @@ object Bot {
          (sp.pieces.has(InsurgentBases) && !sp.pieces.has(UndergroundGuerrillas)))
       }
 
+    def spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops: Boolean = 
+      game.spaces exists { sp =>
+        coinFirepower(sp) < sp.pieces.totalOf(NVATroops) &&
+        sp.pieces.has(USTroops::USBase::Nil)
+      }
     // All routes from Can Tho to Hue blocked and Shaded M-48 not in effect
     def allLocRoutesCanTho_HueBlockedAndNoShadedM48: Boolean =
       !capabilityInPlay(M48Patton_Shaded) && !getPatrolDestinations(CanTho).contains(Hue)
@@ -2819,7 +2832,7 @@ object Bot {
     //                      a roll 1-3 (US to casualties)
     //
     //  Sweep not allowed in Monsoon.
-    def sweepOp(params: Params, actNum: Int): Option[CoinOp] = {
+    def sweepOp(params: Params): Option[CoinOp] = {
       if (game.inMonsoon)
         None
       else {
@@ -2880,7 +2893,7 @@ object Bot {
     //  SearchAndDestroy_Unshaded - Each US assault space may remove 1 underground guerrilla
     //  SearchAndDestroy_Shaded   - Each US and ARVN assault Province shifts support one level toward Active Opposition
     //  Mo_BodyCount              - Cost=0 AND +3 Aid per guerrilla removed
-    def assaultOp(params: Params, actNum: Int, once: Boolean = false)(doSpecialActivity: () => Boolean): Option[(CoinOp, Boolean)] = {
+    def assaultOp(params: Params)(doSpecialActivity: () => Boolean): Option[(CoinOp, Boolean)] = {
       if (generalLandsdale(US))
         None
       else {
@@ -4382,7 +4395,7 @@ object Bot {
     //  PT76_Unshaded  - If Attack, then NVA must first remove 1 Troop (if one is present)
     //  PT76_Shaded    - In one attack space remove 1 enemy per NVA Troop
     //  -------------------------------------------------------------
-    def attackOp(params: Params, actNum: Int, addAmbush: Boolean): (Option[InsurgentOp], Boolean) = {
+    def attackOp(params: Params, actNum: Int, addAmbush: Boolean): Option[(InsurgentOp, Boolean)] = {
       val threePlusGuerrillasNoVCBase = (sp: Space) => {
         sp.pieces.totalOf(VCGuerrillas) > 2 &&
         !sp.pieces.has(VCBases)
@@ -4502,10 +4515,10 @@ object Bot {
         nextAttack(guerrillaCandidates, useTroops = false, needActivation = attackSpaces.nonEmpty)
       
       if (attackSpaces.nonEmpty)
-        (Some(Attack), ambushed)
+        Some(Attack, ambushed)
       else {
         logNoOp(NVA, Attack)
-        (None, false)
+        None
       }
     }
 
@@ -5482,16 +5495,42 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecialActivity(): Boolean = {
+        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity()) ||
+        US_Bot.airStrikeActivity()
+      }
+
+      if (!US_Bot.any2PlusPopNotAtActiveSupportWithCoinControlUsPieces)
+        TrungDraw
+      else if (!US_Bot.usPiecesWith4PlusNVATroopsOrVulnerableBase)
+        flipCard(params)
+      else {
+        US_Bot.assaultOp(params)(doSpecialActivity) match {
+          case Some((_, didSpecial)) => TrungComplete(didSpecial)
+          case None                   => TrungNoOp
+        }
+      }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecialActivity(): Boolean = {
+        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity()) ||
+        US_Bot.adviseActivity() ||
+        US_Bot.airLiftActivity()
+      }
+
+      // Special activity comes first!
+      val didSpecial = params.specialActivity && doSpecialActivity()
+
+      // If the special activty was done we return TrungComplete
+      // even if the opeation was ineffective
+      if (US_Bot.trainOp(params, actNum).nonEmpty || didSpecial)
+        TrungComplete(didSpecial)
+      else
+        TrungNoOp
     }
   }
 
@@ -5502,16 +5541,41 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecialActivity(): Boolean = {
+        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity()) ||
+        US_Bot.airStrikeActivity()
+      }
+
+      if (!US_Bot.any2PlusPopNotAtActiveSupportWithCoinControlUsPieces)
+        TrungDraw
+      else if (!US_Bot.usPiecesWith4PlusNVATroopsOrVulnerableBase)
+        flipCard(params)
+      else {
+        US_Bot.assaultOp(params)(doSpecialActivity) match {
+          case Some((op, didSpecial)) => TrungComplete(didSpecial)
+          case None                   => TrungNoOp
+        }
+      }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecial(): Boolean = {
+        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity()) ||
+        US_Bot.airLiftActivity()
+      }
+
+      val operation = if (US_Bot.allLocRoutesCanTho_HueBlockedAndNoShadedM48)
+        US_Bot.patrolOp(params)
+      else
+        US_Bot.sweepOp(params)
+
+      operation match {
+        case Some(_) => TrungComplete(params.specialActivity && doSpecial())
+        case None    => TrungNoOp
+      }
     }
   }
 
@@ -5522,16 +5586,42 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecialActivity(): Boolean = {
+        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity()) ||
+        US_Bot.airStrikeActivity()
+      }
+
+      if (game.arvnPoints < 42)
+        TrungDraw
+      else if (!US_Bot.usPiecesWith4PlusNVATroopsOrVulnerableBase)
+        flipCard(params)
+      else {
+        US_Bot.assaultOp(params)(doSpecialActivity) match {
+          case Some((op, didSpecial)) => TrungComplete(didSpecial)
+          case None                   => TrungNoOp
+        }
+      }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecialActivity(): Boolean = {
+        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity()) ||
+        US_Bot.adviseActivity() ||
+        US_Bot.airLiftActivity()
+      }
+
+      // Special activity comes first!
+      val didSpecial = params.specialActivity && doSpecialActivity()
+
+      // If the special activty was done we return TrungComplete
+      // even if the opeation was ineffective
+      if (US_Bot.trainOp(params, actNum).nonEmpty || didSpecial)
+        TrungComplete(didSpecial)
+      else
+        TrungNoOp
     }
   }
 
@@ -5542,16 +5632,36 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecialActivity(): Boolean = {
+        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity()) ||
+        US_Bot.airStrikeActivity()
+      }
+
+      if (!US_Bot.twoOrMoreSpacesWithSupportAndUndergroundGuerrillas)
+        TrungDraw
+      else if (!US_Bot.usPiecesWith4PlusNVATroopsOrVulnerableBase)
+        flipCard(params)
+      else {
+        US_Bot.assaultOp(params)(doSpecialActivity) match {
+          case Some((op, didSpecial)) => TrungComplete(didSpecial)
+          case None                   => TrungNoOp
+        }
+      }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecialActivity(): Boolean = {
+        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity()) ||
+        US_Bot.airLiftActivity()
+      }
+
+      US_Bot.sweepOp(params) match {
+        case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity())
+        case None    => TrungNoOp
+      }
     }
   }
 
@@ -5562,16 +5672,37 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecialActivity(): Boolean = {
+        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity()) ||
+        US_Bot.airStrikeActivity()
+      }
+
+      if (!US_Bot.usPiecesWithVulnerableEnemies)
+        TrungDraw
+      else if (!US_Bot.usPiecesWith4PlusNVATroopsOrVulnerableBase)
+        flipCard(params)
+      else {
+        US_Bot.assaultOp(params)(doSpecialActivity) match {
+          case Some((op, didSpecial)) => TrungComplete(didSpecial)
+          case None                   => TrungNoOp
+        }
+      }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecialActivity(): Boolean = {
+        US_Bot.adviseActivity() ||
+        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity()) ||
+        US_Bot.airLiftActivity()
+      }
+
+      US_Bot.trainOp(params, actNum) match {
+        case Some(_) => TrungComplete(params.specialActivity && doSpecialActivity())
+        case None    => TrungNoOp
+      }
     }
   }
 
@@ -5582,16 +5713,40 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      def doSpecialActivity(): Boolean = {
+        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity()) ||
+        US_Bot.airLiftActivity()
+      }
+
+      if (!US_Bot.allUSBasesinSouthWithUSTroopsNoNVATroops)
+        TrungDraw
+      else {
+        val didSpecial = params.specialActivity && doSpecialActivity()
+        if (!US_Bot.allLocRoutesCanTho_HueBlockedAndNoShadedM48)
+          flipCard(params, didSpecial)
+        else
+          US_Bot.patrolOp(params) match {
+            case Some(_) => TrungComplete(didSpecial)
+            case None    => TrungNoOp
+          }
+      }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      log(s"\n$this not yet implemented!")
-      TrungNoOp
+      val operation = if (US_Bot.any2PopNotAtActiveSupportWithCoinControlUsTroops)
+        US_Bot.trainOp(params, actNum)
+      else
+        US_Bot.sweepOp(params)
+
+      // The special activity will have been done
+      // on the front side of the card.
+      if (specialDone || operation.nonEmpty)
+        TrungComplete(specialDone)
+      else
+        TrungNoOp
     }
   }
 
@@ -5676,13 +5831,14 @@ object Bot {
       else
         ARVN_Bot.assaultOp(params, actNum)
 
-      operation match {
-        case Some(_) =>
-          ARVN_Bot.armoredCavalryAssault()
-          TrungComplete(specialDone)
-
-        case None => TrungNoOp
-      } 
+      // If the special activity was done, return TrungComplete
+      // even if the operation was ineffective
+      if (operation.nonEmpty || specialDone) {
+        ARVN_Bot.armoredCavalryAssault()
+        TrungComplete(specialDone)
+      }
+      else
+        TrungNoOp
     }
   }
 
@@ -5700,7 +5856,9 @@ object Bot {
       else {
         ARVN_Bot.trainOp(params, actNum) match {
           case Some(_) if params.specialActivity =>
-            TrungComplete(ARVN_Bot.governActivity() || ARVN_Bot.transportActivity())
+            val didSpecial = ARVN_Bot.governActivity() || ARVN_Bot.transportActivity()
+            ARVN_Bot.armoredCavalryAssault()  // In case we transported
+            TrungComplete(didSpecial)
 
           case Some(_) => TrungComplete(false)
           case None    => TrungNoOp
@@ -5878,12 +6036,12 @@ object Bot {
       else if (!NVA_Bot.sixTroopsWithCOINTroopsOrBase)
         flipCard(params)
       else {
-        val (operation, ambushed) = NVA_Bot.attackOp(params, actNum, addAmbush = params.specialActivity)
+        val result = NVA_Bot.attackOp(params, actNum, addAmbush = params.specialActivity)
 
-        operation match {
-          case Some(_) if ambushed => TrungComplete(true)
-          case Some(_) => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
-          case _       => TrungNoOp
+        result match {
+          case Some((_, true)) => TrungComplete(true)
+          case Some(_)         => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
+          case _               => TrungNoOp
         }
       }
     }
@@ -5929,14 +6087,14 @@ object Bot {
         val bombarded = params.specialActivity && NVA_Bot.bombardActivity()
 
         val operation = if (NVA_Bot.sixTroopsWithCOINTroopsOrBase)
-          NVA_Bot.attackOp(params, actNum, addAmbush = false)
+          NVA_Bot.attackOp(params, actNum, addAmbush = false) map (_._1)
         else
           NVA_Bot.marchOp(params, marchActNum, withLoC = false, withLaosCambodia = false)
 
-        operation match {
-          case Some(_) => TrungComplete(bombarded)
-          case None    => TrungNoOp
-        }
+        if (bombarded || operation.nonEmpty)
+          TrungComplete(bombarded)
+        else
+          TrungNoOp
       }
     }
 
@@ -5958,10 +6116,11 @@ object Bot {
       else {
         val infiltrated = params.specialActivity &&
                           NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false)
-        NVA_Bot.marchOp(params, marchActNum, withLoC = false, withLaosCambodia = false) match {
-          case Some(_) => TrungComplete(infiltrated)
-          case None    => TrungNoOp
-        }
+        val operation = NVA_Bot.marchOp(params, marchActNum, withLoC = false, withLaosCambodia = false)
+        if (infiltrated || operation.nonEmpty)
+          TrungComplete(infiltrated)
+        else
+          TrungNoOp
       }
     }
   }
@@ -5981,12 +6140,11 @@ object Bot {
       else if (!NVA_Bot.sixTroopsWithCOINTroopsOrBase)
         flipCard(params)
       else {
-        val (operation, ambushed) = NVA_Bot.attackOp(params, actNum, addAmbush = params.specialActivity)
-        val bombarded = operation.nonEmpty && !ambushed && NVA_Bot.bombardActivity()
-        operation match {
-          case Some(_) if ambushed => TrungComplete(true)
-          case Some(_) => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
-          case None    => TrungNoOp
+        val result = NVA_Bot.attackOp(params, actNum, addAmbush = params.specialActivity)
+        result match {
+          case Some((_, true))  => TrungComplete(true)
+          case Some((_, false)) => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
+          case None             => TrungNoOp
         }
       }
     }
@@ -6024,11 +6182,12 @@ object Bot {
       else {
         val infiltrated = params.specialActivity &&
                           NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = true)
+        val operation = NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true)
 
-        NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true) match {
-          case Some(_) => TrungComplete(infiltrated)
-          case None    => TrungNoOp
-        }
+        if (infiltrated || operation.nonEmpty)
+          TrungComplete(infiltrated)
+        else
+          TrungNoOp
       }
     }
 
@@ -6111,15 +6270,15 @@ object Bot {
       }
 
 
-      val (operation, ambushed) = if (NVA_Bot.sixTroopsWithCOINPieces)
+      val result = if (NVA_Bot.sixTroopsWithCOINPieces)
         NVA_Bot.attackOp(params, actNum, addAmbush = params.specialActivity)
       else
-        (NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true), false)
+        NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true) map (_ -> false)
 
-      operation match {
-        case Some(Attack) if ambushed => TrungComplete(true)
-        case Some(op)                 => TrungComplete(params.specialActivity && doSpecialActivity(op))
-        case None                     => TrungNoOp
+      result match {
+        case Some((Attack, true)) => TrungComplete(true)
+        case Some((op, _))        => TrungComplete(params.specialActivity && doSpecialActivity(op))
+        case None                 => TrungNoOp
       }
     }
   }
@@ -6136,12 +6295,12 @@ object Bot {
       else if (!NVA_Bot.sixTroopsWithCOINTroopsOrBase)
         flipCard(params)
       else {
-        val (operation, ambushed) = NVA_Bot.attackOp(params, actNum, addAmbush = params.specialActivity)
+        val result = NVA_Bot.attackOp(params, actNum, addAmbush = params.specialActivity)
 
-        operation match {
-          case Some(_) if ambushed => TrungComplete(true)
-          case Some(_)             => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
-          case None                => TrungNoOp
+        result match {
+          case Some((_, true)) => TrungComplete(true)
+          case Some(_)         => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
+          case None            => TrungNoOp
         }
       }
     }
@@ -6166,11 +6325,12 @@ object Bot {
           params.specialActivity &&
           (NVA_Bot.infiltrateActivity(needDiceRoll = true, replaceVCBase = true) ||
            NVA_Bot.bombardActivity())
+        val operation = NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false)
 
-        NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false) match {
-          case Some(_) => TrungComplete(didSpecial)
-          case None    => TrungNoOp
-        }
+        if (didSpecial || operation.nonEmpty)
+          TrungComplete(didSpecial)
+        else
+          TrungNoOp
       }
     }
   }
@@ -6451,11 +6611,13 @@ object Bot {
       else {
         val specialDone = params.specialActivity && doSpecialActivity()
 
-        if (game.spaces exists (sp => numVCGuerrillas(sp) >= 3))
-          VC_Bot.marchOp(params, actNum) match {
-            case Some(_) => TrungComplete(true)
-            case None    => TrungNoOp
-          }
+        if (game.spaces exists (sp => numVCGuerrillas(sp) >= 3)) {
+          val operation = VC_Bot.marchOp(params, actNum)
+          if (specialDone || operation.nonEmpty)
+            TrungComplete(specialDone)
+          else
+            TrungNoOp
+        }
         else
           flipCard(params, specialDone)
       }
@@ -6475,12 +6637,12 @@ object Bot {
       else
         VC_Bot.marchOp(params, actNum)
 
+      // This special activity will have been done on the front
+      // of the card
       if (operation.nonEmpty || specialDone)
         TrungComplete(specialDone)
       else
         TrungNoOp
     }
-
   }
-
 }

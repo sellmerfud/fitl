@@ -520,12 +520,14 @@ object FireInTheLake {
     }
   }
 
-  def activateGuerrillasForSweep(name: String, faction: Faction): Unit = {
+  def activateGuerrillasForSweep(name: String, faction: Faction, logHeading: Boolean = true): Unit = {
     val sp = game.getSpace(name)
-    val num = sp.sweepActivations(faction) min sp.pieces.totalOf(UndergroundGuerrillas)
+    val num = sp.sweepActivations(faction)
     if (num > 0) {
-      log(s"\nActivating guerrillas in $name")
-      log(separator())
+      if (logHeading) {
+        log(s"\nActivating guerrillas in $name")
+        log(separator())
+      }
       val guerrillas = askPieces(sp.pieces, num, UndergroundGuerrillas)
       revealPieces(name, guerrillas)
     }
@@ -1050,11 +1052,15 @@ object FireInTheLake {
 
     def assaultFirepower(faction: Faction): Int = (assaultCubes(faction) * assaultMultiplier(faction)).toInt
     
+    // The number of underground guerrillas that would
+    // be activated by the given faction
     def sweepActivations(faction: Faction): Int = {
-      if (isJungle)
+      val numActivate =if (isJungle)
         sweepForces(faction) / 2
       else
         sweepForces(faction)
+
+      numActivate min pieces.totalOf(UndergroundGuerrillas)
     }
 
   }

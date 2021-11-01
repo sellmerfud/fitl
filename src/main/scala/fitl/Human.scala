@@ -552,7 +552,7 @@ object Human {
       val maxAdvise = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
       val canAdvise = Special.selectedSpaces.size < maxAdvise
 
-      val canSweep   = canAdvise && sweepCandidates.nonEmpty
+      val canSweep   = canAdvise && !game.inMonsoon && sweepCandidates.nonEmpty
       val canAssault = canAdvise && !momentumInPlay(Mo_GeneralLansdale) &&
                                     assaultCandidates.nonEmpty
       val canSpecial = canAdvise && specialForcesCandidates.nonEmpty
@@ -2238,7 +2238,7 @@ object Human {
     def activateGuerrillas(): Unit = {
       val canActivate = (name: String) => {
         val sp = game.getSpace(name)
-        sp.sweepActivations(faction) > 0 && sp.pieces.has(UndergroundGuerrillas)
+        sp.sweepActivations(faction) > 0
       }
       val candidates = ((sweepSpaces -- activatedSpaces) filter canActivate).toList.sorted
 

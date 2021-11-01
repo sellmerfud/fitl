@@ -171,7 +171,7 @@ object Bot {
       log(note)
   }
 
-    def logNoActivity(faction: Faction, sa: SpecialActivity): Unit = {
+  def logNoActivity(faction: Faction, sa: SpecialActivity): Unit = {
       log(s"\nNo spaces found for $faction $sa")
   }
 
@@ -3130,15 +3130,150 @@ object Bot {
 
     //  -------------------------------------------------------------
     //  Implement the US Air Strike instructions from the US Trung cards.
+    //  1.  Degrade trail if at least 2 hits and trail not at 1
+    //  2.  Use Air Strike column of Space Selection table to select spaces.
+    //      In each space remove max pieces possible (unless Laser Guided Bombs in effect)
+    // 
+    //  Destroy exposed insurent units and degrade trail
+    //  Up to 6 spaces (2 in Monsoon) each with any US or ARVN piece
+    //  Roll d6 to determine number of hits
+    //  2 hits may be used to degrade trail by one box (only once)
+    //  1 hit per enemy piece removed.  (NVATroops, then active guerrillas, then exposed bases)
+    //  Shift each City/Province with >= 1 Population one level toward Active Opposition
+    //
+    //  Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
+    //  Mo_WildWeasels - Either degrade trail OR remove only 1 piece (not 1-6)
+    //  Mo_ADSID       - -6 NVA resrouces at any trail change
+    //  TopGun_Unshaded - degrade trail by 2 boxes instead of 1
+    //  TopGun_Shaded   - degrade of trail requires d6 = 4-6 (after expending 2 hits)
+    //  ArcLight_Unshaded - 1 space may be Province without COIN pieces (including N. Vietnam)
+    //  ArcLight_Shaded - spaces removing >1 piece shift two levels toward Active Opposition
+    //  LaserGuidedBombs_Unshaded - In space were only 1 piece removed, no shift toward Active Opposition
+    //  LaserGuidedBombs_Shaded - Remove no more than 2 pieces total
+    //  AAA_Shaded - Cannot degrade the trail below 2
+    //  MiGs_Shaded - If trail degraded, US remove 1 Available Troop to Casualties
+    //  SA2s_Unshaded - When trail degraded, US removes 1 NVA piece (including untunneled base) outside the South (includes N. Vietnam)
+    //  Mo_Oriskany   - Shaded (prohibits degrade of trail) (includes air strike, coup round, NOT evnts!)
+
     def airStrikeActivity(): Boolean = {
-      if (false)
-      logEndSA(US, AirStrike)
-      false
+      val adsid    = game.isHuman(NVA) && momentumInPlay(Mo_ADSID)
+      val oriskany = momentumInPlay(Mo_Oriskany)
+      val migs_shaded = capabilityInPlay(MiGs_Shaded) && !capabilityInPlay(TopGun_Unshaded)
+      val aaa_shaded = capabilityInPlay(AAA_Shaded)
+      val arclight_unshaded = capabilityInPlay(ArcLight_Unshaded)
+      val minTrail   = if (aaa_shaded) 2 else 1
+      val maxHits       = d6
+      var hitsRemaining = maxHits
+      val maxSpaces = if      (momentumInPlay(Mo_TyphoonKate)) 1
+                      else if (game.inMonsoon) 2
+                      else 6
+      val maxPieces = if (momentumInPlay(Mo_WildWeasels)) 1 else if (capabilityInPlay(LaserGuidedBombs_Shaded)) 2 else maxHits
+      var strikeSpaces = Set.empty[String]
+      var arclight_unshaded_used = false
+      var totalRemoved = 0
+
+      def logSelectAirStrike(): Unit = if (hitsRemaining == maxHits) {
+        logSAChoice(US, AirStrike)
+        log(s"Die roll to determine the number of hits = $maxHits")
+      }
+      // Degrade the trail if possible
+      def degradeTheTrail(): Unit = {
+        if (hitsRemaining > 1 && !oriskany && (!aaa_shaded || game.trail > minTrail)) {
+          val die    = d6
+          val success = !capabilityInPlay(TopGun_Shaded) || die > 3
+          val numBoxes = {
+            val num = if (capabilityInPlay(TopGun_Unshaded)) 2 else 1
+            val newTrail = (game.trail - num) max minTrail
+            game.trail - newTrail
+          }
+    
+          logSelectAirStrike()
+          log(s"\nUS Air Strikes The Trail")
+          log(separator())
+
+          if (capabilityInPlay(TopGun_Shaded))
+            log(s"Die roll ($TopGun_Shaded): $die [${if (success) "Success!" else "Failure"}]")
+    
+          if (success) {
+            degradeTrail(numBoxes)
+            hitsRemaining -= 2
+    
+            if (adsid) {
+              log(s"Momentum: $Mo_ADSID reduces NVA resources at trail change")
+              decreaseResources(NVA, 6)
+            }
+
+            if (migs_shaded && game.availablePieces.has(USTroops))
+                removeAvailableToCasualties(Pieces(usTroops = 1), Some(s"$MiGs_Shaded triggers"))
+    
+            if (capabilityInPlay(SA2s_Unshaded)) {
+              val CanRemove = List(NVABase, NVATroops, NVAGuerrillas_U, NVAGuerrillas_A)
+              log(s"\n$SA2s_Unshaded triggers")
+              val sa2Candidates = spaces(OutsideSouth) filter (_.pieces.has(CanRemove))
+              if (sa2Candidates.isEmpty)
+                log("There are no NVA outside the south that can be removed") // Very unlikely!
+              else {
+                val sp = pickSpaceAirStrike(sa2Candidates)
+                val toRemove = selectEnemyRemovePlaceActivate(sp.pieces.only(CanRemove), 1)
+                removeToAvailable(sp.name, toRemove)
+              }
+            }
+          }
+        }
+      }
+
+      def strikeASpace(): Unit = {
+        val isCandidate = (sp: Space) =>
+          !strikeSpaces(sp.name)         &&
+          sp.pieces.hasExposedInsurgents &&
+          (sp.pieces.has(CoinPieces) || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
+
+        val candidates = game.spaces filter isCandidate
+
+        if (hitsRemaining > 0 && strikeSpaces.size < maxSpaces && totalRemoved < maxPieces && candidates.nonEmpty) {
+          val sp                = pickSpaceAirStrike(candidates)
+          val (killedPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, hitsRemaining)
+
+          logSelectAirStrike()
+          log(s"\nUS Air Strikes ${sp.name}")
+          log(separator())
+          removeToAvailable(sp.name, killedPieces)
+
+          if (killedPieces.total > 0) {
+            val numShift = if (sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition)
+              0
+            else if (killedPieces.total > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
+              log(s"Shift 2 levels toward Active Opposition [$ArcLight_Shaded]")
+              2
+            }
+            else if (killedPieces.total == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded)) {
+              log(s"No shift toward Active Opposition [$LaserGuidedBombs_Unshaded]")
+              0
+            }
+            else {
+              log(s"Shift 1 level toward Active Opposition")
+              1
+            }
+            decreaseSupport(sp.name, numShift)
+          }
+
+          hitsRemaining -= killedPieces.total
+          totalRemoved += killedPieces.total
+          strikeSpaces += sp.name
+          strikeASpace()
+        }
+      }
+
+      // Start of Air Lift Special Activity
+      // ------------------------------------
+      degradeTheTrail()
+      if (!momentumInPlay(Mo_WildWeasels) || hitsRemaining == maxHits)
+        strikeASpace()
+
+      if (hitsRemaining < maxHits)
+        logEndSA(US, AirStrike)
+      hitsRemaining < maxHits  // True if we did an airstrike action
     }
-
-
-
-
   }
 
 

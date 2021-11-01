@@ -111,15 +111,6 @@ object Human {
     def cancelled() = specialTaken = false
   }
 
-  // Return the number of exposed insurgent pieces
-  // Bases are only included if there are not hidden guerrillas
-  def numExposedInsurgents(pieces: Pieces): Int = {
-    val exposedForces = pieces.totalOf(NVATroops::ActiveGuerrillas)
-    val exposedBases  = if (pieces.has(UndergroundGuerrillas)) 0
-                        else pieces.totalOf(NVABase::VCBase::Nil)
-    exposedForces + exposedBases
-  }
-
   //  Kill exposed insurgent pieces up to the max allowd.
   //  NVA Troops first
   //  Then active guerrillas (prompt user for which to remove)
@@ -787,11 +778,18 @@ object Human {
             game.trail - newTrail
           }
 
+          log(s"\nUS Air Strikes The Trail")
+          log(separator())
           if (capabilityInPlay(TopGun_Shaded))
-            log(s"\nDie roll ($TopGun_Shaded): %die [${if (success) "Success!" else "Failure"}]")
+            log(s"Die roll ($TopGun_Shaded): $die [${if (success) "Success!" else "Failure"}]")
 
           if (success) {
             degradeTrail(numBoxes)
+
+            if (adsid) {
+              log(s"Momentum: $Mo_ADSID reduces NVA resources at trail change")
+              decreaseResources(NVA, 6)
+            }
 
             if (migs_shaded && game.availablePieces.has(USTroops))
                 removeAvailableToCasualties(Pieces(usTroops = 1), Some(s"$MiGs_Shaded triggers"))
@@ -819,28 +817,29 @@ object Human {
           val num          = askInt(s"\nRemove how many pieces from $name", 1, maxNumber)
           val killedPieces = killExposedInsurgents(name, num, canRevealTunnel = false)
 
+          log(s"\nUS Air Strikes $name")
+          log(separator())
+          removeToAvailable(name, killedPieces)
 
           if (num > 0) {
             val sp = game.getSpace(name)
             val numShift = if (sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition)
               0
             else if (num > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
-              log(s"\n$ArcLight_Shaded triggers")
-              log(s"Shift 2 levels toward Active Opposition")
+              log(s"Shift 2 levels toward Active Opposition [$ArcLight_Shaded]")
               2
             }
             else if (num == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded)) {
-              log(s"\n$LaserGuidedBombs_Unshaded triggers")
-              log(s"No shift toward Active Opposition")
+              log(s"No shift toward Active Opposition [$LaserGuidedBombs_Unshaded]")
               0
             }
             else {
-              log(s"\nShift 1 level toward Active Opposition")
+              log(s"Shift 1 level toward Active Opposition")
               1
             }
             decreaseSupport(name, numShift)
           }
-          removedSpaces = removedSpaces + name
+          removedSpaces += name
           num
         }
 
@@ -874,7 +873,7 @@ object Human {
           askMenu(choices, s"\nAir Strike: (${amountOf(hitsRemaining, "hit")} remaining, remove up to ${amountOf(canRemove, "piece")})").head match {
             case "select" =>
               askCandidateOrBlank("\nAir Strike in which space:", selectCandidates) foreach { name =>
-                strikeSpaces = strikeSpaces + name
+                strikeSpaces += name
               }
               nextAirStrikeAction(hitsRemaining, hasDegraded)
 
@@ -884,7 +883,7 @@ object Human {
 
             case StrikeOpt(name) =>
               val numRemoved = performStrike(name)
-              totalRemoved -= numRemoved
+              totalRemoved += numRemoved
 
               nextAirStrikeAction(hitsRemaining - numRemoved, hasDegraded)
 
@@ -913,10 +912,7 @@ object Human {
     // Start of Air Lift Special Activity
     // ------------------------------------
     logSAChoice(US, AirStrike, notes)
-
-    log("\nRolling a die to determine the number of hits")
-    log(separator())
-    log(s"Number of hits: $maxHits")
+    log(s"Die roll to determine the number of hits = $maxHits")
 
     nextAirStrikeAction(maxHits, false)
   }
@@ -2662,6 +2658,11 @@ object Human {
         log(separator())
         decreaseResources(NVA, 2)
         improveTrail(num)
+
+        if (adsid) {
+          log(s"Momentum: $Mo_ADSID reduces NVA resources at trail change")
+          decreaseResources(NVA, 6)
+        }
       }
     }
 

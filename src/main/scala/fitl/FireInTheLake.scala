@@ -2812,6 +2812,15 @@ object FireInTheLake {
     }
   }
 
+  // Return the number of exposed insurgent pieces
+  // Bases are only included if there are not hidden guerrillas
+  def numExposedInsurgents(pieces: Pieces): Int = {
+    val exposedForces = pieces.totalOf(NVATroops::ActiveGuerrillas)
+    val exposedBases  = if (pieces.has(UndergroundGuerrillas)) 0
+                        else pieces.totalOf(NVABase::VCBase::Nil)
+    exposedForces + exposedBases
+  }
+
   //  Reveal guerrillas/rangers/irregulars in a space
   def revealPieces(spaceName: String, hidden: Pieces): Unit = if (hidden.total > 0) {
     val Valid = List(Irregulars_U, Rangers_U, NVAGuerrillas_U, VCGuerrillas_U)

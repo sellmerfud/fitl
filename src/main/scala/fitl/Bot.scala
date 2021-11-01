@@ -2042,14 +2042,24 @@ object Bot {
                  moveTypes: Set[PieceType],
                  maxPieces: Int): Pieces = {
   
-    // First we determine which piece to keep in the origin space
+    // First we determine which pieces to keep in the origin space
     val toKeep = selectPiecesToKeep(originName, destName, faction, action, moveTypes)
-    selectPiecesToMove(originName, destName, faction, action, moveTypes, maxPieces, toKeep)
+    // If this is an Air Lift we must limit the number of non USTroops moved to 4
+    // Higher priority others come first in the list.
+    val airLiftKeep = if (action == AirLift) {
+      val otherTypes = List(ARVNTroops, Rangers_U, Irregulars_U, Rangers_A, Irregulars_A)
+      val canMove    = (game.getSpace(originName).pieces - toKeep).explode(otherTypes)
+      val numAllowd  = 4 - movedPieces.allPieces.totalOf(otherTypes)
+      Pieces.fromTypes(canMove drop numAllowd)
+    }
+    else
+      Pieces()
+    selectPiecesToMove(originName, destName, faction, action, moveTypes, maxPieces, toKeep + airLiftKeep)
   }
 
 
   // Find the best space from which to move pieces to the given destination.
-  // If not pieces can reach the destination, the return None.
+  // If no pieces can reach the destination, the return None.
   
   def selectMoveOrigin(
     faction: Faction,
@@ -2083,6 +2093,45 @@ object Bot {
     }
     else {
       botLog(s"No reachable spaces with moveable pieces")
+      None
+    }
+  }
+
+  def selectAirLiftOrigin(currentOrigins: Set[String], addNewOrigin: Boolean): Option[String] = {
+    // Can only move up to 4 ARVNTroop, Irregulars, Rangers
+    val otherTypes = (ARVNTroops::Irregulars:::Rangers).toSet
+    val numOthers = 4 - movedPieces.allPieces.totalOf(otherTypes)
+    val moveTypes = if (numOthers < 4)
+      otherTypes + USTroops
+    else
+      Set(USTroops)
+
+    val newcandidates = game.spaces filter { sp =>
+      !moveDestinations.contains(sp.name) &&
+      !currentOrigins(sp.name)            &&
+      sp.pieces.has(moveTypes)
+    }
+    val existingCandidates = spaces(currentOrigins) filter { sp => sp.pieces.has(moveTypes) }
+    val candidates = if (addNewOrigin)
+      newcandidates:::existingCandidates
+    else
+      existingCandidates
+
+    val priorities = List(
+      new HighestScore[Space]("Most Moveable Pieces",
+      sp => {
+        val others = sp.pieces.totalOf(otherTypes) min numOthers
+        sp.pieces.totalOf(USTroops) + others
+      })
+    )
+
+    botLog(s"\nSelect Air Lift origin space with moveable: [${andList(moveTypes.toList)}]")
+    botLog(separator())
+    if (candidates.nonEmpty) {
+      Some(bestCandidate(candidates, priorities).name)
+    }
+    else {
+      botLog(s"No spaces with moveable pieces for AirLift")
       None
     }
   }
@@ -2201,7 +2250,8 @@ object Bot {
   //  This function implements a move operation for the given faction.
   //  This list of destCandidates should be sorted such the the higher priority
   //  spaces come first.
-  //  Note:  This function is NOT used for ARVN Transport
+  //  Note:  During Air Lift we must use the maxDests to also limit origin spaces
+  //         During Air Lift we must ensure no more than 4 non US Troops are moved
   //  Returns true if any following moves would need an activation roll.
   def movePiecesToDestinations(
     faction: Faction,
@@ -2212,13 +2262,21 @@ object Bot {
     maxDests: Option[Int] = None)(getNextDestination: MoveDestGetter): Boolean = {
 
     val maxDest = maxDests getOrElse NO_LIMIT
+    var allOrigins = Set.empty[String] // For air lift we must limit origins+destinations
     // ----------------------------------------
     def tryOrigin(destName: String, previousOrigins: Set[String]): Unit = {
+      val canAddAirLiftOrigin = if (moveDestinations contains destName)
+        allOrigins.size + moveDestinations.size < maxDest
+      else
+        allOrigins.size + moveDestinations.size < maxDest - 1 // This dest has not yet been added
       val origin = action match {
         // Only one origin allowed for Transport
         case Transport if previousOrigins.nonEmpty => None
         // Use the same (single) origin from previous Transport destinations
         case Transport if transportOrigin.nonEmpty => transportOrigin
+
+        case AirLift => selectAirLiftOrigin(allOrigins, canAddAirLiftOrigin)
+
         // Select the top priority origin 
         case _ => selectMoveOrigin(faction, destName, action, moveTypes, previousOrigins)
       }
@@ -2265,6 +2323,7 @@ object Bot {
             //  The dest space can no longer be considered for
             //  a destination or for an origin
             moveDestinations = moveDestinations :+ destName
+            allOrigins += originName
           }
           else
             botLog(s"\nNo pieces moved from $originName to $destName")
@@ -2279,8 +2338,17 @@ object Bot {
 
     // ----------------------------------------
     def tryDestination(lastWasSuccess: Boolean, needActivationRoll: Boolean, notReachable: Set[String]): Boolean = {
-      if (moveDestinations.size < maxDest) {
-        getNextDestination(lastWasSuccess, needActivationRoll, moveDestinations.toSet ++ notReachable) match {
+      val exhausted = if (action == AirLift)
+        allOrigins.size + moveDestinations.size < maxDest
+      else
+        moveDestinations.size < maxDest
+      if (!exhausted) {
+        // For Air Lift don't allow moving into any origin space
+        val prohibited = if (action == AirLift)
+          moveDestinations.toSet ++ notReachable ++ allOrigins
+        else
+          moveDestinations.toSet ++ notReachable
+        getNextDestination(lastWasSuccess, needActivationRoll, prohibited) match {
           case None => // No more destinations
             needActivationRoll  // Return so subsequent calls will know if activation is needed
 
@@ -3021,11 +3089,47 @@ object Bot {
       adviseSpaces.nonEmpty
     }
 
+    //  -------------------------------------------------------------
+    //  Implement the US Air Lift instructions from the US Trung cards.
+    //  1. Use move priorities
+    //  -  Max of four total origins/destinations
+    //  -  Max of two in Monsoon
+    //
+    // Mo_TyphoonKate - prohibits air lift, transport, and bombard, all other special activities are max 1 space
     def airLiftActivity(): Boolean = {
-      if (false)
-      logEndSA(US, AirLift)
-      false
+      if (momentumInPlay(Mo_TyphoonKate))
+        false
+      else {
+        // If Shaded Booby Traps then limit spaces to 2 unless this is a limOp
+        val maxSpaces: Option[Int]  = Some(if (game.inMonsoon) 2 else 4)
+  
+        val nextAirLiftCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
+          val candidates = game.spaces filterNot (sp => sp.isNorthVietnam || prohibited(sp.name))
+  
+          if (candidates.nonEmpty)
+            Some(pickSpaceAirLiftDest(candidates).name)
+          else
+            None
+        }
+  
+        logSAChoice(US, AirLift)
+        //  Since the air lift can be use during a sweep we must preserve the moveDestinations
+        val savedMovedDestinations = moveDestinations
+        val savedMovedPieces       = movedPieces
+        val moveTypes = (USTroops::ARVNTroops::Irregulars:::Rangers).toSet[PieceType]
+        movePiecesToDestinations(US, AirLift, moveTypes, false, maxDests = maxSpaces)(nextAirLiftCandidate)
+        val effective = moveDestinations.nonEmpty
+        moveDestinations = savedMovedDestinations
+        movedPieces      = savedMovedPieces
+
+        if (effective)
+          logEndSA(US, AirLift)
+        effective
+      }
     }
+
+    //  -------------------------------------------------------------
+    //  Implement the US Air Strike instructions from the US Trung cards.
     def airStrikeActivity(): Boolean = {
       if (false)
       logEndSA(US, AirStrike)

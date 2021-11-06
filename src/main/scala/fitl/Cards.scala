@@ -1635,12 +1635,16 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Unshaded),
               VC   -> (NotExecuted -> Unshaded)),
-      (faction: Faction) => false,
+      (faction: Faction) => game.numCardsInLeaderBox >= 2 &&
+                            game.usPoints > 40,
       (faction: Faction) => false,
       (faction: Faction) => singleNotYet(),
       (faction: Faction) => ()
     )),
     
+    // With the Pivotal events only the Unshaded functions are used.
+    // The unshadedEffective() function is used to determine if the
+    // faction can play the Pivotal event.
     // ------------------------------------------------------------------------
     entry(new EventCard(122, "Easter Offensive", SingleEvent, // NVA Pivotal event
       List(NVA, VC, ARVN, US),
@@ -1648,7 +1652,8 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Critical    -> Unshaded),
               VC   -> (NotExecuted -> Unshaded)),
-      (faction: Faction) => false,
+      (faction: Faction) => game.numCardsInLeaderBox >= 2 &&
+                            game.totalOnMap(_.pieces.totalOf(NVATroops)) > game.totalOnMap(_.pieces.totalOf(USTroops)),
       (faction: Faction) => false,
       (faction: Faction) => singleNotYet(),
       (faction: Faction) => ()
@@ -1661,7 +1666,8 @@ object Cards {
               ARVN -> (Critical    -> Unshaded),
               NVA  -> (NotExecuted -> Unshaded),
               VC   -> (NotExecuted -> Unshaded)),
-      (faction: Faction) => false,
+      (faction: Faction) => game.numCardsInLeaderBox >= 2 &&
+                            game.totalOnMap(_.pieces.totalOf(USTroops)) < 20,
       (faction: Faction) => false,
       (faction: Faction) => singleNotYet(),
       (faction: Faction) => ()
@@ -1674,7 +1680,8 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Unshaded),
               VC   -> (Critical    -> Unshaded)),
-      (faction: Faction) => false,
+      (faction: Faction) => game.numCardsInLeaderBox >= 2 &&
+                            numVCGuerrillasInSouth > 20,
       (faction: Faction) => false,
       (faction: Faction) => singleNotYet(),
       (faction: Faction) => ()

@@ -64,14 +64,14 @@ object FireInTheLake {
   val USPolicy_LBJ   = "LBJ"
   val USPolicy_Nixon = "Nixon"
 
-  sealed abstract class Faction(val name: String, val sortOrder: Int, val pivotCard: Int) {
+  sealed abstract class Faction(val name: String, val sortOrder: Int, val pivotCard: Int, val tieBreak: Int) {
     override def toString() = name
   }
 
-  case object US   extends Faction("US",   1, PivotalUS)
-  case object ARVN extends Faction("ARVN", 2, PivotalARVN)
-  case object VC   extends Faction("VC",   3, PivotalVC)
-  case object NVA  extends Faction("NVA",  4, PivotalNVA)
+  case object US   extends Faction("US",   1, PivotalUS,   4)
+  case object ARVN extends Faction("ARVN", 2, PivotalARVN, 2)
+  case object VC   extends Faction("VC",   3, PivotalVC,   1)
+  case object NVA  extends Faction("NVA",  4, PivotalNVA,  3)
 
   object Faction {
     val ALL       = Set[Faction](US, ARVN, VC, NVA)
@@ -84,6 +84,21 @@ object FireInTheLake {
       throw new IllegalArgumentException(s"Invalid faction name: $name")
     }
     def others(faction: Faction): Set[Faction] = ALL - faction
+  }
+
+  case class Score(faction: Faction, points: Int, score: Int)
+  // Order scores from highest to lowest
+  // With ties, Bot beat Humans
+  // Then ties are resolved VC, ARVN, NVA, then US
+  implicit val ScoreOrdering = new Ordering[Score] {
+    def compare(x: Score, y: Score) = {
+      if (x.score != y.score)
+        y.score - x.score  // Highest comes first
+      else if (game.isBot(x.faction) && !game.isBot(y.faction)) -1
+      else if (!game.isBot(x.faction) && game.isBot(y.faction)) 1
+      else
+        x.faction.tieBreak - y.faction.tieBreak
+    }
   }
 
   sealed trait BotEventPriority
@@ -122,7 +137,7 @@ object FireInTheLake {
     def eventType(faction: Faction)     = eventData(faction)._2
 
     def orderString  = factionOrder map (_.name) mkString ", "
-    def fullString = if (isCoup) s"$numAndName (Coup)" else s"$numAndName ($orderString)"
+    def fullString = if (isCoup) numAndName else s"$numAndName ($orderString)"
     
     def eventEffective(faction: Faction) = eventType(faction) match {
       case Unshaded => unshadedEffective(faction)
@@ -133,6 +148,10 @@ object FireInTheLake {
       case Unshaded => executeUnshaded(faction)
       case Shaded   => executeShaded(faction)
     }
+
+    def isCritical(faction: Faction)  = eventPriority(faction) == Critical
+    def isPerformed(faction: Faction) = eventPriority(faction) == Performed
+    def isIgnored(faction: Faction)   = eventPriority(faction) == NotExecuted
   }
 
   // Sort by card number
@@ -157,6 +176,16 @@ object FireInTheLake {
     RVN_Leader_FailedCoup129,
     RVN_Leader_FailedCoup130
   )
+
+  def rvnLeaderForCard(cardNum: Int): String = cardNum match {
+    case 125 => RVN_Leader_NguyenKhanh
+    case 126 => RVN_Leader_YoungTurks
+    case 127 => RVN_Leader_NguyenCaoKy
+    case 128 => RVN_Leader_NguyenVanThieu
+    case 129 => RVN_Leader_FailedCoup129
+    case 130 => RVN_Leader_FailedCoup130
+    case x   => throw new IllegalArgumentException("Bad card number for RVN Leader")
+  }
 
   // Pivotal card numbers
   val PivotalUS   = 121
@@ -229,6 +258,7 @@ object FireInTheLake {
   val LOC_CanTho_BacLieu          = "LOC Can Tho -- Bac Lieu"
   val LOC_CanTho_LongPhu          = "LOC Can Tho -- Long Phu"
 
+  val Cities       =  List(Hue, DaNang, Kontum, QuiNhon, CamRahn, AnLoc, Saigon, CanTho)
   val OutsideSouth =  List(NorthVietnam, CentralLaos, SouthernLaos, NortheastCambodia,
                            TheFishhook, TheParrotsBeak, Sihanoukville)
   
@@ -238,11 +268,15 @@ object FireInTheLake {
   // Order space name Cities first then Provinces the LoCs
   // Within each category sort alphabetically
   val SpaceNameOrdering = new Ordering[String] {
+    private def typeScore(name: String) =
+      if      (name startsWith "LOC") 3
+      else if (Cities contains name)  1
+      else                            2
+
     def compare(x: String, y: String) = {
-      (x startsWith "LOC", y startsWith "LOC") match {
-        case (false, true) => -1
-        case (true, false) => 1
-        case _             => x compare y
+      (typeScore(x), typeScore(y)) match {
+        case (sx, sy) if sx == sy => x compare y  // Alphabetical within same type
+        case (sx, sy)             => sx - sy
       }
     }
   }
@@ -912,8 +946,18 @@ object FireInTheLake {
 
     def reset(): Unit = groups = Map.empty.withDefaultValue(Pieces())
     def apply(name: String): Pieces = groups(name)
+    def set(name: String, pieces: Pieces): Unit = groups += name -> pieces
     def add(name: String, pieces: Pieces): Unit = groups += name -> (groups(name) + pieces)
-    def remove(name: String, pieces: Pieces): Unit = groups += name -> (groups(name) - pieces)
+    def remove(name: String, pieces: Pieces): Unit = {
+      // If the result removes all pieces then remove the entry
+      // from the groups map so it will not be include when toList
+      // is called.
+      val newPieces = groups(name) - pieces
+      if (newPieces.isEmpty)
+        groups -= name
+      else
+        groups += name -> newPieces
+    }
 
     def spaces = groups.keys.toSet
     def toList = groups.toList.sortBy(_._1)
@@ -1591,6 +1635,7 @@ object FireInTheLake {
     outOfPlay: Pieces                 = Pieces(),  // US and ARVN
     pivotCardsAvailable: Set[Faction] = Set.empty,
     capabilities: List[Capability]    = Nil,
+    ongoingEvents: List[String]       = Nil,  // Used to determine which capability/momentum was play most recently
     rvnLeaders: List[String]          = List(RVN_Leader_DuongVanMinh),  // Head of list is current leader
     trungDeck: List[TrungCard]        = Nil,  // The head of the list is the top of the deck
     momentum: List[String]            = Nil,
@@ -1599,7 +1644,7 @@ object FireInTheLake {
     currentCard: Int                  = 0,
     onDeckCard: Int                   = 0,
     prevCardWasCoup: Boolean          = false,
-    coupCardsPlayed: Int              = 0,  // Number of Coup cards played/ignored thus far
+    coupCardsPlayed: Int              = 0,    // Number of Coup cards played/ignored thus far
     botLogging: Boolean               = false,
     history: Vector[GameSegment]      = Vector.empty,
     log: Vector[String]               = Vector.empty) {  // Log of the cuurent game segment
@@ -1615,13 +1660,22 @@ object FireInTheLake {
     lazy val nonLocSpaces     = spaces filterNot (_.isLoC)
     lazy val citySpaces       = (spaces filter (_.isCity))
     lazy val patrolSpaces     = locSpaces ::: citySpaces
+    
+    // rvnLeaders always contains "Duong Van Minh" which is
+    // not a card, hence size - 1
+    lazy val numCardsInLeaderBox = rvnLeaders.size - 1
 
     val agitateTotal = vcResources
 
     def actionSummary: Seq[String] = {
       val b = new ListBuffer[String]
 
-      if (isCoupRound) {
+      if (coupCardsPlayed == totalCoupCards) {
+        val winner = scores.head.faction
+        val player = if (game.isBot(winner)) "Bot" else "Player"
+        s"The game has ended with a $winner $player victory"
+      }
+      else if (isCoupRound) {
         s"${ordinal(coupCardsPlayed + 1)} Coup! round"
       }
       else {
@@ -1653,6 +1707,8 @@ object FireInTheLake {
     else
       deck(currentCard).factionOrder find sequence.eligibleThisTurn
     
+    def isActingFaction(faction: Faction) = actingFaction exists (_ == faction)
+
     // Return faction that would be following the acting faction 
     // on the current card.
     def followingFaction: Option[Faction] = actingFaction match {
@@ -1664,6 +1720,7 @@ object FireInTheLake {
     
     def executingPivotalEvent = deck.isPivotalCard(currentCard) && sequence.numActors == 0
 
+    def gameEnded = coupCardsPlayed == totalCoupCards
     def isFinalCampaign = coupCardsPlayed == (totalCoupCards - 1)
     def isCoupRound = cardsDrawn > 0 && deck(currentCard).isCoup
     def onDeckIsCoup = onDeckCard > 0 &&  deck(onDeckCard).isCoup
@@ -1701,6 +1758,12 @@ object FireInTheLake {
     def nvaScore   = nvaPoints  - 18
     def arvnScore  = arvnPoints - 50
     def vcScore    = vcPoints   - 35
+
+    lazy val scores = List(
+      Score(VC,   game.vcPoints, game.vcScore),
+      Score(ARVN, game.arvnPoints, game.arvnScore),
+      Score(NVA,  game.nvaPoints, game.nvaScore),
+      Score(US,   game.usPoints, game.usScore)).sorted
 
     def numPieceAvailable(pieceType: PieceType): Int = {
       availablePieces.only(normalizedType(pieceType)).total
@@ -1780,29 +1843,27 @@ object FireInTheLake {
   }
 
   def statusSummary: Seq[String] = {
+    val scoreLabels: Map[Faction, String] = Map(
+      US   -> "Total Support + Avail US",
+      ARVN ->"Coin Control + Patronage",
+      NVA  -> "NVA Control + NVA Bases",
+      VC   -> "Total Opp. + VC Bases"
+    )
+    val padLen = scoreLabels.values.map(_.length).max
     val b = new ListBuffer[String]
-    def score(faction: Faction): String = {
-      val (points, score, auto)= faction match {
-      case US   => (game.usPoints,   game.usScore,   autoVictory(US))
-      case NVA  => (game.nvaPoints,  game.nvaScore,  autoVictory(NVA))
-      case ARVN => (game.arvnPoints, game.arvnScore, autoVictory(ARVN))
-      case VC   => (game.vcPoints,   game.vcScore,   autoVictory(VC))
-      }
-
-      val auto_display = if (auto) "** Auto victory **" else ""
-      f"$points%2d   ($score%3d)  $auto_display"
+    def displayScore(score: Score): String = {
+      val label = s"${padLeft(scoreLabels(score.faction), padLen)} : "
+      val auto_display = if (autoVictory(score.faction)) "** Auto victory **" else ""
+      f"${label}%s${score.points}%2d   (${score.score}%3d)  $auto_display"
     }
+
     val coupCardChance = chanceOfDrawingACoupCard match {
       case (chance, remaining) =>  f"${chance}%.3f  (${remaining} cards remaining in campaign)"
     }
 
     b += "Game Summary"
     b += separator()
-    b += s"Total Support + Avail US : ${score(US)}"
-    b += s"Coin Control + Patronage : ${score(NVA)}"
-    b += s"NVA Control + NVA Bases  : ${score(NVA)}"
-    b += s"Total Opp. + VC Bases    : ${score(NVA)}"
-
+    game.scores foreach { s => b += displayScore(s) }
     b += separator()
     if (game.trackResources(ARVN))
       b += f"ARVN resources : ${game.arvnResources}%2d"
@@ -1957,8 +2018,8 @@ object FireInTheLake {
     b.toList
   }
 
-  def spaceNames(spaces: Traversable[Space]): List[String] = (spaces map (_.name)).toList.sorted
-  def spaces(names: Traversable[String]): List[Space] = (names map game.getSpace).toList.sortBy(_.name)
+  def spaceNames(spaces: Traversable[Space]): List[String] = (spaces map (_.name)).toList.sorted(SpaceNameOrdering)
+  def spaces(names: Traversable[String]): List[Space] = (names map game.getSpace).toList.sortBy(_.name)(SpaceNameOrdering)
 
   // We assume that the current working directory
   // set as the installed directory and thus the game directory
@@ -2054,12 +2115,8 @@ object FireInTheLake {
 
           //  If VC is a Bot then we use the vcResources as the Agitate Total
           //  This is initialized by rolling a d3
-          if (game.isBot(VC)) {
-            val agitateTotal = d3
-            log(s"\nRolling d3 to set the Agitate Total (VC resources cylinder)")
-            log(separator())
-            setAgitateTotal(d3)
-          }
+          if (game.isBot(VC))
+            initAgitateTotal()
 
           // Ask user for the first two event cards
           // and create the initial save point
@@ -2083,6 +2140,11 @@ object FireInTheLake {
     for (sp <- scenario.spaces)
       spaces = sp :: (spaces filterNot (_.name == sp.name))
 
+    val (capabilities, ongoingEvents) = if (usePeriodCapabilities)
+      (scenario.periodCapabilities, scenario.periodCapabilities map (_.name))
+    else
+      (Nil, Nil)
+
     GameState(
       scenario.name,
       humanFactions,
@@ -2100,7 +2162,8 @@ object FireInTheLake {
       Pieces(), // casualties
       scenario.outOfPlay,
       scenario.pivotCardsAvailable,
-      if (usePeriodCapabilities) scenario.periodCapabilities else Nil,
+      capabilities,
+      ongoingEvents,
       scenario.rvnLeadersInPlay,
       trungDeck
     )
@@ -2222,6 +2285,11 @@ object FireInTheLake {
     val desc = s"The Bot acts on the current card"
   }
 
+  object CoupCmd extends Command {
+    val name = "coup"
+    val desc = s"Resolve the Coup! Round"
+  }
+
   object ShowCmd extends Command {
     val name = "show"
 
@@ -2319,10 +2387,11 @@ object FireInTheLake {
     }
     else {
       val nextCard = askCardNumber("\nEnter the number of the next Event card: ")
-      game = game.copy(currentCard  = game.onDeckCard,
-                       onDeckCard   = nextCard,
-                       cardsDrawn   = game.cardsDrawn + 1,
-                       sequence     = newSequence)
+      game = game.copy(currentCard     = game.onDeckCard,
+                       onDeckCard      = nextCard,
+                       prevCardWasCoup = game.isCoupRound,
+                       cardsDrawn      = game.cardsDrawn + 1,
+                       sequence        = newSequence)
     }
 
     log()
@@ -2330,29 +2399,631 @@ object FireInTheLake {
     log(s"On deck card: ${deck(game.onDeckCard)}")
   }
 
-  // Resolve the Coup phase, then reset the sequence of play and draw the next card.
-  // ------------------
-  // Mo_Oriskany            - Shaded (prohibits degrade of trail) (includes air strike, coup round, NOT evnts!)
-  // Mo_Medevac_Unshaded    - In Commitment Phase (immediately move all US TROOPS in CASUALTIES to AVAILABLE,
-  //                          no TROOPS go out of play.  See note: For effect when #73 Great Society is played.
+
+  def showScores(header: String): Unit = {
+
+    val winner = game.scores.head
+
+    log()
+    log(separator(char = '='))
+    log(header)
+    log(s"$winner wins!")
+    log(separator(char = '='))
+    log()
+    log("Victory Margins")
+    log(separator())
+    for (Score(faction, _, score) <- game.scores)
+      log(s"${padLeft(faction, 4)}  ${score}")
+  }
+
+  // Resolve Coup Round
+  def resolveCoupCard(): Unit = {
+    val coupCard         = deck(game.currentCard)
+    val isFailedCoup     = game.currentCard == 129 || game.currentCard == 130
+    val skipCoupRound    = game.prevCardWasCoup
+    val newLeader        = rvnLeaderForCard(game.currentCard)
+    val isFinalCoupRound = game.coupCardsPlayed == game.totalCoupCards - 1
+
+    def placeLeader(): Unit = {
+      if (game.rvnLeaders.size == 1) {
+        log(s"\nPlace $coupCard in the RVN Leader Box")
+        game = game.copy(rvnLeaders = newLeader::game.rvnLeaders)
+      }
+      else if (isFailedCoup) {
+        log(s"\nPlace $coupCard beneath the other cards in the RVN Leader Box")
+        // Place above RVN_Leader_DuongVanMinh which is printed on the map
+        game = game.copy(rvnLeaders = game.rvnLeaders.init:::List(newLeader, game.rvnLeaders.last))
+      }
+      else {
+        log(s"\nPlace $coupCard in the RVN Leader Box on top of the stack")
+        game = game.copy(rvnLeaders = newLeader::game.rvnLeaders)
+      }
+    }
+
+    log(s"Coup! Card: $coupCard")
+    log(separator())
+    
+    if (isFailedCoup)
+      coupCard.executeUnshaded(ARVN)  // ARVN Desertion
+
+    // Place the leader card in the Leader Box
+    placeLeader()
+    
+    val gameOver = if (isFailedCoup) {
+      //  We just drew a Coup! card immediately after a Coup round.
+      //  We resolve the RVN Leader and any immediate effects from
+      //  the Coup event,  but we do not conduct a Coup Round.
+      log("\nSkipping this Coup! round (two Coup! cards in a row)")
+      log(separator())
+
+      if (isFinalCoupRound) {
+        showScores("Game over after final Coup! Card")
+        true
+      }
+      else
+        false // Game has not ended
+    }
+    else {
+      var gameEnded = false
+      log(s"\nConduct a Coup! Round")
+      log(separator())
+
+      log(s"\nVictory Phase")
+      log(separator())
+      val leader = game.scores.head
+      if (game.isBot(leader.faction) && leader.score > 0) {
+        val coupRound = game.coupCardsPlayed + 1
+        showScores(s"Game over in the ${ordinal(coupRound)} Coup! round")
+
+        //  Allow the user to continue even though a Bot achieved victory
+        //  Many people like to play it out until the end of the final Coup round.
+        gameEnded = !askYorN("\nDo you want to continue playing this game? (y/n)")
+      }
+
+      if (!gameEnded) {
+        coupResourcesPhase()
+        coupSupportPhase()
+        coupRedeployPhase()
+  
+        if (isFinalCoupRound) {
+          showScores("Game over in final Coup! Round")
+          gameEnded = true
+        }
+        else {
+          coupCommitmentPhase()
+          coupResetPhase()
+        }
+      }
+      gameEnded
+    }
+
+    // We set coupCardsPlayed to totalCoupCards explicitly
+    // So we know the game is over even if a Bot won in
+    // an early Coup round.
+    if (gameOver)
+      game = game.copy(coupCardsPlayed = game.totalCoupCards)
+    else
+      game = game.copy(coupCardsPlayed = game.coupCardsPlayed + 1)
+  }
+
+  // Resources Phase of Coup Round
+  // Mo_Oriskany - Shaded (prohibits degrade of trail) (includes air strike, coup round, NOT evnts!)
+  def coupResourcesPhase(): Unit = {
+    val sabotagePriorities = List(Bot.HighestEconValue)
+    val canSabotage = (sp: Space) =>
+      sp.terror == 0 &&
+      (sp.pieces.totalOf(Guerrillas) > sp.pieces.totalOf(CoinPieces) ||
+       (spaces(getAdjacentCities(sp.name)) exists (!_.coinControlled)))
+
+    def sabotageCandidates = game.locSpaces filter canSabotage
+  
+    def nextBotSabotage(): Unit = {
+      val candidates = sabotageCandidates
+      if (game.terrorMarkersAvailable > 0 && candidates.nonEmpty) {
+        val sp = Bot.bestCandidate(candidates, sabotagePriorities)
+        addTerror(sp.name, 1)
+        nextBotSabotage()
+      }
+    }
+
+    def nextHumanSabotage(): Unit = {
+      val candidates = sabotageCandidates
+      val numMarkers = game.terrorMarkersAvailable
+      if (numMarkers > 0 && candidates.nonEmpty) {
+        val choices = candidates.map(sp => sp.name -> sp.name)
+        val prompt  = s"\nChoose LoC to sabotage (${amountOf(numMarkers, "sabotage marker")} available):"
+        val name = askMenu(choices, prompt).head
+          addTerror(name, 1)
+          nextHumanSabotage()
+      }
+    }
+
+    log("\nResources Phase")
+    log(separator(char = '='))
+
+    // Sabotage Locs --------------------------------------
+    log("\nSabotage LoCs")
+    log(separator())
+    if (sabotageCandidates.isEmpty)
+      log("There are not LoCs that can be sabotaged")
+    else if (game.terrorMarkersAvailable == 0)
+      log("There are no sabotage markers available")
+    else {
+      // If there are enough terror markers to sabotage all candidates
+      // then we just place them all.
+      // Otherwise we allow the VC faction to choose where they go.
+      if (game.terrorMarkersAvailable >= sabotageCandidates.size)
+        nextBotSabotage()
+      else {
+        log("\nThere are not enough sabotage markers for all LoCs")
+        log("VC will choose which LoCs are sabotaged")
+        if (game.isBot(VC))
+          nextBotSabotage()
+        else
+          nextHumanSabotage()
+      }
+    }
+    pause()
+
+    // Degrade Trail --------------------------------------
+    log("\nDegrade the Trail")
+    log(separator())
+    if (!spaces(LaosCambodia).exists(_.coinControlled))
+      log("There are no COIN controlled spaces in Laos or Cambodia")
+    else if (game.trail == TrailMin)
+      log("The trail is already at the 1 box.")
+    else if (momentumInPlay(Mo_Oriskany))
+      log(s"Degrading the Trail is prohibity by Momentum: $Mo_Oriskany")
+    else
+      degradeTrail(1)
+    pause()
+
+    // ARNV EArnings  -------------------------------------
+    log("\nARVN Earnings")
+    log(separator())
+    val newEcon = (game.locSpaces map (_.currentEconValue)).sum
+    if (game.trackResources(ARVN))
+      increaseResources(ARVN, game.usAid + newEcon)
+    else
+      log("ARVN resources are not being tracked")
+    setEconValue(newEcon)
+    pause()
+
+    val vcBasesOnMap  = game.totalOnMap(_.pieces.totalOf(VCBases))
+    val nvaBasesOnMap = game.totalOnMap(_.pieces.totalOf(NVABases))
+    log("\nInsurgent Earnings")
+    log(separator())
+    if (game.trackResources(VC) && vcBasesOnMap > 0)
+      increaseResources(VC, vcBasesOnMap)
+    else
+      log("VC resources are not being tracked")
+
+    if (game.trackResources(NVA))
+      increaseResources(NVA, nvaBasesOnMap + (2 * game.trail))
+    else
+      log("NVA resources are not being tracked")
+    pause()
+
+    log("\nCasualties and Aid")
+    log(separator())
+    decreaseUsAid(game.casualties.total * 3)
+    pause()
+  }
+
+  // Support Phase of Coup Round
+  // RVN_Leader_NguyenCaoKy - US/ARVN pacification costs 4 resources per Terror/Level
   // Mo_BlowtorchKomer      - Pacify costs 1 resource per step/terror, during Support phase
   // MandateOfHeaven_Shaded - ARVN Pacify is maximum 1 space (instead of 4)
   // Cadres_Unshaded        - VC to Agigate must remove 2 VC guerrillas per space (or not possible there)
-  // RVN_Leader_NguyenCaoKy - US/ARVN pacification costs 4 resources per Terror/Level
-  def resolveCoupCard(): Unit = {
-    
-    game = game.copy(coupCardsPlayed = game.coupCardsPlayed + 1)
-    log("Epoch resolution has not been implemented.")
-    // NOTE: Check game.prevCardWasCoup
-    //       IF so resolve the RVN Leader and any immediate effects
-    //       but do not conduct Coup round.
-    //       If it is the final Coup card determine victory
-    // All factions are eligible after a Coup round
-    game = game.copy(sequence = SequenceOfPlay())
-    
-    // ....
-    
+  def coupSupportPhase(): Unit = {
+    // The leader would have just been played and thus take precedence
+    val nguyenCaoKy = game.trackResources(ARVN) && isRVNLeader(RVN_Leader_NguyenCaoKy)
+    val blowtorch   = game.trackResources(ARVN) && momentumInPlay(Mo_BlowtorchKomer) && !nguyenCaoKy
+    val mandate     = capabilityInPlay(MandateOfHeaven_Shaded)
+    val cadres      = capabilityInPlay(Cadres_Unshaded)
+    val pacifyNotes = List(
+      noteIf(nguyenCaoKy, "US/ARVN pacification cost 4 resources per Terror/Level"),
+      noteIf(blowtorch, "Pacification costs 1 resource per step/terror"),
+      noteIf(mandate, "ARVN Pacify is maximum 1 space (instead of 4)")
+    ).flatten
+    val agitateNotes = List(
+      noteIf(cadres, "VC to Agigate must remove 2 VC guerrillas per space")
+    ).flatten
+
+    val pacifyCost     = if (nguyenCaoKy) 4 else if (blowtorch) 1 else 3
+    val agitateCost    = 1
+    var botPoints      = rollDice(2)  // When both US and ARVN are Bots
+    var agitateSpaces  = Set.empty[String]
+    val cadresUnshaded = capabilityInPlay(Cadres_Unshaded)
+    var usSpaces       = Set.empty[String]
+    var arvnSpaces     = Set.empty[String]
+
+    def pacifySpaces   = usSpaces ++ arvnSpaces
+    def recordSpace(faction: Faction, name: String): Unit =
+      if (faction == US)
+        usSpaces += name
+      else
+        arvnSpaces += name
+
+    def pacifyCandidate(faction: Faction)(sp: Space) = {
+      val maxSupport = if (game.isHuman(faction) || faction == US) ActiveSupport else PassiveSupport
+      val troops     = if (faction == US) USTroops else ARVNTroops
+      !pacifySpaces(sp.name)    &&
+      sp.coinControlled         &&
+      sp.support < maxSupport   &&
+      sp.pieces.has(ARVNPolice) &&
+      sp.pieces.has(troops)
+    }
+    def canPacify(faction: Faction) =
+      pacifySpaces.size < 4 &&
+      (faction == US || !mandate || arvnSpaces.isEmpty) &&
+      (if (game.trackResources(ARVN)) game.arvnResources >= pacifyCost else botPoints > 0)
+ 
+    def pacify(faction: Faction): Unit = {
+      val candidates = game.nonLocSpaces filter pacifyCandidate(faction)
+
+      if (canPacify(faction) && candidates.nonEmpty) {
+        if (game.isBot(faction)) {
+          val sp = if (faction == US)
+            Bot.US_Bot.pickSpaceTowardActiveSupport(candidates)
+          else
+            Bot.ARVN_Bot.pickSpaceTowardPassiveSupport(candidates)
+          botPoints -= Bot.pacifySpace(sp.name, faction, coupRound = true, coupPoints = botPoints)
+          recordSpace(faction, sp.name)
+          pacify(faction)
+        }
+        else {
+          val choices = spaceNames(candidates).map(n => n -> n) :+
+             ("finished" -> "Finished pacifying spaces")
+          
+          val spaceMsg = s"${amountOf(4 - pacifySpaces.size, "space")} remaining"
+          val cashMsg  = amountOf(game.arvnResources, "ARVN resource")
+          println(s"\n$faction Pacification ($spaceMsg, $cashMsg)")
+          askMenu(choices, "Choose space to pacify:").head match {
+            case "finished" =>
+            case name       =>
+              Human.pacifySpace(name, faction, coupRound = true)
+              recordSpace(faction, name)
+              pacify(faction)
+          }
+        }
+      }
+    }
+
+    def agitateCandidate(sp: Space) = {
+      !agitateSpaces(sp.name)       &&
+      sp.support > ActiveOpposition &&
+      sp.pieces.has(VCPieces)       &&
+      !sp.coinControlled            &&
+      (!cadresUnshaded || sp.pieces.totalOf(VCGuerrillas) >= 2)
+    }
+    def canAgitate =
+      agitateSpaces.size < 4 &&
+      (if (game.trackResources(VC)) game.vcResources > 0 else game.agitateTotal > 0)
+
+    def agitate(): Unit = {
+      val candidates = game.nonLocSpaces filter agitateCandidate
+
+      if (canAgitate && candidates.nonEmpty) {
+        if (game.isBot(VC)) {
+          val sp = Bot.VC_Bot.pickSpaceTowardActiveSupport(candidates)
+          Bot.VC_Bot.agitateSpace(sp.name, coupRound = true)
+          agitateSpaces += sp.name
+          agitate()
+        }
+        else {
+          val choices = spaceNames(candidates).map(n => n -> n) :+
+             ("finished" -> "Finished agitating spaces")
+          
+          val spaceMsg = s"${amountOf(4 - agitateSpaces.size, "space")} remaining"
+          val cashMsg  = amountOf(game.vcResources, "VC resource")
+          println(s"\nVC Agitation ($spaceMsg, $cashMsg)")
+          askMenu(choices, "Choose space to agitate:").head match {
+            case "finished" =>
+            case name       =>
+              Human.agitateSpace(name, coupRound = true)
+              agitateSpaces += name
+              agitate()
+          }
+        }
+      }
+
+    }
+
+    log(s"\nSupport Phase")
+    log(separator(char = '='))
+
+    log("\nPacification")
+    log(separator())
+    for (note <- pacifyNotes)
+      log(note)
+
+    loggingPointsChanges {
+      if (!game.trackResources(ARVN))
+        log(s"Rolling 2d6 to determine max pacification: $botPoints")
+      pacify(US)
+      if (usSpaces.isEmpty)
+        log("\nUS did not pacify any spaces")
+      if (game.isBot(US) || usSpaces.isEmpty)
+      pause()
+
+      pacify(ARVN)
+      if (arvnSpaces.isEmpty)
+        log("\nARVN did not pacify any spaces")
+      if (game.isBot(ARVN) || arvnSpaces.isEmpty)
+      pause()
+  
+      log("\nAgitation")
+      log(separator())
+      for (note <- agitateNotes)
+        log(note)
+      agitate()
+      if (agitateSpaces.isEmpty)
+        log("\nVC did not agitate any spaces")
+      if (game.isBot(VC) || agitateSpaces.isEmpty)
+      pause()
+    }
   }
+
+  // Used by both Human/ARV_Bot
+  def arvnRedeployTroopDestinations(): List[String] = {
+    val troopDest = (sp: Space) =>
+      sp.name == Saigon        ||
+      sp.pieces.has(CoinBases) ||
+      (sp.isCity && !sp.nvaControlled)
+    spaceNames(game.spaces filter troopDest)
+  }
+
+  // Used by both Human/ARV_Bot
+  def arvnRedeployPoliceDestinations(): List[String] = {
+    val policeDest = (sp: Space) => sp.isLoC || (sp.coinControlled && isInSouthVietnam(sp.name))
+    spaceNames(game.spaces filter policeDest)
+  }
+
+  // Used by both Human/ARV_Bot
+  // Returns spaces with ARVN Troops that must redeploy
+  def arvnRedeployMandatoryTroopOrigins(): List[String] = {
+    val isOrigin = (sp: Space) =>
+      sp.pieces.has(ARVNTroops) && 
+      (sp.isLoC || (sp.isProvince && !sp.pieces.has(CoinBases)))
+    spaceNames(game.spaces filter isOrigin)
+  }
+
+  def arvnCanRedeployTroops: Boolean = {
+    val arvnTroopsOnMap        = game.spaces exists (_.pieces.has(ARVNTroops))
+    val troopDestOutsideSaigon = arvnRedeployTroopDestinations() exists (_ != Saigon)
+    val troopsOutsideSaigon    = game.spaces exists (sp => sp.name != Saigon && sp.pieces.has(ARVNTroops))
+
+    arvnTroopsOnMap &&
+    (troopsOutsideSaigon || troopDestOutsideSaigon)
+  }
+
+  // As long as there is at least on police cube on the map
+  // it can be redeployed
+  def arvnCanRedeployPolice: Boolean = game.spaces exists (_.pieces.has(ARVNPolice))
+
+    // Used by both Human/ARV_Bot
+  def nvaRedeployTroopDestinations(): List[String] = {
+    val troopDest = (sp: Space) => sp.pieces.has(NVABases)
+    spaceNames(game.spaces filter troopDest)
+  }
+
+  def nvaCanRedeployTroops: Boolean = {
+    val nvaDests = nvaRedeployTroopDestinations()
+    val nvaTroopsOnMap = game.spaces exists (_.pieces.has(NVATroops))
+    val nvaTroopsNotAtBase = game.spaces exists (sp => sp.pieces.has(NVATroops) && !sp.pieces.has(NVABases))
+
+    nvaTroopsOnMap    &&
+    nvaDests.nonEmpty &&
+    (nvaDests.size > 1 || nvaTroopsNotAtBase)
+  }          
+
+  // Redeploy Phase of Coup Round
+  def coupRedeployPhase(): Unit = {
+
+    def redepoyCOINOutOfLaosCambodia(): Unit = {
+      var nothingMoved = true
+      for (sp <- spaces(LaosCambodia)) {
+        val usTroops = sp.pieces.only(USTroops)
+        val others   = sp.pieces.only(ARVNTroops::ARVNPolice::Irregulars:::Rangers)
+        if (usTroops.nonEmpty || others.nonEmpty)
+          nothingMoved = false
+        removeToCasualties(sp.name, usTroops)
+        removeToAvailable(sp.name, others)
+      }
+      if (nothingMoved)
+        log("No COIN forces in Laos or Cambodia")
+    }
+
+    log(s"\nRedeploy Phase")
+    log(separator(char = '='))
+    // Don't log any control changes until we are finished with the entire process.
+    loggingControlChanges {
+
+      log("\nLaos and Cambodia")
+      log(separator())
+      redepoyCOINOutOfLaosCambodia()
+      pause()
+
+      log("\nARVN Redeploy")
+      log(separator())      
+      if (game.isBot(ARVN))
+        Bot.ARVN_Bot.redeployARVNForces()
+      else
+        Human.redeployARVNForces()
+      pause()
+
+      log("\nNVA Redeploy")
+      log(separator())
+      if (game.isBot(NVA))
+        Bot.NVA_Bot.redeployNVATroops()
+      else
+        Human.redeployNVATroops()
+       pause()
+    }
+  }
+
+  // Commitment Phase of Coup Round
+  // Mo_Medevac_Unshaded    - In Commitment Phase (immediately move all US TROOPS in CASUALTIES to AVAILABLE,
+  //                          no TROOPS go out of play, bases still do.
+  //                          See note: For effect when #73 Great Society is played.
+  def coupCommitmentPhase(): Unit = {
+    def troopsAndBasesAvailable = game.availablePieces.totalOf(USTroops) +
+                                  game.availablePieces.totalOf(USBase)
+
+    loggingControlChanges {
+      //  Save the set of coin controlled spaces
+      //  This is used during the commitment phase while
+      //  pieces are placed/moved.  The new control values are
+      //  not adjusted until the end of the phase.
+      val coinControlledSpaces = spaceNames(game.spaces filter (sp => !sp.isLoC && sp.coinControlled)).toSet
+
+      log(s"\nCommitment Phase")
+      log(separator(char = '='))
+      if (game.casualties.has(USTroops) && momentumInPlay(Mo_Medevac_Unshaded)) {
+        log(s"US Troops in the casualties box move to available: [Momentum: $Mo_Medevac_Unshaded]")
+        moveCasualtiesToAvailable(game.casualties.only(USTroops))
+      }
+  
+      // Determine the US Bot's new US Policy
+      if (game.isBot(US)) {
+        log("\nSet US Policy")
+        log(separator())
+        //  The Coup Card for the current Coup round has not yet
+        //  been acccounted for hence the -2 below.
+        val isPenultimateCoupRound = game.coupCardsPlayed == game.totalCoupCards - 2
+        val die = d6
+        val newPolicy = if (isPenultimateCoupRound) {
+          log("Upcoming campaign is the final campaign")
+          USPolicy_Nixon
+        }
+        else {
+          log(s"Rolling d6 to determine new US Policy: $die")
+          die match {
+            case _ if die == game.numCardsInLeaderBox => USPolicy_JFK
+            case _ if die >  game.numCardsInLeaderBox => USPolicy_LBJ
+            case _                                    => USPolicy_Nixon
+          }
+        }
+        setUSPolicy(newPolicy)
+      }
+  
+
+      // Take 1 in 3 US Troop casualties and all US base casualties out of play.
+      val numTroopsOutOfPlay = game.casualties.totalOf(USTroops) / 3
+      val toOutOfPlay = game.casualties.only(USBase).add(numTroopsOutOfPlay, USTroops)
+      log("\nROTATION: Move US base casualites and 1/3 US Troop casualties to Out of Play")
+      log(separator())
+      if (toOutOfPlay.nonEmpty)
+        moveCasualtiesToOutOfPlay(toOutOfPlay)
+      else
+        log("There are no US bases or Troops to move Out of Play")
+  
+      // Move US Irregular casualties to available
+      log("\nROTATION: Move US Irregular casualties to Available")
+      log(separator())
+      val irregulars = game.casualties.only(Irregulars_U)
+      if (irregulars.nonEmpty)
+        moveCasualtiesToAvailable(game.casualties.only(Irregulars_U))
+      else
+        log("There are no US Irregulars in the casualties box")
+      pause()
+
+      // Then US places all remaining US Troop casualties into any COIN controlled spaces,
+      // LoCs, or Saigon.
+      val numUSPlacedOnMap = game.casualties.totalOf(USTroops)
+      
+      if (numUSPlacedOnMap > 0) {
+        log("\nROTATION: Place the remaining US Troop casualties on the map")
+        log(separator())
+        if (game.isBot(US))
+          Bot.US_Bot.placeUSCasualtyTroopsOnMap(coinControlledSpaces)
+        else
+          Human.placeUSCasualtyTroopsOnMap(coinControlledSpaces)
+        pauseIfBot(US)
+      }
+  
+      // The US may then move US Troops totaling up to 10 minus the number of casualties
+      // placed on the map, plus up to 2 US Bases among the US available box, any COIN 
+      // controlled spaces, LoCs and Saigon.
+      val maxUSTroopsToMove = (10 - numUSPlacedOnMap) max 0
+      log(s"\nROTATION: Move up to ${amountOf(maxUSTroopsToMove, "US Troop")} and")
+      log("up to 2 bases among Available box, COIN controlled spaces, LoCs and Saigon")
+      log(separator())
+
+      val numAvailableBefore = troopsAndBasesAvailable
+      if (game.isBot(US))
+        Bot.US_Bot.moveUSCommitmentPieces(maxUSTroopsToMove, coinControlledSpaces)
+      else
+        Human.moveUSCommitmentPieces(maxUSTroopsToMove, coinControlledSpaces)
+      pauseIfBot(US)
+      val numToAvailable = (troopsAndBasesAvailable - numAvailableBefore) max 0
+      // Withdrawal: For every 2 US pieces just moved from the map to available, the
+      // VC may shift 1 Population by 1 level toward Opposition.  No space may be shifted
+      // by more than 1 level.
+      val numVCPopShifts = numToAvailable / 2  // Number of Withdrawal shifts for VC
+      log(s"\nWITHDRAWAL: For every 2 US pieces just removed to Available, VC shifts")
+      log("1 population of support by 1 level toward Active Opposition")
+      log(separator())
+      if (numVCPopShifts > 0) {
+        if (game.isBot(VC))
+          Bot.VC_Bot.usWithdrawalShifts(numVCPopShifts)
+        else
+          Human.usWithdrawalShifts(numVCPopShifts)
+      }
+      else
+        log("No shifts in support possible")
+      if (numVCPopShifts == 0 || game.isBot(VC))
+        pause()
+    }
+  }
+
+  // Reset Phase of Coup Round
+  def coupResetPhase(): Unit = {
+    log(s"\nReset Phase")
+    log(separator(char = '='))
+    if (game.trail == TrailMin) {
+      log("The Trail is in 0 box")
+      improveTrail(1)
+    }
+    else if (game.trail == TrailMax) {
+      log("The Trail is in 4 box")
+      if (momentumInPlay(Mo_Oriskany))
+        log(s"The trail cannot be degraded [Momentum: $Mo_Oriskany]")
+      else
+        degradeTrail(1)
+    }
+
+    val sortedNames = spaceNames(game.spaces)
+    // Remove all Terror and Sabotage markers
+    for (name <- sortedNames; sp = game.getSpace(name); num = sp.terror; if num > 0)
+      removeTerror(name, num)
+
+    for (name <- sortedNames) {
+      val sp = game.getSpace(name)
+      val active = sp.pieces.only(Irregulars_A::Rangers_A::ActiveGuerrillas)
+      hidePieces(name, active)
+    }
+
+    if (game.momentum.nonEmpty)  {
+      log("Place the following momentum cards in the discard pile:")
+      wrap("", game.momentum) foreach { c => log(c) }
+    }
+
+    // All factions are eligible after a Coup round
+    log("\nMove all faction cylinders to the Eligible Factions box.")
+    game = game.copy(sequence = SequenceOfPlay())
+
+    if (game.isBot(VC) && game.agitateTotal == 0)
+      initAgitateTotal()
+
+    if (game.humanFactions.size != 4) {
+      game = game.copy(trungDeck = shuffle(game.trungDeck))
+      log("\nThe Trung deck has been reshuffled")
+  }
+  pause()i
+}
+
 
   def adjustFactionEligibility(): Unit = {
     val oldSequence = game.sequence
@@ -2368,6 +3039,35 @@ object FireInTheLake {
       log(s"Move the ${andList(eligible)} ${pluralize(eligible.size, "cylinder")} to the Eligible box")
     if (ineligible.nonEmpty)
       log(s"Move the ${andList(ineligible)} ${pluralize(ineligible.size, "cylinder")} to the Ineligible box")
+  }
+
+  // Allow user to do common commands and to resolve the 
+  // Coup card.
+  @tailrec def processCoupCommand(): Unit = {
+    val opts      = orList(List(CoupCmd.name, "?"))
+    val coupNum   = game.coupCardsPlayed + 1
+    val card      = deck(game.currentCard)
+    val prompt = {
+      val promptLines = new ListBuffer[String]
+      promptLines += ""
+      promptLines += s">>> ${ordinal(coupNum)} Coup Round <<<"
+      promptLines += separator()
+      promptLines += s"Current card: ${card.fullString}"
+      promptLines += s"($opts): "
+      promptLines.mkString("\n", "\n", "")
+    }
+
+    val (cmd, param) = askCommand(prompt, CoupCmd :: CommonCmds)
+
+    cmd match {
+      case CoupCmd  =>
+        resolveCoupCard()
+
+      case _ =>
+        doCommonCommand(cmd, param)
+        processCoupCommand()
+    }
+
   }
 
   // Resolve the action for the next eligible faction.
@@ -2402,48 +3102,134 @@ object FireInTheLake {
     }
   }
 
+  // Return the list of factions that may play their
+  // pivotal event.
+  // The factions are returned in the order: VC, ARVN, NVA, US
+  def getPlayablePivotalEvents: List[Faction] = {
+    // Pivotal events are only available if no
+    // faction has acted on the current card and
+    // the next card showing is not a Coup! card.
+    if (game.sequence.numActors == 0 && !game.isCoupRound && !game.onDeckIsCoup) {
+      val factionOrder = List(VC, ARVN, NVA, US)
+      for {
+        faction <- factionOrder 
+        card    =  deck(faction.pivotCard)
+        if game.sequence.eligibleNextTurn(faction) && card.eventEffective(faction)
+      } yield faction
+    }
+    else
+      Nil
+  }
+
+  //  Determine if a faction will play their Pivotal
+  //  Event, cancelling the current event card.
+  //  The Bots will always play their pivotal event
+  //  as soon as they can and a 1d6 roll is less than
+  //  the number of cards in the RVN Leader Box.
+  //  If the Bot is 1st Elibigle on the current card,
+  //  it will not play its pivotal event if the current
+  //  event is critical for that Bot.
+  def getPivotalFaction: Option[Faction] = {
+    def botCriticalCheck(faction: Faction) = 
+      !game.isActingFaction(faction) ||
+      !deck(game.currentCard).isCritical(faction)
+    def askHumanPivot(factions: List[Faction]): Option[Faction] = {
+      factions match {
+        case Nil   => None
+        case f::fs =>
+          if (askYorN(s"Does $f wish to play their Pivotal Event? (y/n) "))
+            Some(f)
+          else
+            askHumanPivot(fs)
+      }
+    }
+
+    val eligible = getPlayablePivotalEvents
+    // Find the first Bot that will play their card.
+    val pivotBot    = eligible find { faction =>
+      game.isBot(faction)           &&
+      d6 < game.numCardsInLeaderBox &&
+      botCriticalCheck(faction)
+    }
+    // Next find all eligible human factions
+    // that could play their pivotal event without
+    // being trumped by the Bot.
+    val pivotHumans = eligible.takeWhile { faction =>
+      pivotBot match {
+        case Some(bot) => bot != faction
+        case None      => true
+      }
+    }      
+    val pivotPlayer = askHumanPivot(pivotHumans)
+
+    pivotPlayer orElse pivotBot
+  }
+
+
   @tailrec def mainLoop(): Unit = {
-    try {
-      val savedState = game
+    // Does any faction wish to play their pivotal event?
+    // Will alwasy return None if Coup round or Coup card on deck
+    // or any faction has already acted.
+    val pivotFaction = getPivotalFaction
+    if (!game.gameEnded && pivotFaction.nonEmpty) {
+      val faction = pivotFaction.get
+
+      log(s"\n$faction elects to play their Pivotal Event")
+      log(separator())
+      log(s"Replace the current event card with ${deck(faction.pivotCard)}")
+
+      // Replace the current card with the faction's Pivotal event
+      game = game.copy(currentCard = faction.pivotCard)
+    }
+    else {
       try {
-        if (game.isCoupRound) {
-          resolveCoupCard()
-          // TODO:  Need to check if we have just played the
-          //        final Coup! card.  If so call endGameCommand()
-          //        which should let the user do common commands 
-          //        including rollback.
-          drawNextCard()
-          saveGameState()
+        // This can happend if the user loads a game that has already ended
+        // We call this here because the user may want to rollback to 
+        // an earlier turn.
+        if (game.gameEnded)
+          endgameCommand() // Does not return, throws ExitGame or Rollback
+
+        val savedState = game
+        try {
+          if (game.isCoupRound) {
+            processCoupCommand()
+
+            if (game.gameEnded) {
+              // The game has ended allow the user to 
+              // look around, rollback, and quit
+              saveGameState()
+              endgameCommand() // Does not return, throws ExitGame or Rollback
+            }
+            else {
+              drawNextCard()
+              saveGameState()
+            }
+          }
+          else {
+            processActorCommand(game.actingFaction.get)
+            
+            // If no more factions can act on the current card
+            // prompt prompt for a new Event card.
+            if (game.sequence.exhausted)
+              drawNextCard()
+
+            // Now create a save point to capture the action
+            saveGameState()
+          }
         }
-        else {
-        
-          // TODO:  We must check to see if nay faction wishes to play it's pivotal event.
-          //        If so we replace the current card with the approprate event card.
-          // ....
-
-          processActorCommand(game.actingFaction.get)
-          
-          // If no more factions can act on the current card
-          // prompt prompt for a new Event card.
-          if (game.sequence.exhausted)
-            drawNextCard()
-
-          // Now create a save point to capture the action
-          saveGameState()
+        catch {
+          case AbortAction =>
+            println("\n>>>> Aborting the current action <<<<")
+            println(separator())
+            displayGameStateDifferences(game, savedState)
+            game = savedState
         }
       }
       catch {
-        case AbortAction =>
-          println("\n>>>> Aborting the current action <<<<")
-          println(separator())
-          displayGameStateDifferences(game, savedState)
-          game = savedState
+        // The rollback command will have restored the game state from a previosly
+        // saved turn.
+        case Rollback =>
       }
-    }
-    catch {
-      // The rollback command will have restored the game state from a previosly
-      // saved turn.
-      case Rollback =>
     }
 
     // Loop infinitely
@@ -2451,18 +3237,15 @@ object FireInTheLake {
     mainLoop()
   }
 
-
-  // def canPlayPivotCard(faction: Faction): Boolean = {
-  //   val factionCondition = faction match {
-  //     case Scotti    => true
-  //     case Saxon     => game.saxonRenown >= 15
-  //     case Dux       => game.romanRule == false && game.prestige >= 5
-  //     case Civitates => game.romanRule == false
-  //   }
-  //   game.sequence.eligible(faction) && factionCondition
-  // }
-
-  def ??? : Nothing = throw new Exception("Not yet implemented")
+  //  Called when the game has ended.
+  //  Allow the user to do common commands.
+  //  Show, History, Rollback, Quit
+  // This function does not return!
+  // It can throw either ExitGame, or Rollback exceptions.
+  def endgameCommand(): Unit = {
+    val Commands = List(ShowCmd, HistoryCmd, RollbackCmd, HelpCmd, QuitCmd)
+    // TODO: Inifinte loop processing commands
+  }
 
 
   // Check to see if any faction wishes to play their pivotal event.
@@ -2658,7 +3441,14 @@ object FireInTheLake {
   // If VC is a Bot, the we store the agitate total in vcResources
   def setAgitateTotal(amount: Int): Unit = if (game.isBot(VC)) {
     game = game.copy(vcResources = amount)
-    log(s"Set Agitate Total to ${game.vcResources}")
+    log(s"Set Agitate Total (VC resources cylinder) to ${game.vcResources}")
+  }
+
+  def initAgitateTotal(): Unit = {
+    val agitateTotal = d3
+    log(s"\nRolling d3 to set the Agitate Total: $agitateTotal")
+    log(separator())
+    setAgitateTotal(agitateTotal)
   }
 
   // If VC is a Bot, the we store the agitate total in vcResources
@@ -2712,15 +3502,39 @@ object FireInTheLake {
 
   def capabilityInPlay(cap: Capability) = game.capabilities contains cap
 
+  //  Caller must ensure that both events are currently in play
+  //  before calling this function.
+  def isEventMoreRecentThan(event: String, otherEvent: String): Boolean = {
+    val eventIndex = game.ongoingEvents.indexOf(event)
+    val otherIndex = game.ongoingEvents.indexOf(otherEvent)
+    assert(eventIndex != -1, s"isEventMoreRecentThan: $event is not in ongoingEvents")
+    assert(otherIndex != -1, s"isEventMoreRecentThan: $otherEvent is not in ongoingEvents")
+
+    eventIndex < otherIndex
+  }
+
+  // We add all capabilities and momentum cards to the ongoingEvent list.
+  // The entries closer to the head of the list have been played more 
+  // recently and will therefore override event played later.
+  def addOngoingEvent(name: String): Unit = {
+    game = game.copy(ongoingEvents = name::game.ongoingEvents)
+  }
+
+  def removeOngoingEvent(name: String): Unit = {
+    game = game.copy(ongoingEvents = game.ongoingEvents filterNot (_ == name))
+  }
+
   def playCapability(cap: Capability): Unit = {
     game = game.copy(capabilities = cap :: game.capabilities)
-    log(s"Capability is now in play: $cap")
+    addOngoingEvent(cap.name)
+    log(s"Capability: '$cap' is now in effect")
   }
 
   def removeCapabilityFromPlay(cap: Capability): Unit = {
     if (game.capabilities contains cap) {
       game = game.copy(capabilities = game.capabilities filterNot (_ == cap))
-      log(s"Remove capability '$cap' from play")
+      removeOngoingEvent(cap.name)
+      log(s"Remove capability: '$cap' from play")
     }
   }
 
@@ -2728,7 +3542,15 @@ object FireInTheLake {
 
   def playMomentum(mo: String): Unit = {
     game = game.copy(momentum = mo :: game.momentum)
-    log(s"Momentum event is now in play: $mo")
+    addOngoingEvent(mo)
+    log(s"Momentum: '$mo' is now in play")
+  }
+
+  def removeMomentumFromPlay(mo: String): Unit = {
+    game = game.copy(momentum = game.momentum filterNot (_ == mo))
+    removeOngoingEvent(mo)
+    log(s"Remove Momentum: '$mo' from play")
+
   }
 
   // Place pieces from the AVAILABLE box in the given map space.
@@ -2779,7 +3601,7 @@ object FireInTheLake {
     }
   }
   
-  def removeAvailableToCasualties(pieces: Pieces, reason: Option[String] = None): Unit = if (pieces.total > 0) {
+  def moveAvailableToCasualties(pieces: Pieces, reason: Option[String] = None): Unit = if (pieces.total > 0) {
     loggingPointsChanges {
       val available = game.availablePieces
       assert(available contains pieces, s"All requested pieces are not available: $pieces")
@@ -2791,7 +3613,55 @@ object FireInTheLake {
         log(separator())
       }
       for (desc <- pieces.descriptions)
-        log(s"Remove $desc from AVAILABLE to CASUALTIES")
+        log(s"Move $desc from AVAILABLE to CASUALTIES")
+    }
+  }
+
+  def moveCasualtiesToAvailable(pieces: Pieces, reason: Option[String] = None): Unit = if (pieces.total > 0) {
+    loggingPointsChanges {
+      val casualties = game.casualties
+      assert(casualties contains pieces, s"All requested pieces are not in casualties: $pieces")
+      game = game.copy(casualties = game.casualties - pieces.normalized)
+      
+      reason foreach { msg =>
+        log(s"\n$msg")
+        log(separator())
+      }
+      for (desc <- pieces.descriptions)
+        log(s"Move $desc from CASUALTIES to AVAILABLE")
+    }
+  }
+
+  def moveCasualtiesToMap(pieces: Pieces, name: String, reason: Option[String] = None): Unit = if (pieces.total > 0) {
+    loggingControlChanges {
+      val casualties = game.casualties
+      assert(casualties contains pieces, s"All requested pieces are not in casualties: $pieces")
+      val sp = game.getSpace(name)
+      val newSp = sp.copy(pieces = sp.pieces +  pieces)
+      game = game.copy(casualties = game.casualties - pieces.normalized).updateSpace(newSp)
+      
+      reason foreach { msg =>
+        log(s"\n$msg")
+        log(separator())
+      }
+      for (desc <- pieces.descriptions)
+        log(s"Move $desc from CASUALTIES to $name")
+    }
+  }
+
+  def moveCasualtiesToOutOfPlay(pieces: Pieces, reason: Option[String] = None): Unit = if (pieces.total > 0) {
+    loggingPointsChanges {
+      val casualties = game.casualties
+      assert(casualties contains pieces, s"All requested pieces are not in casualties: $pieces")
+      game = game.copy(casualties = game.casualties - pieces.normalized,
+                       outOfPlay  = game.outOfPlay + pieces.normalized)
+      
+      reason foreach { msg =>
+        log(s"\n$msg")
+        log(separator())
+      }
+      for (desc <- pieces.descriptions)
+        log(s"Move $desc from CASUALTIES to OUT OF PLAY")
     }
   }
 
@@ -2949,6 +3819,13 @@ object FireInTheLake {
       Nil
     
     (inPlace.toList ::: adjacent).sorted
+  }
+
+  def numVCGuerrillasInSouth: Int = {
+    game.spaces.foldLeft(0) { (sum, sp) =>
+      val num = if (isInSouthVietnam(sp.name)) sp.pieces.totalOf(VCGuerrillas) else 0
+      sum + num
+    }
   }
 
   // Ask the user to select a number of pieces.
@@ -3190,7 +4067,7 @@ object FireInTheLake {
     var loggedHeader = false;
     def logChange(message: String): Unit = {
       if (!loggedHeader) {
-        log("\nScore Marker changes")
+        log("\nScore Marker Changes")
         log(separator())
         loggedHeader = true
       }
@@ -3252,7 +4129,7 @@ object FireInTheLake {
           } yield (space.name, orig.control, space.control)
 
           if (changed.nonEmpty) {
-            log(s"\nControl changes")
+            log(s"\nControl Changes")
             log(separator())
             for ((name, origControl, newControl) <- changed) {
               (origControl, newControl) match {
@@ -3349,10 +4226,12 @@ object FireInTheLake {
   def pause() {
     import scala.util.Properties.isWin
     if (isWin)
-      readLine("Press Enter to continue... ")
+      readLine("[ Press Enter to continue... ] ")
     else
-      readLine("Continue ↩︎ ")
+      readLine("[ Continue ↩︎ ] " )
   }
+
+  def pauseIfBot(faction: Faction): Unit = if (game.isBot(faction)) pause()
 
   var echoLogging = true
   // Print the line to the console and save it in the game's history.
@@ -4257,6 +5136,7 @@ object FireInTheLake {
           val caps = excluded flatMap (name => AllUnshadedCaps find (_.name == name))
           askCapability(caps) foreach { cap =>
             game = game.copy(capabilities = cap :: game.capabilities)
+            addOngoingEvent(cap.name)
             log(s"Adjusted capabilities: [added ${cap}]")
           }
           nextAdjustment()
@@ -4265,6 +5145,7 @@ object FireInTheLake {
           val caps = excluded flatMap (name => AllShadedCaps find (_.name == name))
           askCapability(caps) foreach { cap =>
             game = game.copy(capabilities = cap :: game.capabilities)
+            addOngoingEvent(cap.name)
             log(s"Adjusted capabilities: [added ${cap}]")
           }
           nextAdjustment()
@@ -4272,6 +5153,7 @@ object FireInTheLake {
         case RemoveCap(name) =>
           game.capabilities find (_.name == name) foreach { cap =>
             game = game.copy(capabilities = game.capabilities filterNot (_ == cap))
+            removeOngoingEvent(name)
             log(s"Adjusted capabilities: [removed ${cap}]")
           }
           nextAdjustment()
@@ -4316,6 +5198,7 @@ object FireInTheLake {
         case "add" =>
           askMomentum(excluded) foreach { mo =>
             game = game.copy(momentum = mo :: game.momentum)
+            addOngoingEvent(mo)
             log(s"Adjusted momentum cards: [added ${mo}]")
           }
           nextAdjustment()
@@ -4323,6 +5206,7 @@ object FireInTheLake {
         case mo =>
           game = game.copy(momentum = game.momentum filterNot (_ == mo))
           log(s"Adjusted momentum cards: [removed ${mo}]")
+          removeOngoingEvent(mo)
           nextAdjustment()
       }
     }

@@ -278,6 +278,46 @@ object Bot {
       false
   }
 
+  // Perform Bot pacification in the given space.
+  // Returns the number of terror removed + level shifted
+  def pacifySpace(name: String, faction: Faction, coupRound: Boolean, coupPoints: Int = 0): Int = {
+    val nguyenCaoKy = isRVNLeader(RVN_Leader_NguyenCaoKy)
+    val blowtorch   = momentumInPlay(Mo_BlowtorchKomer)
+    // In Coup Round The leader takes precedence over Blowtorch because it was played
+    // more recently.  Otherwise the Blowtorch momentum was played more recently and take precedence.
+    val useResources = game.trackResources(ARVN)
+    val cost = if (useResources) {
+      if (coupRound) (if (nguyenCaoKy) 4 else if (blowtorch) 1 else 3)
+      else           (if (nguyenCaoKy) 4 else 3)  // blowtorch only applies in coup round
+    }
+    else 0
+    
+    // ARVN Bot will only pacify to Passive Support
+    val maxLevel    = if (faction == ARVN || capabilityInPlay(CORDS_Shaded))
+      PassiveSupport
+    else
+      ActiveSupport
+    val sp          = game.getSpace(name)
+    val maxShift    = ((maxLevel.value - sp.support.value) max 0) min 2
+    val maxInSpace  = maxShift + sp.terror
+    val d3Limit     = if (coupRound) NO_LIMIT else d3
+    val maxAfford   = (coupRound, useResources) match {
+      case (_, true)      => game.arvnResources / cost
+      case (true, false)  => coupPoints
+      case (false, false) => NO_LIMIT
+    }
+    val maxPacify = ((sp.terror + maxShift) min d3Limit) min maxAfford
+    val numTerror = maxPacify min sp.terror
+    val numShift  = (maxPacify - numTerror) min maxShift
+
+    log(s"\n$faction Pacifies in ${sp.name}")
+    log(separator())
+    decreaseResources(ARVN, (numTerror + numShift) * cost)
+    removeTerror(sp.name, numTerror)
+    increaseSupport(sp.name, numShift)
+    numTerror + numShift
+  }
+
   // Check for the General Lansdale momentum effect
   // and logs a message if it is in play.
   def generalLandsdale(faction: Faction): Boolean = {
@@ -423,12 +463,11 @@ object Bot {
     }
 
     //  Claymores momentum prevents ambush
-    if (momentumInPlay(Mo_Claymores))
-      (ambushSpaces, true) 
-    else {
-      val canContinue = nextAmbush(ambushCandidates)
-      (ambushSpaces, canContinue)
-    }
+    val canContinue = if (momentumInPlay(Mo_Claymores))
+      true // True because we did nothing
+    else
+      nextAmbush(ambushCandidates)
+    (ambushSpaces, canContinue)
   }
 
   //  Perform a US/AVRN assault in the given space.
@@ -940,33 +979,32 @@ object Bot {
     sp => sp.isLoC && sp.printedEconValue > 0
   )
 
-  // Find the best candidate from the given list using the
-  // prirority table represented by the list of PriorityFilters.
-  //
-  // The list of candidates MUST NOT be empty!
-  //
+  // Used during Resource Phase of the Coup Rounds
+  val HighestEconValue = new HighestScore[Space](
+    "Highest Econ",
+    sp => if (sp.isLoC) sp.printedEconValue else NO_SCORE
+  )
+
+  // Narrow down the list of candidates to those that match best conform
+  // to the given priorities.
   // Each filter in the list is used against the given candidates:
-  // - If the result is a single candidate then that candidate is the winner
+  // - If the result is a single candidate then a list with just that candidate
+  //   is returned
   // - If the result is more than one candidate then the resulting list is
   //   then used with the next filter in the list.
   // - If the result is that none of the candidates match the filter then
   //   the samme list of candidates is used with the next filter in the list.
-  // - If we get through the entire list of filters and we still have not
-  //   resolved the best candidate, then we pick randomly from those that remain.
-
-  def bestCandidate[T](candidates: List[T], priorities: List[PriorityFilter[T]]): T = {
-    assert(candidates.nonEmpty, "bestCandidate: called with empty list!")
-
-    @tailrec def nextPriority(candidates: List[T], priorities: List[PriorityFilter[T]]): T = {
+  //   Effectivlely skipping that priority filter.
+  def narrowCandidates[T](candidates: List[T], priorities: List[PriorityFilter[T]]): List[T] = {
+    @tailrec def nextPriority(candidates: List[T], priorities: List[PriorityFilter[T]]): List[T] = {
       (candidates, priorities) match {
-        case (Nil, _)    => throw new IllegalArgumentException("nextPriority: empty list")
+        case (Nil, _) => Nil  // Only happens if the initial list of canidates was empty.
         case (sp :: Nil, _) =>
-          botLog(s"Picked a winner [${sp.toString}]")
-          sp
-        case (best, Nil)   =>
-          val sp = shuffle(best).head        // Take one at random
-          botLog(s"Picked random winner [${sp.toString}]")
-          sp
+          // Narrowed to a single candidate
+          List(sp)
+        case (best, Nil) =>
+          // No more priorities
+          best
         case (list, f :: fs) =>
           (f filter list) match {
             case Nil =>
@@ -981,31 +1019,28 @@ object Bot {
     nextPriority(candidates, priorities)
   }
 
+  // Find the best candidate from the given list using the
+  // prirority table represented by the list of PriorityFilters.
+  //
+  // The list of candidates MUST NOT be empty!
+  //
+  // We narrow the list of candiates to the ones that match most of
+  // our priority filters.
+  // Then if we still have more than one, we pick one at random.
+  def bestCandidate[T](candidates: List[T], priorities: List[PriorityFilter[T]]): T = {
+    assert(candidates.nonEmpty, "bestCandidate: called with empty list!")
 
-  // // As soon as a filter finds at least one matching candidate, then the procees stops and the
-  // // results from that filter are returned.
-  // // If none of the filters finds at least one matching candidate we return Nil.
-  // @tailrec final def selectCandidates(candidates: List[Space], filters: SpacePriorities): List[Space] = {
-  //   botLog(s"selectCandidates: [${andList(candidates)}]")
-  //   (candidates, filters) match {
-  //     case (Nil, _) =>
-  //       botLog("selectCandidates: no candidates to consider")
-  //       Nil    // No candidates to consider
-  //     case (_, Nil) =>
-  //       botLog("selectCandidates: no candidates found")
-  //       Nil    // No filter found any candidates
-  //     case (xs, f::fs) =>
-  //       (f filter xs) match {
-  //         case Nil =>            // Filter did not match anything, try the next filter
-  //           botLog(s"selectCandidates ($f): failed")
-  //           selectCandidates(xs, fs)
-  //         case results =>        // We got some results…
-  //           botLog(s"selectCandidates ($f): [${(results map (_.name) mkString ", ")}]")
-  //           results
-  //       }
-  //   }
-  // }
+    narrowCandidates(candidates, priorities) match {
+      case best::Nil =>
+        botLog(s"Picked a winner [${best.toString}]")
+        best
 
+      case narrowed  =>
+        val best = shuffle(narrowed).head        // Take one at random
+        botLog(s"Picked random winner [${best.toString}]")
+        best
+    }
+  }
 
   def filterIf[T](cond: Boolean, filter: PriorityFilter[T]): Option[PriorityFilter[T]] = {
     if (cond) Some(filter) else None
@@ -2087,7 +2122,7 @@ object Bot {
     )
 
     botLog(s"\nSelect origin space with moveable: [${andList(moveTypes.toList)}]")
-    botLog(separator())
+    botLog(separator(char = '#'))
     if (candidates.nonEmpty) {
       Some(bestCandidate(candidates, priorities).name)
     }
@@ -2126,7 +2161,7 @@ object Bot {
     )
 
     botLog(s"\nSelect Air Lift origin space with moveable: [${andList(moveTypes.toList)}]")
-    botLog(separator())
+    botLog(separator(char = '#'))
     if (candidates.nonEmpty) {
       Some(bestCandidate(candidates, priorities).name)
     }
@@ -2465,7 +2500,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nUS Select space (Shift Toward Active Support): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -2481,24 +2516,24 @@ object Bot {
       ).flatten
 
       botLog(s"\nUS Select space (Place Bases): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
     // US Spaces Priorities: Place Cubes or Special Forces
-    def pickSpacePlaceCubesSpecialForces(candidates: List[Space], placingMovingUSTroops: Boolean = false): Space = {
+    def pickSpacePlaceCubesSpecialForces(candidates: List[Space], troops: Boolean): Space = {
 
       val priorities = List(
-        filterIf(true,                  ProvinceWithUSBaseAndCubes),
-        filterIf(true,                  CityProvinceNoActiveSupport),
-        filterIf(placingMovingUSTroops, PoliceWithoutUSTroops),
-        filterIf(true,                  COINFirepowerLessThanVulnerable),
-        filterIf(true,                  MostPopulation),
-        filterIf(true,                  HasEnemyBase)
+        filterIf(true,   ProvinceWithUSBaseAndCubes),
+        filterIf(true,   CityProvinceNoActiveSupport),
+        filterIf(troops, PoliceWithoutUSTroops),
+        filterIf(true,   COINFirepowerLessThanVulnerable),
+        filterIf(true,   MostPopulation),
+        filterIf(true,   HasEnemyBase)
       ).flatten
 
       botLog(s"\nUS Select space (Place Cubes or Special Forces): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -2517,7 +2552,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nUS Select space (Sweep Destinations): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -2532,14 +2567,11 @@ object Bot {
       )
 
       botLog(s"\nUS Select space (Air Lift Destinations): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
     // US Pick space for: Air Strike
-    // TODO:  How do we handle the "trail" ?
-    //        It is the first conditon in the table so perhaps
-    //        the caller can sort this out before calling this function.
     def pickSpaceAirStrike(candidates: List[Space]): Space = {
 
       val priorities = List(
@@ -2551,7 +2583,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nUS Select space (Air Strike): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -2568,9 +2600,198 @@ object Bot {
       ).flatten
 
       botLog(s"\nUS Select space (Remove or Replace): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
+
+    // Part of the Commitment phase of a Coup Round.
+    // All US Troops currently in the casualites box
+    // are place on the map in either:
+    // COIN controlled spaces, LoCs, or Saigon.
+    // We place each Troop cube one at a time using
+    // the "Place Cubes or Special Forces" priorities.
+    def placeUSCasualtyTroopsOnMap(coinControlled: Set[String]): Unit = {
+      def placeNextTroop(numRemaining: Int): Unit = if (numRemaining > 0 ) {
+        val candidates = game.spaces filter { sp =>
+          isInSouthVietnam(sp.name) &&
+          (sp.name == Saigon ||
+           sp.isLoC          ||
+           coinControlled(sp.name))
+        }
+        val sp = pickSpacePlaceCubesSpecialForces(candidates, troops = true)
+        moveCasualtiesToMap(Pieces(usTroops = 1), sp.name)
+        placeNextTroop(numRemaining - 1)
+      }
+
+      placeNextTroop(game.casualties.totalOf(USTroops))
+    }
+
+    // Part of the Commitment phase of a Coup Round.
+    // 1. Move bases from Cities leaving 1 base in Saigon.
+    // 2. Place or withdraw US pieces per current US Policy
+    //    o JFK   - Place bases in S. Vietnam, the place/withdraw troops until 15 are available
+    //    o LBJ   - Place bases in S. Vietnam, the place/withdraw troops until 5 are available
+    //    o NIxon - Withdraw bases from S. Vietnam leaving 1 base in Saigon, then
+    //              place/withdraw troops until 25 are available
+    // * Withdraw/move bases from spaces with the fewest enemy pieces
+    // * Withdraw troops from spaces outside Saigon:
+    //   1. Fewest troops and no COIN base
+    //   2. Spaces with least population
+    def moveUSCommitmentPieces(maxTroopsAllowed: Int, coinControlled: Set[String]): Unit = {
+      val AVAILABLE = "available"
+      val movedPieces = new MovingGroups()
+      def basesMoved  = movedPieces.allPieces.totalOf(USBase)
+      def troopsMoved = movedPieces.allPieces.totalOf(USTroops)
+      def avail       = game.availablePieces
+      val validSpace = (sp: Space) =>
+        sp.name == Saigon ||
+        sp.isLoC          ||
+        coinControlled(sp.name)
+      val canMovePieceAway = (sp: Space) => {
+        val numCoin  = sp.pieces.totalOf(CoinPieces)
+        val numVC    = sp.pieces.totalOf(VCPieces)
+        val numNVA   = sp.pieces.totalOf(NVAPieces)
+        val numEnemy = numVC + numNVA
+
+        if (numCoin > numEnemy)
+          numCoin > numEnemy + 1
+        else if (numCoin + numVC >= numNVA)
+          numCoin + numVC > numNVA
+        else
+          true
+      }
+      val baseLeavePriorities = List(
+        new LowestScore[Space]("Fewest enemy pieces", _.pieces.totalOf(InsurgentPieces))
+      )
+      val fewestTroopsPriorities = List(
+        new LowestScore[Space]("Fewest US Troops", _.pieces.totalOf(USTroops))
+      )
+      val leastPopPriorities = List(
+        new BooleanPriority[Space]("LoC", _.isLoC),  // LoCs have no population so pick them first.
+        new LowestScore[Space]("Least Population", sp => if (sp.isLoC) NO_SCORE else sp.population)
+      )
+      val numBases  = (sp: Space) => (sp.pieces - movedPieces(sp.name)).totalOf(USBase)
+      val numTroops = (sp: Space) => (sp.pieces - movedPieces(sp.name)).totalOf(USTroops)
+
+      def moveBases(): Unit = if (basesMoved < 2) {
+        val originCandidates = game.spaces filter { sp =>
+          val baseNeeded = if (sp.name == Saigon) 2 else 1
+          validSpace(sp)       &&
+          sp.isCity            &&
+          canMovePieceAway(sp) &&
+          numBases(sp) >= baseNeeded
+        }
+
+        if (originCandidates.nonEmpty) {
+          val origin = bestCandidate(originCandidates, baseLeavePriorities)
+          val destCandidates = game.spaces filter { sp =>
+            validSpace(sp)            &&
+            sp.name != origin.name    &&
+            sp.isProvince             &&
+            sp.totalBases < 2         &&
+            isInSouthVietnam(sp.name) &&
+            numTroops(sp) > 0
+          }
+
+          if (destCandidates.nonEmpty) {
+            val dest = pickSpacePlaceBases(destCandidates)
+            val base = Pieces(usBases = 1)
+            movePieces(base, origin.name, dest.name)
+            movedPieces.add(dest.name, base)
+            moveBases()
+          }
+        }
+      }
+
+      def placeBases(): Unit = if (basesMoved < 2 && avail.has(USBase)) {
+        val destCandidates = game.spaces filter { sp =>
+          validSpace(sp)     &&
+          sp.totalBases < 2  &&
+          isInSouthVietnam(sp.name)
+        }
+
+        if (destCandidates.nonEmpty) {
+          val dest = pickSpacePlaceBases(destCandidates)
+          val base = Pieces(usBases = 1)
+          placePieces(dest.name, base)
+          movedPieces.add(dest.name, base)
+          placeBases()
+        }
+      }
+
+      def withdrawBases(): Unit = if (basesMoved < 2) {
+        val originCandidates = game.spaces filter { sp =>
+          val baseNeeded = if (sp.name == Saigon) 2 else 1
+          validSpace(sp)       &&
+          numBases(sp) >= baseNeeded
+        }
+
+        if (originCandidates.nonEmpty) {
+          val origin = bestCandidate(originCandidates, baseLeavePriorities)
+          val base = Pieces(usBases = 1)
+          removeToAvailable(origin.name, base)
+          movedPieces.add(AVAILABLE, base)
+          withdrawBases()
+        }
+      }
+
+      def placeTroops(targetNum: Int): Unit = {
+        if (troopsMoved < maxTroopsAllowed && avail.totalOf(USTroops) > targetNum) {
+          val destCandidates = game.spaces filter validSpace
+          val dest = pickSpacePlaceCubesSpecialForces(destCandidates, troops = true)
+          val troop = Pieces(usTroops = 1)
+          placePieces(dest.name, troop)
+          movedPieces.add(dest.name, troop)
+          placeTroops(targetNum)
+        }
+      }
+
+      def withdrawTroops(targetNum: Int): Unit = {
+        if (troopsMoved < maxTroopsAllowed && avail.totalOf(USTroops) < targetNum) {
+          val originCandidates1 = game.spaces filter { sp =>
+            validSpace(sp)            &&
+            sp.name != Saigon         &&
+            !sp.pieces.has(CoinBases) &&
+            numTroops(sp) > 0
+          }
+          val originCandidates2 = game.spaces filter { sp => validSpace(sp) && numTroops(sp) > 0 }
+
+          if (originCandidates1.nonEmpty || originCandidates2.nonEmpty) {
+            val origin = if (originCandidates1.nonEmpty) 
+              bestCandidate(originCandidates1, fewestTroopsPriorities)
+            else
+              bestCandidate(originCandidates2, leastPopPriorities)
+            val troop = Pieces(usTroops = 1)
+            removeToAvailable(origin.name, troop)
+            movedPieces.add(AVAILABLE, troop)
+            withdrawTroops(targetNum)
+          }
+        }
+      }
+      
+      def placeOrWithdrawTroops(targetNum: Int): Unit = {
+        val availTroops = avail.totalOf(USTroops)
+        if (availTroops > targetNum)
+          placeTroops(targetNum)
+        else if (availTroops < targetNum)
+          withdrawTroops(targetNum)
+      }
+
+      val troopTarget = game.usPolicy match {
+        case USPolicy_JFK => 15
+        case USPolicy_LBJ =>  5
+        case _ /* Nixon*/ => 25
+      }
+
+      moveBases()
+      if (game.usPolicy == USPolicy_Nixon)
+        withdrawBases()
+      else
+        placeBases()
+
+      placeOrWithdrawTroops(troopTarget)
+    }
+
 
     //  -------------------------------------------------------------
     //  Implement the US Train instructions from the US Trung cards.
@@ -2607,7 +2828,7 @@ object Bot {
       def trainToPlaceCubes(once: Boolean): Unit = {
         val candidates = game.nonLocSpaces filter arvnCandidate
         if (canTrain(true) && game.availablePieces.has(ARVNCubes) && candidates.nonEmpty) {
-          val sp      = pickSpacePlaceCubesSpecialForces(candidates)
+          val sp      = pickSpacePlaceCubesSpecialForces(candidates, troops = true)
           val avail   = game.availablePieces.only(ARVNCubes)
           val num     = 6 min avail.total
           val toPlace = selectFriendlyToPlaceOrMove(avail, num)
@@ -2627,7 +2848,7 @@ object Bot {
       def trainToPlaceRangers(): Unit = {
         val candidates = game.nonLocSpaces filter arvnCandidate
         if (canTrain(true) && game.availablePieces.has(Rangers) && candidates.nonEmpty) {
-          val sp      = pickSpacePlaceCubesSpecialForces(candidates)
+          val sp      = pickSpacePlaceCubesSpecialForces(candidates, troops = false)
           val avail   = game.availablePieces.only(Rangers)
           val num     = 2 min avail.total
           val toPlace = selectFriendlyToPlaceOrMove(avail, num)
@@ -2646,7 +2867,7 @@ object Bot {
       def trainToPlaceIrregulars(): Unit = {
         val candidates = game.nonLocSpaces filter irregCandidate
         if (canTrain(false) && game.availablePieces.has(Irregulars) && candidates.nonEmpty) {
-          val sp      = pickSpacePlaceCubesSpecialForces(candidates)
+          val sp      = pickSpacePlaceCubesSpecialForces(candidates, troops = false)
           val avail   = game.availablePieces.only(Irregulars)
           val num     = 2 min avail.total
           val toPlace = selectFriendlyToPlaceOrMove(avail, num)
@@ -2711,22 +2932,18 @@ object Bot {
 
         if (candidates.nonEmpty && game.arvnResources >= costEach) {
           val sp = pickSpaceTowardActiveSupport(candidates)
-          val numCanPay = if (costEach == 0) NO_LIMIT else game.arvnResources / costEach
-          val maxShift  = (ActiveSupport.value - sp.support.value) min 2
-          val maxPacify = ((sp.terror + maxShift) min d3) min numCanPay
-          val numTerror = maxPacify min sp.terror
-          val numShift  = (maxPacify - numTerror) min maxShift
+          // val numCanPay = if (costEach == 0) NO_LIMIT else game.arvnResources / costEach
+          // val maxShift  = (ActiveSupport.value - sp.support.value) min 2
+          // val maxPacify = ((sp.terror + maxShift) min d3) min numCanPay
+          // val numTerror = maxPacify min sp.terror
+          // val numShift  = (maxPacify - numTerror) min maxShift
 
           if (!trainingSpaces(sp.name)) {
             log(s"\n$ARVN selects ${sp.name} for Train")
             log(separator())
             trainingSpaces += sp.name
           }
-          log(s"\nPacifying in ${sp.name}")
-          log(separator())
-          decreaseResources(ARVN, (numTerror + numShift) * costEach)
-          removeTerror(sp.name, numTerror)
-          increaseSupport(sp.name, numShift)
+          pacifySpace(sp.name, US, coupRound = false)
         }
       }
 
@@ -3109,8 +3326,9 @@ object Bot {
     //  -  Max of two in Monsoon
     //
     // Mo_TyphoonKate - prohibits air lift, transport, and bombard, all other special activities are max 1 space
+    // Mo_Medevac_Shaded - prohibits air lift
     def airLiftActivity(): Boolean = {
-      if (momentumInPlay(Mo_TyphoonKate))
+      if (momentumInPlay(Mo_TyphoonKate) || momentumInPlay(Mo_Medevac_Shaded))
         false
       else {
         // If Shaded Booby Traps then limit spaces to 2 unless this is a limOp
@@ -3154,6 +3372,9 @@ object Bot {
     //  1 hit per enemy piece removed.  (NVATroops, then active guerrillas, then exposed bases)
     //  Shift each City/Province with >= 1 Population one level toward Active Opposition
     //
+    //  Mo_RollingThunder  - prohibits air strike
+    //  Mo_DaNang          - prohibits air strike
+    //  Mo_BombingPause    - prohibits air strike
     //  Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
     //  Mo_WildWeasels - Either degrade trail OR remove only 1 piece (not 1-6)
     //  Mo_ADSID       - -6 NVA resrouces at any trail change
@@ -3169,123 +3390,136 @@ object Bot {
     //  Mo_Oriskany   - Shaded (prohibits degrade of trail) (includes air strike, coup round, NOT evnts!)
 
     def airStrikeActivity(): Boolean = {
-      val adsid    = game.isHuman(NVA) && momentumInPlay(Mo_ADSID)
-      val oriskany = momentumInPlay(Mo_Oriskany)
-      val migs_shaded = capabilityInPlay(MiGs_Shaded) && !capabilityInPlay(TopGun_Unshaded)
-      val aaa_shaded = capabilityInPlay(AAA_Shaded)
-      val arclight_unshaded = capabilityInPlay(ArcLight_Unshaded)
-      val minTrail   = if (aaa_shaded) 2 else 1
-      val maxHits       = d6
-      var hitsRemaining = maxHits
-      val maxSpaces = if      (momentumInPlay(Mo_TyphoonKate)) 1
-                      else if (game.inMonsoon) 2
-                      else 6
-      val maxPieces = if (momentumInPlay(Mo_WildWeasels)) 1 else if (capabilityInPlay(LaserGuidedBombs_Shaded)) 2 else maxHits
-      var strikeSpaces = Set.empty[String]
-      var arclight_unshaded_used = false
-      var totalRemoved = 0
-
-      def logSelectAirStrike(): Unit = if (hitsRemaining == maxHits) {
-        logSAChoice(US, AirStrike)
-        log(s"Die roll to determine the number of hits = $maxHits")
-      }
-      // Degrade the trail if possible
-      def degradeTheTrail(): Unit = {
-        if (hitsRemaining > 1 && !oriskany && (!aaa_shaded || game.trail > minTrail)) {
-          val die    = d6
-          val success = !capabilityInPlay(TopGun_Shaded) || die > 3
-          val numBoxes = {
-            val num = if (capabilityInPlay(TopGun_Unshaded)) 2 else 1
-            val newTrail = (game.trail - num) max minTrail
-            game.trail - newTrail
-          }
-    
-          logSelectAirStrike()
-          log(s"\nUS Air Strikes The Trail")
-          log(separator())
-
-          if (capabilityInPlay(TopGun_Shaded))
-            log(s"Die roll ($TopGun_Shaded): $die [${if (success) "Success!" else "Failure"}]")
-    
-          if (success) {
-            degradeTrail(numBoxes)
-            hitsRemaining -= 2
-    
-            if (adsid) {
-              log(s"Momentum: $Mo_ADSID reduces NVA resources at trail change")
-              decreaseResources(NVA, 6)
+      val prohibited = momentumInPlay(Mo_RollingThunder) ||
+                       momentumInPlay(Mo_DaNang)         ||
+                       momentumInPlay(Mo_BombingPause)
+      if (prohibited)
+        false
+      else {
+        val adsid    = game.isHuman(NVA) && momentumInPlay(Mo_ADSID)
+        val oriskany = momentumInPlay(Mo_Oriskany)
+        val migs_shaded = capabilityInPlay(MiGs_Shaded) && !capabilityInPlay(TopGun_Unshaded)
+        val aaa_shaded = capabilityInPlay(AAA_Shaded)
+        val arclight_unshaded = capabilityInPlay(ArcLight_Unshaded)
+        val minTrail   = if (aaa_shaded) 2 else 1
+        val maxHits       = d6
+        var hitsRemaining = maxHits
+        val wildWeasels = momentumInPlay(Mo_WildWeasels) && 
+                        (!capabilityInPlay(LaserGuidedBombs_Shaded) ||
+                         isEventMoreRecentThan(Mo_WildWeasels, LaserGuidedBombs_Shaded.name))
+        val laserShaded = capabilityInPlay(LaserGuidedBombs_Shaded) && 
+                          (!momentumInPlay(Mo_WildWeasels) ||
+                          isEventMoreRecentThan(LaserGuidedBombs_Shaded.name, Mo_WildWeasels))
+        val maxSpaces = if      (momentumInPlay(Mo_TyphoonKate)) 1
+                        else if (game.inMonsoon) 2
+                        else 6
+        val maxPieces = if (wildWeasels) 1 else if (laserShaded) 2 else maxHits
+        var strikeSpaces = Set.empty[String]
+        var arclight_unshaded_used = false
+        var totalRemoved = 0
+  
+        def logSelectAirStrike(): Unit = if (hitsRemaining == maxHits) {
+          logSAChoice(US, AirStrike)
+          log(s"Die roll to determine the number of hits = $maxHits")
+        }
+        // Degrade the trail if possible
+        def degradeTheTrail(): Unit = {
+          if (hitsRemaining > 1 && !oriskany && (!aaa_shaded || game.trail > minTrail)) {
+            val die    = d6
+            val success = !capabilityInPlay(TopGun_Shaded) || die > 3
+            val numBoxes = {
+              val num = if (capabilityInPlay(TopGun_Unshaded)) 2 else 1
+              val newTrail = (game.trail - num) max minTrail
+              game.trail - newTrail
             }
-
-            if (migs_shaded && game.availablePieces.has(USTroops))
-                removeAvailableToCasualties(Pieces(usTroops = 1), Some(s"$MiGs_Shaded triggers"))
-    
-            if (capabilityInPlay(SA2s_Unshaded)) {
-              val CanRemove = List(NVABase, NVATroops, NVAGuerrillas_U, NVAGuerrillas_A)
-              log(s"\n$SA2s_Unshaded triggers")
-              val sa2Candidates = spaces(OutsideSouth) filter (_.pieces.has(CanRemove))
-              if (sa2Candidates.isEmpty)
-                log("There are no NVA outside the south that can be removed") // Very unlikely!
-              else {
-                val sp = pickSpaceAirStrike(sa2Candidates)
-                val toRemove = selectEnemyRemovePlaceActivate(sp.pieces.only(CanRemove), 1)
-                removeToAvailable(sp.name, toRemove)
+      
+            logSelectAirStrike()
+            log(s"\nUS Air Strikes The Trail")
+            log(separator())
+  
+            if (capabilityInPlay(TopGun_Shaded))
+              log(s"Die roll ($TopGun_Shaded): $die [${if (success) "Success!" else "Failure"}]")
+      
+            if (success) {
+              degradeTrail(numBoxes)
+              hitsRemaining -= 2
+      
+              if (adsid) {
+                log(s"Momentum: $Mo_ADSID reduces NVA resources at trail change")
+                decreaseResources(NVA, 6)
+              }
+  
+              if (migs_shaded && game.availablePieces.has(USTroops))
+                  moveAvailableToCasualties(Pieces(usTroops = 1), Some(s"$MiGs_Shaded triggers"))
+      
+              if (capabilityInPlay(SA2s_Unshaded)) {
+                val CanRemove = List(NVABase, NVATroops, NVAGuerrillas_U, NVAGuerrillas_A)
+                log(s"\n$SA2s_Unshaded triggers")
+                val sa2Candidates = spaces(OutsideSouth) filter (_.pieces.has(CanRemove))
+                if (sa2Candidates.isEmpty)
+                  log("There are no NVA outside the south that can be removed") // Very unlikely!
+                else {
+                  val sp = pickSpaceAirStrike(sa2Candidates)
+                  val toRemove = selectEnemyRemovePlaceActivate(sp.pieces.only(CanRemove), 1)
+                  removeToAvailable(sp.name, toRemove)
+                }
               }
             }
           }
         }
-      }
-
-      def strikeASpace(): Unit = {
-        val isCandidate = (sp: Space) =>
-          !strikeSpaces(sp.name)         &&
-          sp.pieces.hasExposedInsurgents &&
-          (sp.pieces.has(CoinPieces) || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
-
-        val candidates = game.spaces filter isCandidate
-
-        if (hitsRemaining > 0 && strikeSpaces.size < maxSpaces && totalRemoved < maxPieces && candidates.nonEmpty) {
-          val sp                = pickSpaceAirStrike(candidates)
-          val (killedPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, hitsRemaining)
-
-          logSelectAirStrike()
-          log(s"\nUS Air Strikes ${sp.name}")
-          log(separator())
-          removeToAvailable(sp.name, killedPieces)
-
-          if (killedPieces.total > 0) {
-            val numShift = if (sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition)
-              0
-            else if (killedPieces.total > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
-              log(s"Shift 2 levels toward Active Opposition [$ArcLight_Shaded]")
-              2
+  
+        def strikeASpace(): Unit = {
+          val isCandidate = (sp: Space) =>
+            !strikeSpaces(sp.name)         &&
+            sp.pieces.hasExposedInsurgents &&
+            (sp.pieces.has(CoinPieces) || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
+  
+          val candidates = game.spaces filter isCandidate
+  
+          if (hitsRemaining > 0 && strikeSpaces.size < maxSpaces && totalRemoved < maxPieces && candidates.nonEmpty) {
+            val sp                = pickSpaceAirStrike(candidates)
+            val (killedPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, hitsRemaining)
+  
+            logSelectAirStrike()
+            log(s"\nUS Air Strikes ${sp.name}")
+            log(separator())
+            removeToAvailable(sp.name, killedPieces)
+  
+            if (killedPieces.total > 0) {
+              val numShift = if (sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition)
+                0
+              else if (killedPieces.total > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
+                log(s"Shift 2 levels toward Active Opposition [$ArcLight_Shaded]")
+                2
+              }
+              else if (killedPieces.total == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded)) {
+                log(s"No shift toward Active Opposition [$LaserGuidedBombs_Unshaded]")
+                0
+              }
+              else {
+                log(s"Shift 1 level toward Active Opposition")
+                1
+              }
+              decreaseSupport(sp.name, numShift)
             }
-            else if (killedPieces.total == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded)) {
-              log(s"No shift toward Active Opposition [$LaserGuidedBombs_Unshaded]")
-              0
-            }
-            else {
-              log(s"Shift 1 level toward Active Opposition")
-              1
-            }
-            decreaseSupport(sp.name, numShift)
+  
+            hitsRemaining -= killedPieces.total
+            totalRemoved += killedPieces.total
+            strikeSpaces += sp.name
+            strikeASpace()
           }
-
-          hitsRemaining -= killedPieces.total
-          totalRemoved += killedPieces.total
-          strikeSpaces += sp.name
-          strikeASpace()
         }
+  
+        // Start of Air Lift Special Activity
+        // ------------------------------------
+        degradeTheTrail()
+        if (!momentumInPlay(Mo_WildWeasels) || hitsRemaining == maxHits)
+          strikeASpace()
+  
+        if (hitsRemaining < maxHits)
+          logEndSA(US, AirStrike)
+        hitsRemaining < maxHits  // True if we did an airstrike action
       }
-
-      // Start of Air Lift Special Activity
-      // ------------------------------------
-      degradeTheTrail()
-      if (!momentumInPlay(Mo_WildWeasels) || hitsRemaining == maxHits)
-        strikeASpace()
-
-      if (hitsRemaining < maxHits)
-        logEndSA(US, AirStrike)
-      hitsRemaining < maxHits  // True if we did an airstrike action
     }
   }
 
@@ -3295,6 +3529,459 @@ object Bot {
   // ================================================================
   object ARVN_Bot {
 
+    // 2-pop Province with COIN Base and NO Supoprt
+    val prov2PopWithCoinBaseNoSupport = (sp: Space) =>
+      sp.isProvince &&
+      sp.population == 2 &&
+      sp.pieces.has(CoinBases) &&
+      sp.support < PassiveSupport
+
+    // 2-pop Province WITHOUT Control and NO Supoprt
+    val prov2PopWithCoinControlNoSupport = (sp: Space) =>
+      sp.isProvince &&
+      sp.population == 2 &&
+      sp.coinControlled &&
+      sp.support < PassiveSupport
+
+    // 2-pop Province with COIN Base, US Troops, and NO Support
+    val pop2PopCoinBaseUsTroopsNoSupport = (sp: Space) =>
+      sp.isProvince &&
+      sp.population == 2 &&
+      sp.pieces.has(CoinBases) &&
+      sp.pieces.has(USTroops) &&
+      sp.support < PassiveSupport
+
+    // 2-pop City/Province with US Troops and support
+    val pop2SpaceWithUsTroopsAndSupport = (sp: Space) =>
+      (sp.isCity || sp.isProvince)  &&
+      sp.population == 2 &&
+      sp.support > Neutral &&
+      sp.pieces.has(USTroops)
+
+    val locOrProvinceNoBase = (sp: Space) =>
+      sp.isLoC || (sp.isProvince && !sp.pieces.has(CoinBases))
+
+    val provinceWithCoinControlNoCoinBase = (sp: Space) =>
+      sp.isProvince &&
+      sp.coinControlled &&
+      !sp.pieces.has(CoinBases)
+
+    val mostOpposition = List(
+      new LowestScore[Space]("Most Opposition", _.support.value)
+    )
+  
+    // Determine which ARVN troops/police are eligible to move
+    // The Trung rules have instructions for which cubes
+    // should remain in place
+    // -----------------------------------------------
+    // o  Unless Troops are leaving a Province without a COIN base,
+    //    keep ARVN cubes > US Troops in 2-Pop spaces with Support
+    // o  Keep both 1 ARVN Troop and 1 Police in each space without support.
+    // AND:
+    // o  Keep COIN Pieces > Enemies, first
+    //    then keep COIN+VC pieces >= NVA pieces
+    def determineEligibleMovingCubes(cubeType: PieceType): MovingGroups = {
+      val eligibleCubes = new MovingGroups()
+      // Add the eligible cubes for each space
+      for (sp <- game.spaces; if sp.pieces.has(cubeType)) {
+        val numCubeType    = sp.pieces.totalOf(cubeType)
+        val numARVNTroops  = sp.pieces.totalOf(ARVNTroops)
+        val numPolice      = sp.pieces.totalOf(ARVNPolice)
+        val numARVNCubes   = numARVNTroops + numPolice
+        val numUSTroops    = sp.pieces.totalOf(USTroops)
+        val numNVA         = sp.pieces.totalOf(NVAPieces)
+        val numVC          = sp.pieces.totalOf(VCPieces)
+        val numCOIN        = sp.pieces.totalOf(CoinPieces)
+        val numOtherARVN   = numARVNCubes - numCubeType
+        val numOtherCOIN   = numCOIN - numCubeType
+
+        // If we are moving mandatory Troops out of LoCs or Provinces
+        // without a base, then we don't keep any behind
+        val numToKeep = if (cubeType == ARVNTroops && locOrProvinceNoBase(sp))
+          0
+        else {
+          val keepForSupport = if (cubeType == ARVNTroops && locOrProvinceNoBase(sp))
+            0
+          else if (sp.population == 2 && sp.support > Neutral && numARVNCubes > numUSTroops)
+            (numUSTroops + 1 - numOtherARVN) min numCubeType
+          else if (sp.support < PassiveSupport && numARVNTroops > 0 && numPolice > 0)
+            1
+          else
+            0
+  
+          val keepForControl = if (numCOIN > numNVA + numVC)
+            (numNVA + numVC + 1 - numOtherCOIN) min numCubeType
+          else if (numCOIN + numVC >= numNVA)
+            (numNVA - numOtherCOIN - numVC) min numCubeType
+          else
+            0
+
+          keepForSupport max keepForControl
+        }
+
+
+        // To ensure that both conditions are met we must use
+        // the smaller value of the two, making sure that we
+        // don't exceed the number that are actually in the space.
+        val movingCubes = Pieces().set(numCubeType - numToKeep, cubeType)
+        if (movingCubes.nonEmpty)
+          eligibleCubes.set(sp.name, movingCubes)
+      }
+      eligibleCubes
+    }
+
+    // =========================================================================
+    // Carry out the Troop Redeployment part of the 
+    // Coup Round Redeploy phase.
+    // This is called by redeployARVNForces(), see the comment for
+    // that function for a summary of the Trung Troop redeployment
+    // instructions.
+    // =========================================================================
+    private def redeployARVNTroops(troopDestinations: List[String]): Unit = {
+      var destsUsed       = Set.empty[String]  // Dests that we moved troops to
+      var destsConsidered = Set.empty[String]  // Dests that were selected but did not need troops
+      val eligibleTroops = determineEligibleMovingCubes(ARVNTroops)
+
+      // o  Move ARVN Troops from LoCs and Provinces without a COIN base first,
+      //    then if the `mandatoryOnly` flag is not set from any spaces with
+      //    troops that are eligible to move.
+      def getTroopOrigin(mandatoryOnly: Boolean): Option[String] = {
+        val candidates1 = game.spaces filter { sp => 
+          !destsUsed(sp.name) &&
+          locOrProvinceNoBase(sp)  &&
+          eligibleTroops(sp.name).nonEmpty
+        }
+        
+        if (candidates1.nonEmpty)
+          Some(shuffle(candidates1).head.name)
+        else if (!mandatoryOnly) {
+          val candidates2 = game.spaces filter { sp => 
+            !destsUsed(sp.name) &&
+            eligibleTroops(sp.name).nonEmpty
+          }
+          if (candidates2.nonEmpty) {
+            val priorities = List(new HighestScore[Space]("Most ARVN Troops", _.pieces.totalOf(ARVNTroops)))
+            Some(bestCandidate(candidates2, priorities).name)
+          }
+          else
+            None
+        }
+        else
+          None
+      }
+
+      // Move troops to the given destination using as many origin spaces
+      // as need to fullfil the number needed.  Or until we run out of 
+      // eligible troops.
+      // Returns true if we have exhausted the eligible moveable troops
+      def moveTroopsTo(dest: String, numNeeded: Int, mandatoryOnly: Boolean): Boolean = {
+        def nextOrigin(remaining: Int): Boolean = if (remaining > 0) {
+          getTroopOrigin(mandatoryOnly) match {
+            case None => true  // No more origins with eligible troops
+
+            case Some(origin) =>
+              val numToMove = remaining min eligibleTroops(origin).total
+              val troops    = Pieces(arvnTroops = numToMove)
+              movePieces(troops, origin, dest)
+              eligibleTroops.remove(origin, troops)
+              nextOrigin(remaining - numToMove)
+          }
+        }
+        else
+          false
+
+        // Record that this destination was considered so it is
+        // not selected as a destination again.
+        destsConsidered += dest
+        if (numNeeded > 0) {
+          // Record that we moved troops to this destination
+          // so we do not subsequently select it as an origin.
+          destsUsed += dest
+          nextOrigin(numNeeded)
+        }
+        else
+          false
+      }
+
+      // Find the next destination for troop deployment
+      // using the Trung instructions, then determine how
+      // many troops should be moved there and move as many
+      // as possible up to that number.
+      // Then if we have not exhausted all of the eligible troops
+      // call recursively to do it again.
+      //
+      // Move Troop Priorities
+      // 1. Move Troops to get COIN pieces to exceed enemies in Saigon and in all
+      //    Provinces with a COIN Base
+      // 2. Get 1 Troop to Hue and to each 2-Pop Province with a COIN base AND no support,
+      //    most Opposition first
+      // 3. Move Troops to get ARNV cubes to exceed US Troops in each 2-Pop Province
+      //    with a COIN base, US Troops, and NO Support
+      // 4. Move any Troops still in LoCs and Provinces without a COIN base
+      def nextTroopDestination(): Unit = {
+        lazy val candidates1 = spaces(troopDestinations) filter { sp =>
+          !destsConsidered(sp.name) &&
+          sp.name == Saigon || (sp.isProvince && sp.pieces.has(CoinBases)) &&
+          sp.pieces.totalOf(CoinPieces) <= sp.pieces.totalOf(InsurgentPieces)
+        }
+
+        lazy val candidates2 = spaces(troopDestinations) filter { sp =>
+          !destsConsidered(sp.name) &&
+          (sp.name == Hue || prov2PopWithCoinBaseNoSupport(sp)) &&
+          sp.pieces.totalOf(ARVNTroops) == 0
+        }
+
+        lazy val candidates3 = spaces(troopDestinations) filter { sp =>
+          !destsConsidered(sp.name) &&
+          pop2PopCoinBaseUsTroopsNoSupport(sp) &&
+          sp.pieces.totalOf(ARVNCubes) <= sp.pieces.totalOf(USTroops)
+        }
+
+        val exhausted = if (candidates1.nonEmpty) {
+          // 1. Move Troops to get COIN pieces to exceed enemies in Saigon and in all
+          //    Provinces with a COIN Base
+          val sp = pickSpacePlaceCubesRangers(candidates1)
+          val numNeeded = sp.pieces.totalOf(InsurgentPieces) + 1 - sp.pieces.totalOf(CoinPieces)
+          
+          moveTroopsTo(sp.name, numNeeded, mandatoryOnly = false)
+        }
+        else if (candidates2.nonEmpty) {
+          // 2. Get 1 Troop to Hue and to each 2-Pop Province with a COIN base AND no support,
+          //    most Opposition first
+          // ActiveOpposition has the LOWEST support value.
+          val sp = pickSpacePlaceCubesRangers(narrowCandidates(candidates2, mostOpposition))
+          
+          moveTroopsTo(sp.name, 1, mandatoryOnly = false)
+        }
+        else if (candidates3.nonEmpty) {
+          // 3. Move Troops to get ARNV cubes to exceed US Troops in each 2-Pop Province
+          //    with a COIN base, US Troops, and NO Support
+          val sp = pickSpacePlaceCubesRangers(candidates3)
+          val numNeeded = sp.pieces.totalOf(USTroops) + 1 - sp.pieces.totalOf(ARVNCubes)
+
+          moveTroopsTo(sp.name, 1, mandatoryOnly = false)
+        }
+        else {
+          // 4. Move any Troops still in LoCs and Provinces without a COIN base
+          //    (ie. mandatory redeployments)
+          // -  Not sure the best way to handle the remaining manadatory troop redeployments?
+          //    I will dole them out one at a time using place cubes priorities
+          //    (May want to try to consolodate the movements to make the log cleaner?)
+          val sp = pickSpacePlaceCubesRangers(spaces(troopDestinations))
+          moveTroopsTo(sp.name, 1, mandatoryOnly = true)
+        }
+
+        if (!exhausted)
+          nextTroopDestination()
+      }
+
+      // Start moving troops to the first destination
+      nextTroopDestination()
+    }
+
+    // =========================================================================
+    // Carry out the Police Redeployment part of the 
+    // Coup Round Redeploy phase.
+    // This is called by redeployARVNForces(), see the comment for
+    // that function for a summary of the Trung Police redeployment
+    // instructions.
+    // =========================================================================
+    private def redeployARVNPolice(policeDestinations: List[String]): Unit = {
+      var destsUsed       = Set.empty[String]  // Dests that we moved troops to
+      var destsConsidered = Set.empty[String]  // Dests that were selected but did not need troops
+      val eligiblePolice = determineEligibleMovingCubes(ARVNPolice)
+
+      // o  Move Police from spaces with the most Police
+      def getPoliceOrigin(): Option[String] = {
+        val priorities = List(
+          new HighestScore[Space]("Most ARVN Police", _.pieces.totalOf(ARVNPolice))
+        )
+        val candidates = game.spaces filter { sp => 
+          !destsUsed(sp.name) &&
+          eligiblePolice(sp.name).nonEmpty
+        }
+        
+        if (candidates.nonEmpty)
+          Some(bestCandidate(candidates, priorities).name)
+        else
+          None
+      }
+
+      // Move troops to the given destination using as many origin spaces
+      // as need to fullfil the number needed.  Or until we run out of 
+      // eligible troops.
+      // Returns true if we have exhausted the eligible moveable troops
+      def movePoliceTo(dest: String, numNeeded: Int): Boolean = {
+
+        def nextOrigin(remaining: Int): Boolean = if (remaining > 0) {
+          getPoliceOrigin() match {
+            case None => true  // No more origins with eligible police
+
+            case Some(origin) =>
+              val numToMove = remaining min eligiblePolice(origin).total
+              val police    = Pieces(arvnPolice = numToMove)
+              movePieces(police, origin, dest)
+              eligiblePolice.remove(origin, police)
+              nextOrigin(remaining - numToMove)
+          }
+        }
+        else
+          false
+
+        // Record that this destination was considered so it is
+        // not selected as a destination again.
+        destsConsidered += dest
+        if (numNeeded > 0) {
+          // Record that we moved troops to this destination
+          // so we do not subsequently select it as an origin.
+          destsUsed += dest
+          nextOrigin(numNeeded)
+        }
+        else
+          false
+      }
+
+
+      // Find the next destination for police deployment
+      // using the Trung instructions, then determine how
+      // many police should be moved there and move as many
+      // as possible up to that number.
+      // Then if we have not exhausted all of the eligible police
+      // call recursively to do it again.
+      // 
+      // Move Police Priorities
+      // 1. Get Police to exceed enemies in all Provinces with COIN Control and
+      //    NO Coin base
+      // 2. Get 1 Police to Hue and each 2-Pop Province with COIN control and NO support,
+      //    most Opposition first.
+      // 3. Move Police to get ARVN cubes to exceed US Troops in each 2-Pop space with
+      //    both US Troops AND support.
+      // 4. Get Police to equal Guerrillas on all LoCs, highest Econ first.
+      def nextPoliceDestination(): Unit = {
+        lazy val candidates1 = spaces(policeDestinations) filter { sp =>
+          !destsConsidered(sp.name) &&
+          provinceWithCoinControlNoCoinBase(sp) &&
+          sp.pieces.totalOf(ARVNPolice) <= sp.pieces.totalOf(InsurgentPieces)
+        }
+
+        lazy val candidates2 = spaces(policeDestinations) filter { sp =>
+          !destsConsidered(sp.name) &&
+          (sp.name == Hue || prov2PopWithCoinControlNoSupport(sp)) &&
+          sp.pieces.totalOf(ARVNPolice) == 0
+        }
+
+        lazy val candidates3 = spaces(policeDestinations) filter { sp =>
+          !destsConsidered(sp.name) &&
+          pop2SpaceWithUsTroopsAndSupport(sp) &&
+          sp.pieces.totalOf(ARVNCubes) <= sp.pieces.totalOf(USTroops)
+        }
+
+        lazy val candidates4 = spaces(policeDestinations) filter { sp =>
+          !destsConsidered(sp.name) &&
+          sp.isLoC &&
+          sp.pieces.totalOf(ARVNPolice) < sp.pieces.totalOf(Guerrillas)
+        }
+
+        val exhausted = if (candidates1.nonEmpty) {
+          // 1. Get Police to exceed enemies in all Provinces with
+          //     COIN Control and NO Coin base
+          val sp = pickSpacePlaceCubesRangers(candidates1)
+          val numNeeded = sp.pieces.totalOf(InsurgentPieces) + 1 - sp.pieces.totalOf(ARVNPolice)
+          
+          movePoliceTo(sp.name, numNeeded)
+        }
+        else if (candidates2.nonEmpty) {
+          // 2. Get 1 Police to Hue and each 2-Pop Province with
+          //    COIN control and NO support, most Opposition first.
+          val sp = pickSpacePlaceCubesRangers(narrowCandidates(candidates2, mostOpposition))
+
+          movePoliceTo(sp.name, 1)
+        }
+        else if (candidates3.nonEmpty) {
+          // 3. Move Police to get ARVN cubes to exceed US Troops in
+          //    each 2-Pop space with both US Troops AND support.
+          val sp = pickSpacePlaceCubesRangers(candidates3)
+          val numNeeded = sp.pieces.totalOf(USTroops) + 1 - sp.pieces.totalOf(ARVNCubes)
+          
+          movePoliceTo(sp.name, numNeeded)
+        }
+        else if (candidates4.nonEmpty) {
+          // 4. Get Police to equal Guerrillas on all LoCs,
+          //    highest Econ first.
+          val sp = pickSpacePlaceCubesRangers(candidates4)
+          val numNeeded = sp.pieces.totalOf(Guerrillas) - sp.pieces.totalOf(ARVNPolice)
+          
+          movePoliceTo(sp.name, numNeeded)
+        }
+        else
+          true  // We've exhausted destinations
+
+        if (!exhausted)
+          nextPoliceDestination()
+      }
+
+      // Start moving police to the first destination
+      nextPoliceDestination()
+    }
+
+    // Coup Round ARVN Redeployment
+    // 
+    // Summary of Trung Instructions
+    // ===============================================================================
+    // Keep in place
+    // -------------------------------------------------------------------------------
+    // o  Unless Troops are leaving a Province without a COIN base,
+    //    keep ARVN cubes > US Troops in 2-Pop spaces with Support
+    // o  Keep both 1 ARVN Troop and 1 Police in each space without support.
+    // AND:
+    // o  Keep COIN Pieces > Enemies, first
+    //    then keep COIN+VC pieces >= NVA pieces
+    // 
+    // Move cubes
+    // -------------------------------------------------------------------------------
+    // o  Within each instruction move cubes using "Place Cubes or Rangers" to
+    //    select destination
+    // o  Move Police from spaces with the most Police
+    // o  Move ARVN Troops from LoCs and Provinces without a COIN base first,
+    //    then spaces with the most ARVN Troops
+    //
+    // Move Troop Priorities
+    // 1. Move Troops to get COIN pieces to exceed enemies in Saigon and in all
+    //    Provinces with a COIN Base
+    // 2. Get 1 Troop to Hue and to each 2-Pop Province with a COIN base AND no support,
+    //    most Opposition first
+    // 3. Move Troops to get ARNV cubes to exceed US Troops in each 2-Pop Province
+    //    with a COIN base, US Troops, and NO Support
+    // 4. Move any Troops still in LoCs and Provinces without a COIN base
+    // 
+    // Move Police Priorities
+    // 1. Get Police to exceed enemies in all Provinces with COIN Control and
+    //    NO Coin base
+    // 2. Get 1 Police to Hue and each 2-Pop Province with COIN control and NO support,
+    //    most Opposition first.
+    // 3. Move Police to get ARVN cubes to exceed US Troops in each 2-Pop space with
+    //    both US Troops AND support.
+    // 4. Get Police to equal Guerrillas on all LoCs, highest Econ first.
+    // ===============================================================================
+    def redeployARVNForces(): Unit = {
+      // Get the destinations up front because they should not be affected
+      // by changes to control as pieces are moved.
+      // Control is not adjusted until the end of the Redeploy phase.
+      val troopDestinations     = arvnRedeployTroopDestinations()
+      val policeDestinations    = arvnRedeployPoliceDestinations()
+
+      if (arvnCanRedeployTroops)
+        redeployARVNTroops(troopDestinations)
+      else
+        log("There are no ARVN Troops that can Redeploy")
+      
+      if (arvnCanRedeployPolice)
+        redeployARVNPolice(policeDestinations)
+      else
+        log("There are no ARVN Police that can Redeploy")
+    }
+    
+    //  Used during ARVN operations
     //  If we are tracking ARVN resources, then after passing an activation
     //  roll we must also make sure that there are sufficient ARVN resources
     //  to pay for the operation.
@@ -3355,7 +4042,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nARVN Select space (Shift Toward Passive Support): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -3370,7 +4057,7 @@ object Bot {
       )
 
       botLog(s"\nARVN Select space (Place Bases): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -3387,7 +4074,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nARVN Select space (Place Cubes or Rangers): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -3402,7 +4089,7 @@ object Bot {
       )
 
       botLog(s"\nARVN Select space (Sweep or Transport Destinations): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -3416,7 +4103,7 @@ object Bot {
       )
 
       botLog(s"\nARVN Select space (Patrol Destinations): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -3429,7 +4116,7 @@ object Bot {
       )
 
       botLog(s"\nARVN Select space (Govern): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -3447,7 +4134,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nARVN Select space (Remove or Replace): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -3575,17 +4262,7 @@ object Bot {
 
         if (candidates.nonEmpty && game.arvnResources >= costEach) {
           val sp = pickSpaceTowardPassiveSupport(candidates)
-          val numCanPay = if (costEach == 0) NO_LIMIT else game.arvnResources / costEach
-          val maxShift  = (PassiveSupport.value - sp.support.value) min 2
-          val maxPacify = ((sp.terror + maxShift) min d3) min numCanPay
-          val numTerror = maxPacify min sp.terror
-          val numShift  = (maxPacify - numTerror) min maxShift
-
-          log(s"\nPacifying in ${sp.name}")
-          log(separator())
-          decreaseResources(ARVN, (numTerror + numShift) * costEach)
-          removeTerror(sp.name, numTerror)
-          increaseSupport(sp.name, numShift)
+          pacifySpace(sp.name, ARVN, coupRound = false)
         }
       }
 
@@ -3993,6 +4670,119 @@ object Bot {
   // ================================================================
   object NVA_Bot {
 
+    // Coup Round Redeployment
+    // o Keep NVA pieces to exceed COIN+VC if possible
+    //   otherwise keep keep Insurgent pieces to equal or exceed COIN pieces
+    // o Then move Troops as follows:
+    //   - Each cube may only move once
+    //   - Select destination spaces outside N. Vietnam with a base using Place Troops priorities
+    //   - Select origin spaces:
+    //     1.  In South Vietnam with with no NVA base and no NVA control
+    //     2.  In N. Vietnam/Laos/Cambodia with most Troops and not already
+    //         selected as a destination
+    //   - Roll 3d6.  Get this many troops to each destination using one or
+    //                more origins.
+    def redeployNVATroops(): Unit = {
+      val destinationNames = nvaRedeployTroopDestinations()
+      var destsUsed      = Set.empty[String]
+      val eligibleTroops = new MovingGroups()
+      val targetNumber   = rollDice(3)
+
+      val destCandidate = (sp: Space) =>
+        !destsUsed(sp.name) &&
+        !sp.isNorthVietnam      &&
+        sp.pieces.has(NVABases)
+
+      val isSouthOrigin = (sp: Space) =>
+        isInSouthVietnam(sp.name)        &&
+        eligibleTroops(sp.name).nonEmpty &&
+        !(sp.pieces.has(NVABases) || sp.nvaControlled)
+
+      val isOtherOrigin = (sp: Space) => 
+        !destsUsed(sp.name)   &&
+        (sp.isNorthVietnam || isInLaosCambodia(sp.name)) &&
+        eligibleTroops(sp.name).nonEmpty
+
+      val otherPriorities = List(
+        new HighestScore[Space]("Most Troops", sp => sp.pieces.totalOf(NVATroops))
+      )
+
+      def getOrigin: Option[String] = {
+        val southOrigins = game.spaces filter isSouthOrigin
+        val otherOrigns  = game.spaces filter isOtherOrigin
+        if (southOrigins.nonEmpty || otherOrigns.nonEmpty) {
+          val sp = if (southOrigins.nonEmpty)
+            shuffle(southOrigins).head
+          else
+            bestCandidate(otherOrigns, otherPriorities)
+          Some(sp.name)
+        }
+        else
+          None
+      }
+
+      def nextDestination(): Unit = {
+        val candidates = game.spaces filter destCandidate
+        
+        if (candidates.nonEmpty) {
+          var totalMoved = 0
+          val dest       = pickSpacePlaceTroops(candidates).name
+
+          def moveFromOrigins(): Boolean = if (totalMoved < targetNumber) {
+            getOrigin match {
+              case None => true  // No more origins
+              case Some(origin) =>
+                val num = eligibleTroops(origin).total min (targetNumber - totalMoved)
+                val troops = Pieces(nvaTroops = num)
+                movePieces(troops, origin, dest)
+                destsUsed += dest
+                totalMoved += num
+                eligibleTroops.remove(origin, troops)
+                moveFromOrigins()
+            }
+          }
+          else
+            false // Origins not exhausted, just moved max troops
+
+          // Update redepoyDests first so that our destination
+          // will not be selected as an origin!
+          destsUsed += dest
+          val originsExhausted = moveFromOrigins()
+
+          if (!originsExhausted)
+            nextDestination()
+        }
+      }
+
+      if (nvaCanRedeployTroops) {
+        // First determine which Troops are eligible to move
+        // o Keep NVA pieces to exceed COIN+VC if possible
+        //   otherwise keep keep Insurgent pieces to equal or exceed COIN pieces
+        for (sp <- game.spaces; if sp.pieces.has(NVATroops)) {
+          val numTroops = sp.pieces.totalOf(NVATroops)
+          val numNVA    = sp.pieces.totalOf(NVAPieces)
+          val numVC     = sp.pieces.totalOf(VCPieces)
+          val numCOIN   = sp.pieces.totalOf(CoinPieces)
+  
+          val numEligible = if (numNVA > numCOIN + numVC)
+            (numNVA - (numCOIN + numVC) - 1) min numTroops
+          else if (numNVA + numVC >= numCOIN)
+            (numNVA + numVC - numCOIN) min numTroops
+          else
+            numTroops
+
+          if (numEligible > 0)
+            eligibleTroops.set(sp.name, Pieces(nvaTroops = numEligible))
+        }
+  
+        // Now start choosing destinations and moving troops.
+        log(s"Rolling 3d6 for number of troops per destination: $targetNumber")
+        nextDestination()
+      }
+      else
+        log("There are no NVA Troops that can Redeploy")
+    }
+
     val inOrAdjacentToLaosCambodia = Set(
       AnLoc,
       CentralLaos,
@@ -4086,7 +4876,7 @@ object Bot {
       )
 
       botLog(s"\nNVA Select space (Place Bases or Tunnels): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4107,7 +4897,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nNVA Select space (Place NVA Troops): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4126,7 +4916,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nNVA Select space (Place NVA Guerrilllas): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4145,7 +4935,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nNVA Select space (March Destinations): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4159,7 +4949,7 @@ object Bot {
       )
 
       botLog(s"\nNVA Select space (Place Terror): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4176,7 +4966,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nNVA Select space (Remove or Replace): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4574,83 +5364,87 @@ object Bot {
     //  Mo_559TransportGrp - Infiltrate is max 1 space
     //  -------------------------------------------------------------
     def infiltrateActivity(needDiceRoll: Boolean, replaceVCBase: Boolean): Boolean = {
-      var infiltrateSpaces = Set.empty[String]
-      val limited          = momentumInPlay(Mo_TyphoonKate) || momentumInPlay(Mo_559TransportGrp)
-      val maxInfiltrate    = if (limited) 1 else 2
-
-      val notes = List(
-        noteIf(momentumInPlay(Mo_TyphoonKate),s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
-        noteIf(momentumInPlay(Mo_559TransportGrp), s"Infiltrate is max 1 space [Momentum: $Mo_559TransportGrp]")
-      ).flatten
-
-      val canReplaceBase = (sp: Space) =>
-        !infiltrateSpaces(sp.name) &&
-        sp.pieces.totalOf(NVAPieces) > sp.pieces.totalOf(VCPieces) &&
-        sp.pieces.has(VCBases)
-      val canPlaceTroops = (sp: Space) =>
-        !infiltrateSpaces(sp.name) &&
-        sp.pieces.has(NVABases)
-      val diceSuccess = rollDice(3) <= game.availablePieces.totalOf(NVATroops)
-      
-      def placeTroops(): Unit = {
-        val troopCandidates = game.nonLocSpaces filter canPlaceTroops
-        val canPlace        = infiltrateSpaces.size < maxInfiltrate &&
-                              game.availablePieces.has(NVATroops)   &&
-                              troopCandidates.nonEmpty
-        if (canPlace) {
-          val sp        = pickSpacePlaceTroops(troopCandidates)
-          val numGs     = (sp.pieces.totalOf(NVAGuerrillas) - 2) max 0
-          val numTroops = (game.trail + sp.pieces.totalOf(NVABases) + numGs) min game.availablePieces.totalOf(NVATroops)
-          val toRemove  = selectFriendlyRemoval(sp.pieces.only(NVAGuerrillas), numGs)
-          val toPlace   = Pieces(nvaTroops = numTroops)
-          if (infiltrateSpaces.isEmpty)
-            logSAChoice(NVA, Infiltrate, notes)
-
-          log(s"\nNVA Infiltrates in ${sp.name}")
-            log(separator())
-
-          loggingControlChanges {
-            removeToAvailable(sp.name, toRemove)
-            placePieces(sp.name, toPlace)
+      if (momentumInPlay(Mo_McNamaraLine))
+        false
+      else {
+        var infiltrateSpaces = Set.empty[String]
+        val limited          = momentumInPlay(Mo_TyphoonKate) || momentumInPlay(Mo_559TransportGrp)
+        val maxInfiltrate    = if (limited) 1 else 2
+  
+        val notes = List(
+          noteIf(momentumInPlay(Mo_TyphoonKate),s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
+          noteIf(momentumInPlay(Mo_559TransportGrp), s"Infiltrate is max 1 space [Momentum: $Mo_559TransportGrp]")
+        ).flatten
+  
+        val canReplaceBase = (sp: Space) =>
+          !infiltrateSpaces(sp.name) &&
+          sp.pieces.totalOf(NVAPieces) > sp.pieces.totalOf(VCPieces) &&
+          sp.pieces.has(VCBases)
+        val canPlaceTroops = (sp: Space) =>
+          !infiltrateSpaces(sp.name) &&
+          sp.pieces.has(NVABases)
+        val diceSuccess = rollDice(3) <= game.availablePieces.totalOf(NVATroops)
+        
+        def placeTroops(): Unit = {
+          val troopCandidates = game.nonLocSpaces filter canPlaceTroops
+          val canPlace        = infiltrateSpaces.size < maxInfiltrate &&
+                                game.availablePieces.has(NVATroops)   &&
+                                troopCandidates.nonEmpty
+          if (canPlace) {
+            val sp        = pickSpacePlaceTroops(troopCandidates)
+            val numGs     = (sp.pieces.totalOf(NVAGuerrillas) - 2) max 0
+            val numTroops = (game.trail + sp.pieces.totalOf(NVABases) + numGs) min game.availablePieces.totalOf(NVATroops)
+            val toRemove  = selectFriendlyRemoval(sp.pieces.only(NVAGuerrillas), numGs)
+            val toPlace   = Pieces(nvaTroops = numTroops)
+            if (infiltrateSpaces.isEmpty)
+              logSAChoice(NVA, Infiltrate, notes)
+  
+            log(s"\nNVA Infiltrates in ${sp.name}")
+              log(separator())
+  
+            loggingControlChanges {
+              removeToAvailable(sp.name, toRemove)
+              placePieces(sp.name, toPlace)
+            }
+            infiltrateSpaces += sp.name
+            placeTroops()
           }
-          infiltrateSpaces += sp.name
+        }
+  
+        if (!needDiceRoll || diceSuccess) {
+          val baseCandidates = game.nonLocSpaces filter canReplaceBase
+  
+          // First try to replace a VC base if requested
+          if (replaceVCBase && game.availablePieces.has(NVABase) && baseCandidates.nonEmpty) {
+            val sp      = pickSpaceRemoveReplace(baseCandidates)
+            val vcPiece = selectEnemyRemovePlaceActivate(sp.pieces.only(VCBases), 1)
+            val nvaType = getInsurgentCounterPart(vcPiece.explode().head)
+  
+            logSAChoice(NVA, Infiltrate, notes)
+            log(s"\nNVA Infiltrates in ${sp.name}")
+              log(separator())
+  
+            if (sp.support < Neutral)
+              increaseSupport(sp.name, 1)
+  
+            loggingControlChanges {
+              removeToAvailable(sp.name, vcPiece)
+              placePieces(sp.name, Pieces(nvaBases = 1))
+              if (nvaType == NVATunnel)
+                  addTunnelMarker(sp.name, Pieces(nvaBases = 1))
+              infiltrateSpaces += sp.name
+            }
+          }
+  
+          // Next attempt to place troops at NVA bases
           placeTroops()
         }
+  
+        if (infiltrateSpaces.nonEmpty)
+          logEndSA(NVA, Infiltrate)
+  
+        infiltrateSpaces.nonEmpty
       }
-
-      if (!needDiceRoll || diceSuccess) {
-        val baseCandidates = game.nonLocSpaces filter canReplaceBase
-
-        // First try to replace a VC base if requested
-        if (replaceVCBase && game.availablePieces.has(NVABase) && baseCandidates.nonEmpty) {
-          val sp      = pickSpaceRemoveReplace(baseCandidates)
-          val vcPiece = selectEnemyRemovePlaceActivate(sp.pieces.only(VCBases), 1)
-          val nvaType = getInsurgentCounterPart(vcPiece.explode().head)
-
-          logSAChoice(NVA, Infiltrate, notes)
-          log(s"\nNVA Infiltrates in ${sp.name}")
-            log(separator())
-
-          if (sp.support < Neutral)
-            increaseSupport(sp.name, 1)
-
-          loggingControlChanges {
-            removeToAvailable(sp.name, vcPiece)
-            placePieces(sp.name, Pieces(nvaBases = 1))
-            if (nvaType == NVATunnel)
-                addTunnelMarker(sp.name, Pieces(nvaBases = 1))
-            infiltrateSpaces += sp.name
-          }
-        }
-
-        // Next attempt to place troops at NVA bases
-        placeTroops()
-      }
-
-      if (infiltrateSpaces.nonEmpty)
-        logEndSA(NVA, Infiltrate)
-
-      infiltrateSpaces.nonEmpty
     }
 
     //  -------------------------------------------------------------
@@ -4767,7 +5561,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nVC Select space (Shift Toward Active Opposition): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4784,7 +5578,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nVC Select space (Place Terror): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
     
@@ -4797,7 +5591,7 @@ object Bot {
       )
 
       botLog(s"\nVC Select space (Place Bases or Tunnels): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4815,7 +5609,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nVC Select space (Place Guerrilllas): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4833,7 +5627,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nVC Select space (March Destinations): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4848,7 +5642,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nVC Select space (Tax): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4866,7 +5660,7 @@ object Bot {
       ).flatten
 
       botLog(s"\nVC Select space (Remove or Replace): [${andList(candidates.sorted)}]")
-      botLog(separator())
+      botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4884,6 +5678,64 @@ object Bot {
       val ambushSpace = bestCandidate(reachableCandidates, MostUndergroundGuerrillas)
 
       (ambushSpace, targetSpace)
+    }
+
+    // Final part of the Commitment Phase of a Coup Round.
+    // 1. Shift spaces with a VC Base at Passive Support first,
+    //    using "Shift Toward Opposition" priorities.
+    def usWithdrawalShifts(numPopShifts: Int): Unit = {
+      var shiftSpaces = Set.empty[String]
+
+      def nextShift(numRemaining: Int): Unit = if (numRemaining > 0) {
+        val candidates1 = game.nonLocSpaces filter { sp =>
+          !shiftSpaces(sp.name)         &&
+          sp.population > 0             &&
+          sp.population <= numRemaining &&
+          sp.support == PassiveSupport  &&
+          sp.pieces.has(VCBases)
+        }
+        val candidates2 = game.nonLocSpaces filter { sp =>
+          !shiftSpaces(sp.name)         &&
+          sp.population > 0             &&
+          sp.population <= numRemaining &&
+          sp.support > ActiveOpposition
+        }
+
+        if (candidates1.nonEmpty || candidates2.nonEmpty) {
+          val sp = pickSpaceTowardActiveSupport(if (candidates1.nonEmpty) candidates1 else candidates2)
+          
+          decreaseSupport(sp.name, 1)
+          shiftSpaces += sp.name
+          nextShift(numRemaining - sp.population)
+        }
+      }
+
+      nextShift(numPopShifts)
+    }
+
+    // Cadres_Unshaded - VC must remove two guerrillas in the space
+    // Cadres_Shaded   - Allows VC to agitate in a rally space.
+    def agitateSpace(name: String, coupRound: Boolean): Unit = {
+      val cadres_unshaded = capabilityInPlay(Cadres_Unshaded)
+      val sp = game.getSpace(name)
+      val cadres_check = !cadres_unshaded || sp.pieces.totalOf(VCGuerrillas) >= 2
+
+      if (game.agitateTotal > 0 && (coupRound || capabilityInPlay(Cadres_Shaded)) && cadres_check) {
+        val cadres_msg = if (coupRound) "" else s" [$Cadres_Shaded]"
+        log(s"\nVC Agitates in ${name}$cadres_msg")
+        log(separator())
+        val numTerror = sp.terror min game.agitateTotal
+        val numShift  = (sp.support.value - ActiveOpposition.value) min (game.agitateTotal - numTerror) min 2
+        removeTerror(sp.name, numTerror)
+        decreaseSupport(sp.name, numShift)
+        decreaseAgitateTotal(numTerror + numShift)
+
+        if (cadres_unshaded) {
+          // Get fresh copy of space to include the guerrilla that was just flipped
+          val toRemove = selectFriendlyRemoval(sp.pieces.only(VCGuerrillas), 2)
+          removeToAvailable(sp.name, toRemove, Some(s"$Cadres_Unshaded triggers"))
+        }
+      }
     }
 
     //  -------------------------------------------------------------
@@ -4919,15 +5771,8 @@ object Bot {
       }
 
       def tryCadresAgitate(sp: Space): Unit = {
-        if (!agitated && cadres && sp.support > ActiveOpposition && game.agitateTotal > 0) {
-          log(s"\nVC Agitates in ${sp.name} [$Cadres_Shaded]")
-          log(separator())
-          val numTerror = sp.terror min game.agitateTotal
-          val numShift  = (sp.support.value - ActiveOpposition.value) min (game.agitateTotal - numTerror) min 2
-          removeTerror(sp.name, numTerror)
-          decreaseSupport(sp.name, numShift)
-          decreaseAgitateTotal(numTerror + numShift)
-        }
+        if (!agitated && cadres && sp.support > ActiveOpposition && game.agitateTotal > 0)
+          agitateSpace(sp.name, coupRound = false)
       }
 
       // Return true if we can continue (no failed activation)
@@ -5346,7 +6191,7 @@ object Bot {
       val which = if (isFirstEligible) "1st" else "2nd"
       s"\n$faction Choosing Action using NP Eligiblity Table ($which eligible)"
     }
-    botLog(separator())
+    botLog(separator(char = '#'))
 
     val table = if (isFirstEligible)
       firstEligibileTable

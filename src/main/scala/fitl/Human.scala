@@ -168,6 +168,372 @@ object Human {
     }
   }
 
+
+  //  Perform ARNV redeployment during a Coup Round.
+  //  1.  Prompt the use to move all Troops on LoCs and Provinces without COIN bases
+  //      to either Cities without NVA control, spaces with a COIN base or Saigon.
+  //  2.  Allow user to move any other Troops
+  //      to either Cities without NVA control, spaces with a COIN base or Saigon.
+  //  3.  Allow user to move Police to LoCs or COIN controlled spaces in South Vietnam.
+  def redeployARVNForces(): Unit = {
+    // Get the destinations up front because the should not be affected
+    // by changes to control as pieces are moved.
+    // Control is not adjusted until the end of the Redeploy phase.
+    val troopDestinations     = arvnRedeployTroopDestinations()
+    val policeDestinations    = arvnRedeployPoliceDestinations()
+    val mandatoryTroopOrigins = arvnRedeployMandatoryTroopOrigins()
+
+    def numTroopsStr(name: String) = {
+      val num = game.getSpace(name).pieces.totalOf(ARVNTroops)
+      amountOf(num, "troop")
+    }
+    def numPoliceStr(name: String) = {
+      val num = game.getSpace(name).pieces.totalOf(ARVNPolice)
+      s"$num police"
+    }
+
+    def moveTroopsFrom(origin: String, mandatory: Boolean): Unit = {
+      val numTroops = game.getSpace(origin).pieces.totalOf(ARVNTroops)
+
+      if (numTroops > 0) {
+        val dests = troopDestinations filterNot (_ == origin)
+        val finished = if (mandatory) None else Some("finished" -> s"Finished moving troops out of $origin")
+        val choices  = dests.map(name => name -> name):::finished.toList
+
+        println(s"\n${numTroopsStr(origin)} remaining in $origin")
+        askMenu(choices, "Choose destination:", allowAbort = false).head match {
+          case "finished" =>
+          case dest =>
+            val num = askInt("Move how many troops", 0, numTroops, 
+                            default = Some(numTroops), allowAbort = false)
+            if (num > 0) {
+              movePieces(Pieces(arvnTroops = num), origin, dest)
+            }
+        }
+        // Keep trying until no more troops or user is finished
+        moveTroopsFrom(origin, mandatory)
+      }
+    }
+
+    def movePoliceFrom(origin: String): Unit = {
+      val numPolice = game.getSpace(origin).pieces.totalOf(ARVNPolice)
+
+      if (numPolice > 0) {
+        val dests = policeDestinations filterNot (_ == origin)
+        val choices  = dests.map(name => name -> name) :+
+                       ("finished" -> s"Finished moving police out of $origin")
+
+        println(s"\n${numPoliceStr(origin)} remaining in $origin")
+        askMenu(choices, "Choose destination:", allowAbort = false).head match {
+          case "finished" =>
+          case dest =>
+            val num = askInt("Move how many police", 0, numPolice, 
+                            default = Some(numPolice), allowAbort = false)
+            if (num > 0) {
+              movePieces(Pieces(arvnPolice = num), origin, dest)
+            }
+        }
+        // Keep trying until no more troops or user is finished
+        movePoliceFrom(origin)
+      }
+    }
+
+    def doMandatoryTroopMoves(origins: List[String]): Unit = {
+      if (origins.nonEmpty) {
+        val choices = origins map (name => name -> s"$name [${numTroopsStr(name)}]")
+
+        println("\nMandatory Troop Redeployment")
+        val origin = askMenu(choices, "Move Troops out of which space:", allowAbort = false).head
+        moveTroopsFrom(origin, mandatory = true)
+        doMandatoryTroopMoves(origins filterNot (_ == origin))
+      }
+    }
+
+    def doVoluntaryTroopMoves(): Unit = {
+      val origins = spaceNames(game.spaces filter (_.pieces.has(ARVNTroops)))
+      if (origins.nonEmpty) {
+        val choices = origins.map(name => name -> s"$name [${numTroopsStr(name)}]") :+
+                      ("finished" -> "Finished with voluntary Troop Redeployment")
+
+        println("\nVoluntary Troop Redeployment")
+        askMenu(choices, "Move Troops out of which space:", allowAbort = false).head match {
+          case "finished" =>
+          case origin =>
+            moveTroopsFrom(origin, mandatory = false)
+            doVoluntaryTroopMoves()
+        }
+      }
+    }
+
+    def doVoluntaryPoliceMoves(): Unit = {
+      val origins = spaceNames(game.spaces filter (_.pieces.has(ARVNPolice)))
+      if (origins.nonEmpty) {
+        val choices = origins.map(name => name -> s"$name [${numPoliceStr(name)}]") :+
+                      ("finished" -> "Finished with voluntary Police Redeployment")
+
+        println("\nVoluntary Police Redeployment")
+        askMenu(choices, "Move Police out of which space:", allowAbort = false).head match {
+          case "finished" =>
+          case origin =>
+            movePoliceFrom(origin)
+            doVoluntaryPoliceMoves()
+        }
+      }
+    }
+
+    if (arvnCanRedeployTroops) {
+      doMandatoryTroopMoves(mandatoryTroopOrigins)
+      doVoluntaryTroopMoves()
+    }
+    else
+      log("There are no ARVN Troops that can Redeploy")
+    
+    if (arvnCanRedeployPolice)
+      doVoluntaryPoliceMoves()
+    else
+      log("There are no ARVN Police that can Redeploy")
+  }
+
+  //  Perform NVA redeployment during a Coup Round.
+  //  1.  NVA may voluntarily move NVA Troops from anywhere to any space
+  //      with an NVA base.
+  def redeployNVATroops(): Unit = {
+    val troopDestinations = arvnRedeployTroopDestinations()
+
+    def numTroopsStr(name: String) = {
+      val num = game.getSpace(name).pieces.totalOf(NVATroops)
+      amountOf(num, "troop")
+    }
+
+    def moveTroopsFrom(origin: String): Unit = {
+      val numTroops = game.getSpace(origin).pieces.totalOf(NVATroops)
+
+      if (numTroops > 0) {
+        val dests = troopDestinations filterNot (_ == origin)
+        val choices  = dests.map(name => name -> name) :+
+                       ("finished" -> s"Finished moving troops out of $origin")
+
+        println(s"\n${numTroopsStr(origin)} remaining in $origin")
+        askMenu(choices, "Choose destination:", allowAbort = false).head match {
+          case "finished" =>
+          case dest =>
+            val num = askInt("Move how many troops", 0, numTroops, 
+                            default = Some(numTroops), allowAbort = false)
+            if (num > 0) {
+              movePieces(Pieces(nvaTroops = num), origin, dest)
+            }
+        }
+        // Keep trying until no more troops or user is finished
+        moveTroopsFrom(origin)
+      }
+    }
+
+    def doVoluntaryTroopMoves(): Unit = {
+      val origins = spaceNames(game.spaces filter (_.pieces.has(NVATroops)))
+      if (origins.nonEmpty) {
+        val choices = origins.map(name => name -> s"$name [${numTroopsStr(name)}]") :+
+                      ("finished" -> "Finished with voluntary Troop Redeployment")
+
+        println("\nVoluntary Troop Redeployment")
+        askMenu(choices, "Move Troops out of which space:", allowAbort = false).head match {
+          case "finished" =>
+          case origin =>
+            moveTroopsFrom(origin)
+            doVoluntaryTroopMoves()
+        }
+      }
+    }
+
+    if (nvaCanRedeployTroops)
+      doVoluntaryTroopMoves()
+    else
+      log("There are no NVA Troops that can Redeploy")
+  }
+
+  // Part of the Commitment phase of a Coup Round.
+  // All US Troops currently in the casualites box
+  // are place on the map in either:
+  // COIN controlled spaces, LoCs, or Saigon.
+  def placeUSCasualtyTroopsOnMap(coinControlled: Set[String]): Unit = {
+    val validSpace = (sp: Space) =>
+      sp.name == Saigon ||
+      sp.isLoC          ||
+      coinControlled(sp.name)
+
+    def placeTroops(): Unit = {
+      val maxTroops = game.casualties.totalOf(USTroops)
+      if (maxTroops > 0) {
+        val candidates = spaceNames(game.spaces filter validSpace)
+        val numLeft = amountOf(maxTroops, "Troop casualty", Some("Troop casualties"))
+        val prompt = s"\n$numLeft remaining to place on the map\nChoose space to place Troops"
+        val name = askSimpleMenu(candidates, prompt, allowAbort = false).head
+        val num  = askInt(s"Move how many Troops to $name", 0, maxTroops, allowAbort = false)        
+        moveCasualtiesToMap(Pieces(usTroops = num), name)
+        placeTroops()
+      }
+    }
+
+    placeTroops()
+  }
+
+  // Part of the Commitment phase of a Coup Round.
+  // US may move up to `maxTroopsAllowed` Troops and up to 2 bases
+  // Available box, COIN controlled spaces, LoCs and Saigon
+  def moveUSCommitmentPieces(maxTroopsAllowed: Int, coinControlled: Set[String]): Unit = {
+    val AVAILABLE = "Available box"
+    var somethingMoved = false
+    val movedPieces = new MovingGroups()
+    val validSpace = (sp: Space) =>
+      sp.name == Saigon ||
+      sp.isLoC          ||
+      coinControlled(sp.name)
+    val validNames = spaceNames(game.spaces filter validSpace).toSet
+    val sortedNames = validNames.toList.sorted(SpaceNameOrdering)
+    val sortedBaseNames = sortedNames filterNot (n => game.getSpace(n).isLoC)
+    val totalTroops = game.availablePieces.totalOf(USTroops) +
+                      game.totalOnMap(sp => if (validNames(sp.name)) sp.pieces.totalOf(USTroops) else 0)
+    val totalBases  = game.availablePieces.totalOf(USBase) +
+                      game.totalOnMap(sp => if (validNames(sp.name)) sp.pieces.totalOf(USBase) else 0)
+    val maxTroops   = maxTroopsAllowed min totalTroops
+    val maxBases    = 2 min totalBases
+    def numTroopsMoved = movedPieces.allPieces.totalOf(USTroops)
+    def numBasesMoved = movedPieces.allPieces.totalOf(USBase)
+
+    def getPieces(name: String) = name match {
+      case AVAILABLE => game.availablePieces
+      case _         => game.getSpace(name).pieces
+    }
+
+    def moveEm(pieces: Pieces, origin: String, dest: String): Unit = if (pieces.nonEmpty) {
+      (origin, dest) match {
+        case (AVAILABLE, to)   => placePieces(to, pieces)
+        case (from, AVAILABLE) => removeToAvailable(from, pieces)
+        case (from, to)        => movePieces(pieces, from, to)
+      }
+      movedPieces.add(dest, pieces)
+      somethingMoved = true
+    }
+
+    def moveNewTroops(): Unit = {
+      val candidates  = sortedNames filter { name => (getPieces(name) - movedPieces(name)).has(USTroops) }
+      val choices     = if (game.availablePieces.has(USTroops)) AVAILABLE +: candidates else candidates
+      val origin      = askSimpleMenu(choices, "\nMove Troops in which space:", allowAbort = false).head
+      val destChoices = (AVAILABLE::sortedNames) filterNot (_ == origin)
+      val dest        = askSimpleMenu(destChoices, s"\nMove Troops in $origin to which space:", allowAbort = false).head
+      val maxNum      = (getPieces(origin) - movedPieces(origin)).totalOf(USTroops) min (maxTroops - numTroopsMoved)
+      val num         = askInt("Move how many Troops", 0, maxNum, allowAbort = false)
+      moveEm(Pieces(usTroops = num), origin, dest)
+    }
+
+    def moveNewBase(): Unit = {
+      val candidates  = sortedBaseNames filter { name => (getPieces(name) - movedPieces(name)).has(USBase) }
+      val choices     = if (game.availablePieces.has(USBase)) AVAILABLE +: candidates else candidates
+      val origin      = askSimpleMenu(choices, "\nMove Base from which space:", allowAbort = false).head
+      val destChoices = (AVAILABLE::sortedBaseNames) filterNot (_ == origin)
+      val dest        = askSimpleMenu(destChoices, "\nMove the Base to which space:", allowAbort = false).head
+      moveEm(Pieces(usBases = 1), origin, dest)
+    }
+
+    def moveOldTroops(): Unit = {
+      val avail = if (movedPieces(AVAILABLE).has(USTroops)) Some(AVAILABLE) else None
+      val candidates = (movedPieces.toList
+                           filter { case (name, pieces) => name != AVAILABLE && pieces.has(USTroops) }
+                           map    { case (name, _) => name})
+      val choices     = avail.toList ::: candidates
+      val origin      = askSimpleMenu(choices, "\nMove Troops from which space:", allowAbort = false).head
+      val destChoices = (AVAILABLE::sortedBaseNames) filterNot (_ == origin)
+      val dest        = askSimpleMenu(destChoices, "\nMove Troops to which space:", allowAbort = false).head
+      val maxNum      = movedPieces(origin).totalOf(USTroops)
+      val num         = askInt("Move how many Troops", 0, maxNum, allowAbort = false)
+      val pieces      = Pieces(usTroops = num)
+      movedPieces.remove(origin, pieces)
+      moveEm(pieces, origin, dest)
+    }
+
+    def moveOldBase(): Unit = {
+      val avail = if (movedPieces(AVAILABLE).has(USBase)) Some(AVAILABLE) else None
+      val candidates = (movedPieces.toList
+                           filter { case (name, pieces) => name != AVAILABLE && pieces.has(USBase) }
+                           map    { case (name, _) => name})
+      val choices     = avail.toList ::: candidates
+      val origin      = askSimpleMenu(choices, "\nMove Base from which space:", allowAbort = false).head
+      val destChoices = (AVAILABLE::sortedNames) filterNot (_ == origin)
+      val dest        = askSimpleMenu(destChoices, "\nMove the Base to which space:", allowAbort = false).head
+      val pieces      = Pieces(usBases = 1)
+      movedPieces.remove(origin, pieces)
+      moveEm(pieces, origin, dest)
+    }
+
+    def nextAction(): Unit = {
+      val canMoveNewTroops = maxTroops > 0 && numTroopsMoved < maxTroops
+      val canMoveOldTroops = numTroopsMoved > 0
+      val canMoveNewBases  = maxBases > 0 && numBasesMoved < maxBases
+      val canMoveOldBases  = numBasesMoved > 0
+      val choices = List(
+        choice(canMoveNewTroops, "new-troop", "Move troops"),
+        choice(canMoveNewBases,  "new-base",  "Move a base"),
+        choice(canMoveOldTroops, "old-troop", "Re-move troops that have already moved"),
+        choice(canMoveOldBases,  "old-base",  "Re-move a base that has already moved"),
+        choice(true,             "finished",  "Finished moving pieces")
+      ).flatten            
+
+      println(s"\nMoved so far: $numTroopsMoved/$maxTroops troops and $numBasesMoved/$maxBases bases")
+      askMenu(choices, "Choose one:", allowAbort = false).head match {
+        case "new-troop" =>
+          moveNewTroops()
+          nextAction()
+        case "new-base"  =>
+          moveNewBase()
+          nextAction()
+        case "old-troop" =>
+          moveOldTroops()
+          nextAction()
+        case "old-base"  =>
+          moveOldBase()
+          nextAction()
+        case _ =>        
+      }
+    }
+
+    if (totalBases + totalTroops > 0)
+      nextAction()
+
+    if (!somethingMoved)
+      log("No pieces were moved")
+  }
+
+    // Final part of the Commitment Phase of a Coup Round.
+    def usWithdrawalShifts(numPopShifts: Int): Unit = {
+      var shiftSpaces = Set.empty[String]
+
+      def pop(name: String) = game.getSpace(name).population
+
+      def nextShift(numRemaining: Int): Unit = if (numRemaining > 0) {
+        val candidates = spaceNames(game.nonLocSpaces filter { sp =>
+          !shiftSpaces(sp.name)         &&
+          sp.population >  0            &&
+          sp.population <= numRemaining &&
+          sp.support > ActiveOpposition
+        })
+
+        if (candidates.nonEmpty) {
+          val choices = candidates.map(name => name -> s"$name [pop: ${pop(name)}]") :+
+                        "finished" -> "Finished shifting spaces toward Opposition"
+          
+          val remaining = s"${amountOf(numRemaining, "population shift")} remaining"
+          val prompt = s"\nChoose space to shift: ($remaining)"
+          askMenu(choices, prompt, allowAbort = false).head match {
+            case "finished" =>
+            case name =>
+              decreaseSupport(name, 1)
+              shiftSpaces += name
+              nextShift(numRemaining - pop(name))
+          }
+        }
+      }
+
+      nextShift(numPopShifts)
+    }
   // Returns false if user decides not to pacify in space
   def pacifySpace(name: String, faction: Faction, coupRound: Boolean): Boolean = {
 
@@ -219,14 +585,15 @@ object Human {
   }
 
   // Returns false if user decides not to agitate in space
-  def agitateSpace(name: String): Boolean = {
+  def agitateSpace(name: String, coupRound: Boolean): Boolean = {
     val sp          = game.getSpace(name)
     val maxShift    = ((sp.support.value - ActiveOpposition.value) max 0) min 2
     val maxInSpace  = maxShift + sp.terror
     val cadres      = capabilityInPlay(Cadres_Unshaded)
     val maxPossible = maxInSpace min game.arvnResources
+    val cadres_msg = if (coupRound) "" else s" [$Cadres_Shaded]"
 
-    log(s"\nAgitating in $name")
+    log(s"\nVC Agitates in ${name}$cadres_msg")
     log(separator())
     if (cadres)
       log(s"VC must remove 2 guerrillas per agitate space [$Cadres_Unshaded]")
@@ -740,7 +1107,13 @@ object Human {
     val maxSpaces = if      (momentumInPlay(Mo_TyphoonKate)) 1
                     else if (game.inMonsoon) 2
                     else 6
-    val maxPieces = if (momentumInPlay(Mo_WildWeasels)) 1 else if (capabilityInPlay(LaserGuidedBombs_Shaded)) 2 else maxHits
+    val wildWeasels = momentumInPlay(Mo_WildWeasels) && 
+                    (!capabilityInPlay(LaserGuidedBombs_Shaded) ||
+                      isEventMoreRecentThan(Mo_WildWeasels, LaserGuidedBombs_Shaded.name))
+    val laserShaded = capabilityInPlay(LaserGuidedBombs_Shaded) && 
+                      (!momentumInPlay(Mo_WildWeasels) ||
+                      isEventMoreRecentThan(LaserGuidedBombs_Shaded.name, Mo_WildWeasels))
+    val maxPieces = if (wildWeasels) 1 else if (laserShaded) 2 else maxHits
     var strikeSpaces = Set.empty[String]
     var removedSpaces = Set.empty[String] // strike spaces where pieces have been removed
     var totalRemoved = 0
@@ -792,7 +1165,7 @@ object Human {
             }
 
             if (migs_shaded && game.availablePieces.has(USTroops))
-                removeAvailableToCasualties(Pieces(usTroops = 1), Some(s"$MiGs_Shaded triggers"))
+                moveAvailableToCasualties(Pieces(usTroops = 1), Some(s"$MiGs_Shaded triggers"))
 
             if (capabilityInPlay(SA2s_Unshaded)) {
               val CanRemove = List(NVABase, NVATroops, NVAGuerrillas_U, NVAGuerrillas_A)
@@ -2624,7 +2997,7 @@ object Human {
             promptToAddPieces(name)
             rallySpaces = rallySpaces :+ name
 
-            if (canAgitate && askYorN(s"Do you wish to Agitate in $name? (y/n) ") && agitateSpace(name))
+            if (canAgitate && askYorN(s"Do you wish to Agitate in $name? (y/n) ") && agitateSpace(name, coupRound = false))
               didCadres = true
           }
           selectRallySpace()

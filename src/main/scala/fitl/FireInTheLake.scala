@@ -3021,7 +3021,7 @@ object FireInTheLake {
       game = game.copy(trungDeck = shuffle(game.trungDeck))
       log("\nThe Trung deck has been reshuffled")
   }
-  pause()i
+  pause()
 }
 
 
@@ -3244,7 +3244,20 @@ object FireInTheLake {
   // It can throw either ExitGame, or Rollback exceptions.
   def endgameCommand(): Unit = {
     val Commands = List(ShowCmd, HistoryCmd, RollbackCmd, HelpCmd, QuitCmd)
-    // TODO: Inifinte loop processing commands
+
+    val opts      = orList(List("quit", "?"))
+    val prompt = {
+      val promptLines = new ListBuffer[String]
+      promptLines += ""
+      promptLines += s">>> This game has ended <<<"
+      promptLines += separator()
+      promptLines += s"($opts): "
+      promptLines.mkString("\n", "\n", "")
+    }
+    val (cmd, param) = askCommand(prompt, Commands)
+
+    doCommonCommand(cmd, param)
+    endgameCommand()
   }
 
 

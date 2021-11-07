@@ -3109,12 +3109,15 @@ object FireInTheLake {
     // Pivotal events are only available if no
     // faction has acted on the current card and
     // the next card showing is not a Coup! card.
+    // For pivot cards, the eventEffection() function
+    // returns true if the condition for playing the pivotal
+    // event has been met.
     if (game.sequence.numActors == 0 && !game.isCoupRound && !game.onDeckIsCoup) {
       val factionOrder = List(VC, ARVN, NVA, US)
       for {
-        faction <- factionOrder 
-        card    =  deck(faction.pivotCard)
-        if game.sequence.eligibleNextTurn(faction) && card.eventEffective(faction)
+        faction  <- factionOrder 
+        pivotCard =  deck(faction.pivotCard)
+        if game.sequence.eligibleThisTurn(faction) && pivotCard.eventEffective(faction)
       } yield faction
     }
     else
@@ -3130,27 +3133,31 @@ object FireInTheLake {
   //  it will not play its pivotal event if the current
   //  event is critical for that Bot.
   def getPivotalFaction: Option[Faction] = {
-    def botCriticalCheck(faction: Faction) = 
-      !game.isActingFaction(faction) ||
-      !deck(game.currentCard).isCritical(faction)
-    def askHumanPivot(factions: List[Faction]): Option[Faction] = {
+    def currentEventIsCritical(faction: Faction) = 
+      game.isActingFaction(faction) &&
+      deck(game.currentCard).isCritical(faction)
+
+    def askHumanPivot(factions: List[Faction], pivotBot: Option[Faction]): Option[Faction] = {
       factions match {
         case Nil   => None
         case f::fs =>
+          val msg = pivotBot map (bot => s"\n$bot Bot plans to play its pivotal event") getOrElse "\n"
+          println(msg)
           if (askYorN(s"Does $f wish to play their Pivotal Event? (y/n) "))
             Some(f)
           else
-            askHumanPivot(fs)
+            askHumanPivot(fs, pivotBot)
       }
     }
 
     val eligible = getPlayablePivotalEvents
     // Find the first Bot that will play their card.
-    val pivotBot    = eligible find { faction =>
+    val pivotBot = eligible find { faction =>
       game.isBot(faction)           &&
       d6 < game.numCardsInLeaderBox &&
-      botCriticalCheck(faction)
+      !currentEventIsCritical(faction)
     }
+
     // Next find all eligible human factions
     // that could play their pivotal event without
     // being trumped by the Bot.
@@ -3160,7 +3167,8 @@ object FireInTheLake {
         case None      => true
       }
     }      
-    val pivotPlayer = askHumanPivot(pivotHumans)
+
+    val pivotPlayer = askHumanPivot(pivotHumans, pivotBot)
 
     pivotPlayer orElse pivotBot
   }
@@ -3181,55 +3189,54 @@ object FireInTheLake {
       // Replace the current card with the faction's Pivotal event
       game = game.copy(currentCard = faction.pivotCard)
     }
-    else {
+    
+    try {
+      // This can happend if the user loads a game that has already ended
+      // We call this here because the user may want to rollback to 
+      // an earlier turn.
+      if (game.gameEnded)
+        endgameCommand() // Does not return, throws ExitGame or Rollback
+
+      val savedState = game
       try {
-        // This can happend if the user loads a game that has already ended
-        // We call this here because the user may want to rollback to 
-        // an earlier turn.
-        if (game.gameEnded)
-          endgameCommand() // Does not return, throws ExitGame or Rollback
+        if (game.isCoupRound) {
+          processCoupCommand()
 
-        val savedState = game
-        try {
-          if (game.isCoupRound) {
-            processCoupCommand()
-
-            if (game.gameEnded) {
-              // The game has ended allow the user to 
-              // look around, rollback, and quit
-              saveGameState()
-              endgameCommand() // Does not return, throws ExitGame or Rollback
-            }
-            else {
-              drawNextCard()
-              saveGameState()
-            }
+          if (game.gameEnded) {
+            // The game has ended allow the user to 
+            // look around, rollback, and quit
+            saveGameState()
+            endgameCommand() // Does not return, throws ExitGame or Rollback
           }
           else {
-            processActorCommand(game.actingFaction.get)
-            
-            // If no more factions can act on the current card
-            // prompt prompt for a new Event card.
-            if (game.sequence.exhausted)
-              drawNextCard()
-
-            // Now create a save point to capture the action
+            drawNextCard()
             saveGameState()
           }
         }
-        catch {
-          case AbortAction =>
-            println("\n>>>> Aborting the current action <<<<")
-            println(separator())
-            displayGameStateDifferences(game, savedState)
-            game = savedState
+        else {
+          processActorCommand(game.actingFaction.get)
+          
+          // If no more factions can act on the current card
+          // prompt prompt for a new Event card.
+          if (game.sequence.exhausted)
+            drawNextCard()
+
+          // Now create a save point to capture the action
+          saveGameState()
         }
       }
       catch {
-        // The rollback command will have restored the game state from a previosly
-        // saved turn.
-        case Rollback =>
+        case AbortAction =>
+          println("\n>>>> Aborting the current action <<<<")
+          println(separator())
+          displayGameStateDifferences(game, savedState)
+          game = savedState
       }
+    }
+    catch {
+      // The rollback command will have restored the game state from a previosly
+      // saved turn.
+      case Rollback =>
     }
 
     // Loop infinitely
@@ -3258,49 +3265,6 @@ object FireInTheLake {
 
     doCommonCommand(cmd, param)
     endgameCommand()
-  }
-
-
-  // Check to see if any faction wishes to play their pivotal event.
-  // If so, update the cards and save the game state.
-  def checkForPivotalEvent(): Unit = {
-    // if (game.sequence.numActors == 0 && !deck.isPivotalCard(game.currentCard)) {
-    //   val trumpPriority = List(Scotti, Saxon, Dux, Civitates)
-    //   // TODO: Need to implement logic to determine if Bots will play their pivotal event.
-    //   val botPivoter: Option[Faction] = None
-    //   // val botPivoter = trumpPriority find (f => game.isBot(f) && canPlayPivotCard(f))
-    //
-    //   // List of human players who can pivot if they wish.
-    //   // If a bot wishes to pivot, the list will only include those
-    //   // that can trump the bot.
-    //   val canTrumpBot = (trumpPriority.reverse dropWhile (f => Some(f) != botPivoter)).tail.reverse
-    //   val humanPivots = canTrumpBot filter (f => game.isHuman(f) && canPlayPivotCard(f))
-    //   val pivoter = (botPivoter, humanPivots) match {
-    //     case (bot, Nil) => bot // May be None
-    //     case (Some(bot), humans) =>
-    //       val choices = ("none" -> s"Allow $bot bot to play its pivotal event") ::
-    //                     (humans map (f => f.name -> s"$f will trump with their pivotal event"))
-    //       println(s"\nThe ${bot} bot wishes to play its pivotal event")
-    //       askMenu(choices, allowAbort = false).head match {
-    //         case "none" => Some(bot)
-    //         case name   => Some(Faction(name))
-    //       }
-    //     case (None, humans) =>
-    //       val choices = ("none" -> "No faction will play a pivotal event") ::
-    //                     (humans map (f => f.name -> s"$f will play their pivotal event"))
-    //       println(s"\nDoes any faction wish to play a pivotal event?")
-    //       askMenu(choices, allowAbort = false).head match {
-    //         case "none" => None
-    //         case name   => Some(Faction(name))
-    //       }
-    //   }
-    //   pivoter foreach { faction =>
-    //     game = game.copy(nextCards = game.currentCard :: game.nextCards,
-    //                      currentCard = faction.pivotCard)
-    //     log()
-    //     log(s"The $faction play their pivotal event")
-    //   }
-    // }
   }
 
   //  Draw the next Trung Card for the given faction.

@@ -240,11 +240,11 @@ object Cards {
       (faction: Faction) => {
         val numCasualties = game.casualties.totalOf(USPieces) min 6
         if (game.isHuman(US)) {
-          Human.doAirStrike(Human.Params())
+          Human.doAirStrike(Human.Params(event = true))
           Human.moveUSOutOfPlayToCities(6)
         }
         else {
-          US_Bot.airStrikeActivity()
+          US_Bot.airStrikeActivity(Bot.Params(event = true))
           US_Bot.moveOutOfPlayToCities(6)
         }
       },

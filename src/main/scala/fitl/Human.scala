@@ -55,7 +55,8 @@ object Human {
     maxSpaces: Option[Int]          = None,
     free: Boolean                   = false, // Events grant free commands
     assaultRemovesTwoExtra: Boolean = false, // M48 Patton (unshaded)
-    onlyIn: Option[Set[String]]     = None   // Limit command to the given spaces
+    onlyIn: Option[Set[String]]     = None,  // Limit command to the given spaces
+    event: Boolean                  = false
   ) {
     val limOpOnly = maxSpaces == Some(1)
 
@@ -908,25 +909,30 @@ object Human {
     def nextAdviseSpace(): Unit = {
       val sweepCandidates = spaceNames(game.nonLocSpaces filter { sp =>
         !sp.isNorthVietnam &&
+        params.spaceAllowed(sp.name) &&
         !Special.trainingSpaces(sp.name) &&
         !Special.selectedSpaces(sp.name) &&
         sp.pieces.has(arvnForces) &&
         (sp.pieces.has(UndergroundGuerrillas) || (cobras && hasAssaultTarget(sp)))
       })
       val assaultCandidates = spaceNames(game.spaces filter { sp =>
+        params.spaceAllowed(sp.name) &&
         !Special.trainingSpaces(sp.name) &&
         !Special.selectedSpaces(sp.name) &&
         sp.pieces.has(arvnForces) &&
         hasAssaultTarget(sp)
       })
       val specialForcesCandidates = spaceNames(game.spaces filter { sp =>
+        params.spaceAllowed(sp.name) &&
         !Special.trainingSpaces(sp.name) &&
         !Special.selectedSpaces(sp.name) &&
         sp.pieces.has(Irregulars_U::Rangers_U::Nil) &&
         hasSpecialOpsTarget(sp)
       })
 
-      val maxAdvise = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
+      val maxAdvise = if (params.maxSpaces.nonEmpty)
+        params.maxSpaces.get
+      else if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
       val canAdvise = Special.selectedSpaces.size < maxAdvise
 
       val canSweep   = canAdvise && !game.inMonsoon && sweepCandidates.nonEmpty
@@ -984,7 +990,9 @@ object Human {
   // among 4 selected spaces (2 in Monsoon, Never N. Vietnam)
   def doAirLift(params: Params): Unit = {
     val Others: List[PieceType] = ARVNTroops::Rangers:::Irregulars
-    val maxAirLiftSpaces = if (game.inMonsoon) 2 else 4
+    val maxAirLiftSpaces = if (params.maxSpaces.nonEmpty)
+      params.maxSpaces.get
+    else if (game.inMonsoon) 2 else 4
     var airLiftSpaces    = List.empty[String]
     val liftedOthers     = new MovingGroups()  // ARVN troops, Rangers, Irregulars (max 4)
 
@@ -1003,7 +1011,9 @@ object Human {
     }
 
     def airLiftCandidates = spaceNames(game.spaces filter { sp =>
-      !sp.isNorthVietnam && !airLiftSpaces.contains(sp.name)
+      !sp.isNorthVietnam && 
+      params.spaceAllowed(sp.name) &&
+      !airLiftSpaces.contains(sp.name)
     })
 
     def liftOutCandidates = if (airLiftSpaces.size > 1)
@@ -1123,7 +1133,8 @@ object Human {
     val aaa_shaded = capabilityInPlay(AAA_Shaded)
     val arclight_unshaded = capabilityInPlay(ArcLight_Unshaded)
     val maxHits     = d6
-    val maxSpaces = if      (momentumInPlay(Mo_TyphoonKate)) 1
+    val maxSpaces = if      (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                    else if (momentumInPlay(Mo_TyphoonKate)) 1
                     else if (game.inMonsoon) 2
                     else 6
     val wildWeasels = momentumInPlay(Mo_WildWeasels) &&
@@ -1320,9 +1331,11 @@ object Human {
     var heaven_unshaded_used = false
     val heaven_unshaded = capabilityInPlay(MandateOfHeaven_Unshaded)
     val heaven_shaded   = capabilityInPlay(MandateOfHeaven_Shaded)
-    val maxSpaces       = if (kate || heaven_shaded) 1 else 2
+    val maxSpaces       = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                          else if (kate || heaven_shaded) 1 else 2
 
     def isCandidate(sp: Space) = {
+        params.spaceAllowed(sp.name) &&
         !sp.isLoC            &&
         sp.coinControlled    &&
         sp.population > 0    &&
@@ -1475,7 +1488,8 @@ object Human {
   def doRaid(params: Params): Unit = {
     val kate      = momentumInPlay(Mo_TyphoonKate)
     val frozen    = new MovingGroups()
-    val maxSpaces = if (kate) 1 else 2
+    val maxSpaces = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                    else if (kate) 1 else 2
     var raidSpaces = Set.empty[String]
 
     def canMoveFrom(name: String) = {
@@ -1502,6 +1516,7 @@ object Human {
 
     def nextSelectAction(): Unit = {
       val isCandidate = (sp: Space) => {
+        params.spaceAllowed(sp.name) &&
         !raidSpaces(sp.name) &&
         !sp.isNorthVietnam &&
         (sp.pieces.has(Rangers) || adjWithRangers(sp.name).nonEmpty)
@@ -1584,7 +1599,8 @@ object Human {
     val NVABases         = NVABase::NVATunnel::Nil
     val kate             = momentumInPlay(Mo_TyphoonKate)
     val transportGrp     = momentumInPlay(Mo_559TransportGrp)
-    val maxSpaces        = if (kate || transportGrp) 1 else 2
+    val maxSpaces        = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                           else if (kate || transportGrp) 1 else 2
     var infiltrateSpaces = Set.empty[String]
 
     val canSuborn = (sp: Space) =>
@@ -1592,6 +1608,8 @@ object Human {
       (sp.pieces.has(VCPieces) || sp.support < Neutral)
 
     val isCandidate = (sp: Space) =>
+      params.spaceAllowed(sp.name) &&
+      !infiltrateSpaces(sp.name) &&
       sp.pieces.has(NVABases) || canSuborn(sp)
 
 
@@ -1705,7 +1723,8 @@ object Human {
     val longRange_unshaded = capabilityInPlay(LongRangeGuns_Unshaded)
     val longRange_shaded   = capabilityInPlay(LongRangeGuns_Shaded)
     var bombardSpaces      = Set.empty[String]
-    val maxSpaces = if      (longRange_unshaded) 1
+    val maxSpaces = if      (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                    else if (longRange_unshaded) 1
                     else if (longRange_shaded)   3
                     else                         2
 
@@ -1716,7 +1735,10 @@ object Human {
         game.getSpace(name).pieces.totalOf(NVATroops) > 2
       }
 
-      enemyCondition && (sp.pieces.totalOf(NVATroops) > 2 || hasAdjacentTroops)
+      params.spaceAllowed(sp.name) &&
+      !bombardSpaces(sp.name) &&
+      enemyCondition && 
+      (sp.pieces.totalOf(NVATroops) > 2 || hasAdjacentTroops)
     }
 
     def bombardSpace(name: String): Unit = {
@@ -1799,12 +1821,19 @@ object Human {
   def doTax(params: Params): Unit = {
     val kate      = momentumInPlay(Mo_TyphoonKate)
     var taxSpaces = Set.empty[String]
-    val maxSpaces = if (kate) 1 else 4
+    val maxSpaces = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                    else if (kate) 1 else 4
 
     val isCandidate = (sp: Space) => if (sp.isLoC)
-      sp.printedEconValue > 0 && sp.pieces.has(VCGuerrillas_U)
+      params.spaceAllowed(sp.name) &&
+      !taxSpaces(sp.name) && sp.printedEconValue > 0 &&
+      sp.pieces.has(VCGuerrillas_U)
     else
-      sp.population > 0 && sp.pieces.has(VCGuerrillas_U) && !sp.coinControlled
+      params.spaceAllowed(sp.name) &&
+      !taxSpaces(sp.name) &&
+      sp.population > 0 &&
+      sp.pieces.has(VCGuerrillas_U) &&
+      !sp.coinControlled
 
     def taxSpace(name: String): Unit = {
       val sp  = game.getSpace(name)
@@ -1861,7 +1890,11 @@ object Human {
     var subvertSpaces = Set.empty[String]
     var cubesRemoved  = 0
 
-    val isCandidate = (sp: Space) => sp.pieces.has(VCGuerrillas_U) && sp.pieces.has(ARVNCubes)
+    val isCandidate = (sp: Space) =>
+      params.spaceAllowed(sp.name) &&
+      !subvertSpaces(sp.name) &&
+      sp.pieces.has(VCGuerrillas_U) &&
+      sp.pieces.has(ARVNCubes)
 
     def removeCubes(name: String): Unit = {
       val sp       =  game.getSpace(name)

@@ -90,7 +90,8 @@ object Bot {
     maxSpaces: Option[Int]          = None,
     free: Boolean                   = false, // Events grant free commands
     assaultRemovesTwoExtra: Boolean = false, // M48 Patton (unshaded)
-    onlyIn: Option[Set[String]]     = None   // Limit command to the given spaces
+    onlyIn: Option[Set[String]]     = None,  // Limit command to the given spaces
+    event: Boolean                  = false
   ) {
     val limOpOnly = maxSpaces == Some(1)
 
@@ -3247,11 +3248,12 @@ object Bot {
     //  *  If ARVN is human, Add +6 Aid
     //
     // Mo_TyphoonKate - prohibits air lift, transport, and bombard, all other special activities are max 1 space
-    def adviseActivity(): Boolean = {
-      val maxAdvise = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
+    def adviseActivity(params: Params): Boolean = {
+      val maxAdvise = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                      else if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
       val UndergroundSpecialForces = Set(Irregulars_U, Rangers_U)
       def canAdvise = adviseSpaces.size < maxAdvise
-      def prohibited(sp: Space) = adviseSpaces(sp.name) || trainingSpaces(sp.name)
+      def prohibited(sp: Space) = !params.spaceAllowed(sp.name) || adviseSpaces(sp.name) || trainingSpaces(sp.name)
       def hasUndergroundForces(sp: Space) = sp.pieces.has(UndergroundSpecialForces)
       def specialForcesWouldRemoveBase(sp: Space) =
         hasUndergroundForces(sp) &&
@@ -3372,15 +3374,22 @@ object Bot {
     //
     // Mo_TyphoonKate - prohibits air lift, transport, and bombard, all other special activities are max 1 space
     // Mo_Medevac_Shaded - prohibits air lift
-    def airLiftActivity(): Boolean = {
-      if (momentumInPlay(Mo_TyphoonKate) || momentumInPlay(Mo_Medevac_Shaded))
+    def airLiftActivity(params: Params): Boolean = {
+      if (!params.event && (momentumInPlay(Mo_TyphoonKate) || momentumInPlay(Mo_Medevac_Shaded)))
         false
       else {
         // If Shaded Booby Traps then limit spaces to 2 unless this is a limOp
-        val maxSpaces: Option[Int]  = Some(if (game.inMonsoon) 2 else 4)
+        val maxSpaces: Option[Int]  = Some(
+          if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+          else if (game.inMonsoon) 2 else 4
+        )
 
         val nextAirLiftCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
-          val candidates = game.spaces filterNot (sp => sp.isNorthVietnam || prohibited(sp.name))
+          val candidates = game.spaces filter { sp =>
+            params.spaceAllowed(sp.name) &&
+            !sp.isNorthVietnam &&
+            !prohibited(sp.name)
+          }
 
           if (candidates.nonEmpty)
             Some(pickSpaceAirLiftDest(candidates).name)
@@ -3434,11 +3443,11 @@ object Bot {
     //  SA2s_Unshaded - When trail degraded, US removes 1 NVA piece (including untunneled base) outside the South (includes N. Vietnam)
     //  Mo_Oriskany   - Shaded (prohibits degrade of trail) (includes air strike, coup round, NOT evnts!)
 
-    def airStrikeActivity(): Boolean = {
+    def airStrikeActivity(params: Params): Boolean = {
       val prohibited = momentumInPlay(Mo_RollingThunder) ||
                        momentumInPlay(Mo_DaNang)         ||
                        momentumInPlay(Mo_BombingPause)
-      if (prohibited)
+      if (!params.event && prohibited)
         false
       else {
         val adsid    = game.isHuman(NVA) && momentumInPlay(Mo_ADSID)
@@ -3455,7 +3464,8 @@ object Bot {
         val laserShaded = capabilityInPlay(LaserGuidedBombs_Shaded) &&
                           (!momentumInPlay(Mo_WildWeasels) ||
                           isEventMoreRecentThan(LaserGuidedBombs_Shaded.name, Mo_WildWeasels))
-        val maxSpaces = if      (momentumInPlay(Mo_TyphoonKate)) 1
+        val maxSpaces = if      (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                        else if (momentumInPlay(Mo_TyphoonKate)) 1
                         else if (game.inMonsoon) 2
                         else 6
         val maxPieces = if (wildWeasels) 1 else if (laserShaded) 2 else maxHits
@@ -3515,6 +3525,7 @@ object Bot {
 
         def strikeASpace(): Unit = {
           val isCandidate = (sp: Space) =>
+            params.spaceAllowed(sp.name)   &&
             !strikeSpaces(sp.name)         &&
             sp.pieces.hasExposedInsurgents &&
             (sp.pieces.has(CoinPieces) || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
@@ -4537,11 +4548,18 @@ object Bot {
     //  MandateOfHeaven_Shaded   - ARVN Govern is maximum 1 space
     //  MandateOfHeaven_Unshaded - 1 Govern space may transfer Aid to Patronage without shifting support
     //  RVN_Leader_YoungTurks    - Each ARVN Govern adds +2 Patronage
-    def governActivity(): Boolean = {
-      val maxGovern   = if (momentumInPlay(Mo_TyphoonKate) || capabilityInPlay(MandateOfHeaven_Shaded)) 1 else 2
+    def governActivity(params: Params): Boolean = {
+      val kate        = momentumInPlay(Mo_TyphoonKate)
+      val mandate     = capabilityInPlay(MandateOfHeaven_Shaded)
+      val maxGovern   = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                        else if (kate || mandate) 1 else 2
       var usedMandate = false
       var governSpaces = Set.empty[String]
-      val prohibited = (sp: Space) => trainingSpaces(sp.name) || governSpaces(sp.name) || sp.name == Saigon
+      val prohibited = (sp: Space) =>
+        !params.spaceAllowed(sp.name) ||
+        trainingSpaces(sp.name) ||
+        governSpaces(sp.name) ||
+        sp.name == Saigon
       val isCandidate = (sp: Space) =>
         !prohibited(sp)   &&
         sp.population > 0 &&
@@ -4603,17 +4621,21 @@ object Bot {
     // Mo_TyphoonKate          - prohibits air lift, transport, and bombard, all other special activities are max 1 space
     // ArmoredCavalry_Shaded   - Transport Rangers only (NO TROOPS)
     // RVN_Leader_NguyenKhanh  - Transport uses max 1 LOC space - Enforced by getTransportOrigins()
-    def transportActivity(): Boolean = {
+    def transportActivity(params: Params): Boolean = {
       var flippedARanger = false
 
-      if (momentumInPlay(Mo_TyphoonKate))
+      if (!params.event && momentumInPlay(Mo_TyphoonKate))
         false  // Typhoon Kate prohibits transport
       else {
         val moveTypes: Set[PieceType] =
           if (capabilityInPlay(ArmoredCavalry_Shaded)) Rangers.toSet else ARVNForces.toSet
 
         val nextTransportCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
-          val candidates = game.spaces filterNot (sp => sp.isNorthVietnam || prohibited(sp.name))
+          val candidates = game.spaces filter { sp =>
+            params.spaceAllowed(sp.name) &&
+            !sp.isNorthVietnam &&
+            !prohibited(sp.name)
+          }
 
           // No activation check for Transport
           if (candidates.nonEmpty)
@@ -4645,8 +4667,9 @@ object Bot {
 
 
     // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
-    def raidActivity(): Boolean = {
-      val maxRaid = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
+    def raidActivity(params: Params): Boolean = {
+      val maxRaid = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                    else if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
       // Underground guerrillas can be targeted, Tunnels cannot and
       // base only if no other Insurgent pieces (forces?) exist
       val hasRaidTarget = (sp: Space) =>
@@ -4699,10 +4722,20 @@ object Bot {
       }
 
       val raidInPlaceCandidates: List[Space] =
-        game.spaces filter (sp => !sp.isNorthVietnam && hasRaidTarget(sp) && sp.pieces.has(Rangers_U))
+        game.spaces filter { sp =>
+          params.spaceAllowed(sp.name) &&
+          !sp.isNorthVietnam &&
+          hasRaidTarget(sp) &&
+          sp.pieces.has(Rangers_U)
+        }
 
       val raidAdjacentCandidates: List[Space] =
-        game.spaces filter (sp => !sp.isNorthVietnam && hasRaidTarget(sp) && hasAdjacentUndergroundRangers(sp))
+        game.spaces filter { sp =>
+          params.spaceAllowed(sp.name) &&
+          !sp.isNorthVietnam &&
+          hasRaidTarget(sp) &&
+          hasAdjacentUndergroundRangers(sp)
+        }
 
       nextRaid(raidInPlaceCandidates)
       nextRaid(raidAdjacentCandidates)
@@ -5411,13 +5444,14 @@ object Bot {
     //  Mo_McNamaraLine    - prohibits infiltrate
     //  Mo_559TransportGrp - Infiltrate is max 1 space
     //  -------------------------------------------------------------
-    def infiltrateActivity(needDiceRoll: Boolean, replaceVCBase: Boolean): Boolean = {
-      if (momentumInPlay(Mo_McNamaraLine))
+    def infiltrateActivity(params: Params, needDiceRoll: Boolean, replaceVCBase: Boolean): Boolean = {
+      if (!params.event && momentumInPlay(Mo_McNamaraLine))
         false
       else {
         var infiltrateSpaces = Set.empty[String]
         val limited          = momentumInPlay(Mo_TyphoonKate) || momentumInPlay(Mo_559TransportGrp)
-        val maxInfiltrate    = if (limited) 1 else 2
+        val maxInfiltrate    = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                               else if (limited) 1 else 2
 
         val notes = List(
           noteIf(momentumInPlay(Mo_TyphoonKate),s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
@@ -5425,10 +5459,12 @@ object Bot {
         ).flatten
 
         val canReplaceBase = (sp: Space) =>
+          params.spaceAllowed(sp.name) &&
           !infiltrateSpaces(sp.name) &&
           sp.pieces.totalOf(NVAPieces) > sp.pieces.totalOf(VCPieces) &&
           sp.pieces.has(VCBases)
         val canPlaceTroops = (sp: Space) =>
+          params.spaceAllowed(sp.name) &&
           !infiltrateSpaces(sp.name) &&
           sp.pieces.has(NVABases)
         val diceSuccess = rollDice(3) <= game.availablePieces.totalOf(NVATroops)
@@ -5502,12 +5538,13 @@ object Bot {
     // LongRangeGuns_Unshaded - NVA Bombard is max 1 space
     // LongRangeGuns_Shaded   - NVA Bombard is max 3 spaces
     //  -------------------------------------------------------------
-    def bombardActivity(): Boolean = {
-      if (momentumInPlay(Mo_TyphoonKate))
+    def bombardActivity(params: Params): Boolean = {
+      if (!params.event && momentumInPlay(Mo_TyphoonKate))
         false   // Typooon Kate prohibits Bombard
       else {
         var bombardSpaces = Set.empty[String]
-        val maxBombard = if (capabilityInPlay(LongRangeGuns_Unshaded)) 1
+        val maxBombard = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                    else if (capabilityInPlay(LongRangeGuns_Unshaded)) 1
                     else if (capabilityInPlay(LongRangeGuns_Shaded))   3
                     else                                               2
         val isCandidate = (sp: Space) => {
@@ -5517,6 +5554,7 @@ object Bot {
             game.getSpace(name).pieces.totalOf(NVATroops) > 2
           }
 
+          params.spaceAllowed(sp.name) &&
           !bombardSpaces(sp.name) &&
           enemyCondition          &&
           (sp.pieces.totalOf(NVATroops) > 2 || hasAdjacentTroops)
@@ -6087,12 +6125,17 @@ object Bot {
     //  -------------------------------------------------------------
     //  VC Tax Activity
     //  -------------------------------------------------------------
-    def taxActivity(): Boolean = {
+    def taxActivity(params: Params): Boolean = {
       var taxSpaces = Set.empty[String]
-      val maxTax = if (momentumInPlay(Mo_TyphoonKate)) 1 else d3
+      val maxTax = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                   else if (momentumInPlay(Mo_TyphoonKate)) 1 else d3
 
       def nextTax(): Unit = {
-        val candidates = game.spaces filter (sp => !taxSpaces(sp.name) && canTaxSpace(sp))
+        val candidates = game.spaces filter { sp =>
+          params.spaceAllowed(sp.name) &&
+          !taxSpaces(sp.name)          &&
+          canTaxSpace(sp)
+        }
         if (taxSpaces.size < maxTax && candidates.nonEmpty) {
           val sp    = pickSpaceTax(candidates)
           val num  = if (sp.isLoC) sp.printedEconValue else sp.population
@@ -6120,8 +6163,9 @@ object Bot {
     //  -------------------------------------------------------------
     //  VC Subert Activity
     //  -------------------------------------------------------------
-    def subvertActivity(): Boolean = {
-      val maxSubvert = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
+    def subvertActivity(params: Params): Boolean = {
+      val maxSubvert = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                       else if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
       var totalRemoved = 0
 
       def nextSubvert(candidates: List[Space], numSubverted: Int): Unit = {
@@ -6143,6 +6187,9 @@ object Bot {
         }
       }
 
+      val candidates = game.spaces filter { sp =>
+        params.spaceAllowed(sp.name) && VC_Bot.canSubvertSpace(sp)
+      }
       nextSubvert(game.spaces filter VC_Bot.canSubvertSpace, 0)
       if (totalRemoved > 0) {
         if (totalRemoved / 2 > 0) {
@@ -6389,8 +6436,8 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity()) ||
-        US_Bot.airStrikeActivity()
+        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity(params)) ||
+        US_Bot.airStrikeActivity(params)
       }
 
       if (!US_Bot.any2PlusPopNotAtActiveSupportWithCoinControlUsPieces)
@@ -6410,9 +6457,9 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity()) ||
-        US_Bot.adviseActivity() ||
-        US_Bot.airLiftActivity()
+        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity(params)) ||
+        US_Bot.adviseActivity(params) ||
+        US_Bot.airLiftActivity(params)
       }
 
       // Special activity comes first!
@@ -6435,8 +6482,8 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity()) ||
-        US_Bot.airStrikeActivity()
+        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity(params)) ||
+        US_Bot.airStrikeActivity(params)
       }
 
       if (!US_Bot.any2PlusPopNotAtActiveSupportWithCoinControlUsPieces)
@@ -6456,8 +6503,8 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecial(): Boolean = {
-        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity()) ||
-        US_Bot.airLiftActivity()
+        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity(params)) ||
+        US_Bot.airLiftActivity(params)
       }
 
       val operation = if (US_Bot.allLocRoutesCanTho_HueBlockedAndNoShadedM48)
@@ -6480,8 +6527,8 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity()) ||
-        US_Bot.airStrikeActivity()
+        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity(params)) ||
+        US_Bot.airStrikeActivity(params)
       }
 
       if (game.arvnPoints < 42)
@@ -6501,9 +6548,9 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity()) ||
-        US_Bot.adviseActivity() ||
-        US_Bot.airLiftActivity()
+        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity(params)) ||
+        US_Bot.adviseActivity(params) ||
+        US_Bot.airLiftActivity(params)
       }
 
       // Special activity comes first!
@@ -6526,8 +6573,8 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity()) ||
-        US_Bot.airStrikeActivity()
+        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity(params)) ||
+        US_Bot.airStrikeActivity(params)
       }
 
       if (!US_Bot.twoOrMoreSpacesWithSupportAndUndergroundGuerrillas)
@@ -6547,8 +6594,8 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity()) ||
-        US_Bot.airLiftActivity()
+        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity(params)) ||
+        US_Bot.airLiftActivity(params)
       }
 
       US_Bot.sweepOp(params) match {
@@ -6566,8 +6613,8 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity()) ||
-        US_Bot.airStrikeActivity()
+        (US_Bot.spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops && US_Bot.airLiftActivity(params)) ||
+        US_Bot.airStrikeActivity(params)
       }
 
       if (!US_Bot.usPiecesWithVulnerableEnemies)
@@ -6587,9 +6634,9 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        US_Bot.adviseActivity() ||
-        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity()) ||
-        US_Bot.airLiftActivity()
+        US_Bot.adviseActivity(params) ||
+        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity(params)) ||
+        US_Bot.airLiftActivity(params)
       }
 
       US_Bot.trainOp(params, actNum) match {
@@ -6607,8 +6654,8 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity()) ||
-        US_Bot.airLiftActivity()
+        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity(params)) ||
+        US_Bot.airLiftActivity(params)
       }
 
       if (!US_Bot.allUSBasesinSouthWithUSTroopsNoNVATroops)
@@ -6661,7 +6708,7 @@ object Bot {
       else {
         ARVN_Bot.assaultOneSpaceOpMostFirepower(params) match {
           case Some(firstName) =>
-            val transported = ARVN_Bot.transportActivity()
+            val transported = ARVN_Bot.transportActivity(params)
             // Now try other assaults
             ARVN_Bot.assaultOp(params, actNum, Set(firstName))
             ARVN_Bot.armoredCavalryAssault()
@@ -6678,8 +6725,8 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecial(): Boolean =
-        ARVN_Bot.governActivity() ||
-        ARVN_Bot.transportActivity()
+        ARVN_Bot.governActivity(params) ||
+        ARVN_Bot.transportActivity(params)
 
       ARVN_Bot.trainOp(params, actNum) match {
         case Some(_) =>
@@ -6702,7 +6749,7 @@ object Bot {
       if (!ARVN_Bot.fiveArvnTroopPlusRangesInAnySpace)
         TrungDraw
       else {
-        val transported = params.specialActivity && ARVN_Bot.transportActivity()
+        val transported = params.specialActivity && ARVN_Bot.transportActivity(params)
 
         if (ARVN_Bot.arvnAssaultWouldAddControlOrUnblockCanTo_Hue) {
           ARVN_Bot.assaultOp(params, actNum)
@@ -6749,7 +6796,7 @@ object Bot {
       else {
         ARVN_Bot.trainOp(params, actNum) match {
           case Some(_) if params.specialActivity =>
-            val didSpecial = ARVN_Bot.governActivity() || ARVN_Bot.transportActivity()
+            val didSpecial = ARVN_Bot.governActivity(params) || ARVN_Bot.transportActivity(params)
             ARVN_Bot.armoredCavalryAssault()  // In case we transported
             TrungComplete(didSpecial)
 
@@ -6764,9 +6811,9 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecial(op: CoinOp): Boolean =
-        (op == Patrol && ARVN_Bot.governActivity()) ||
-        ARVN_Bot.raidActivity()                     ||
-        ARVN_Bot.transportActivity()
+        (op == Patrol && ARVN_Bot.governActivity(params)) ||
+        ARVN_Bot.raidActivity(params)                     ||
+        ARVN_Bot.transportActivity(params)
 
       val operation = if (allLocRoutesCanTho_HueBlocked)
         ARVN_Bot.patrolOp(params)
@@ -6797,9 +6844,9 @@ object Bot {
         flipCard(params)
       else {
         val didSpecial = params.specialActivity &&
-          (ARVN_Bot.governActivity() ||
-           ARVN_Bot.raidActivity     ||
-           ARVN_Bot.transportActivity())
+          (ARVN_Bot.governActivity(params) ||
+           ARVN_Bot.raidActivity(params)   ||
+           ARVN_Bot.transportActivity(params))
 
         ARVN_Bot.patrolOp(params) match {
           case Some(_) =>
@@ -6816,8 +6863,8 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecial(op: CoinOp): Boolean =
-        (op == Train && ARVN_Bot.governActivity()) ||
-        ARVN_Bot.transportActivity()
+        (op == Train && ARVN_Bot.governActivity(params)) ||
+        ARVN_Bot.transportActivity(params)
 
       val operation = if (ARVN_Bot.arvnAssaultWouldAddCoinControlToASpace)
         ARVN_Bot.assaultOp(params, actNum)
@@ -6850,7 +6897,7 @@ object Bot {
         ARVN_Bot.trainOp(params, actNum) match {
           case Some(_) =>
             val didSpecial = params.specialActivity &&
-              (ARVN_Bot.governActivity() || ARVN_Bot.transportActivity())
+              (ARVN_Bot.governActivity(params) || ARVN_Bot.transportActivity(params))
             ARVN_Bot.armoredCavalryAssault()
             TrungComplete(didSpecial)
 
@@ -6871,7 +6918,7 @@ object Bot {
       operation match {
         case Some(_) =>
           val didSpecial = params.specialActivity &&
-            (ARVN_Bot.raidActivity() || ARVN_Bot.transportActivity())
+            (ARVN_Bot.raidActivity(params) || ARVN_Bot.transportActivity(params))
           ARVN_Bot.armoredCavalryAssault()
           TrungComplete(didSpecial)
 
@@ -6895,7 +6942,7 @@ object Bot {
         ARVN_Bot.trainOp(params, actNum) match {
           case Some(_) =>
             val didSpecial = params.specialActivity &&
-              (ARVN_Bot.transportActivity() || ARVN_Bot.governActivity())
+              (ARVN_Bot.transportActivity(params) || ARVN_Bot.governActivity(params))
             ARVN_Bot.armoredCavalryAssault()
             TrungComplete(didSpecial)
 
@@ -6933,7 +6980,7 @@ object Bot {
 
         result match {
           case Some((_, true)) => TrungComplete(true)
-          case Some(_)         => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
+          case Some(_)         => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity(params))
           case _               => TrungNoOp
         }
       }
@@ -6944,7 +6991,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       if (NVA_Bot.eightTroopsOutsideSouth) {
-        val infiltrated = params.specialActivity && NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false)
+        val infiltrated = params.specialActivity && NVA_Bot.infiltrateActivity(params, needDiceRoll = false, replaceVCBase = false)
 
         NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false) match {
           case Some(_) => TrungComplete(infiltrated)
@@ -6955,7 +7002,7 @@ object Bot {
         NVA_Bot.rallyOp(params, actNum) match {
           case Some(_) =>
             val infiltrated = params.specialActivity &&
-                              NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false)
+                              NVA_Bot.infiltrateActivity(params, needDiceRoll = false, replaceVCBase = false)
             TrungComplete(infiltrated)
 
           case None =>
@@ -6977,7 +7024,7 @@ object Bot {
       else if (!NVA_Bot.atleastTwentyNVATroopsOnMap)
         flipCard(params)
       else {
-        val bombarded = params.specialActivity && NVA_Bot.bombardActivity()
+        val bombarded = params.specialActivity && NVA_Bot.bombardActivity(params)
 
         val operation = if (NVA_Bot.sixTroopsWithCOINTroopsOrBase)
           NVA_Bot.attackOp(params, actNum, addAmbush = false) map (_._1)
@@ -6999,7 +7046,7 @@ object Bot {
         NVA_Bot.rallyOp(params, actNum) match {
           case Some(_) =>
             val infiltrated = params.specialActivity &&
-                              NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = true)
+                              NVA_Bot.infiltrateActivity(params, needDiceRoll = false, replaceVCBase = true)
             TrungComplete(infiltrated)
 
           case None =>
@@ -7008,7 +7055,7 @@ object Bot {
       }
       else {
         val infiltrated = params.specialActivity &&
-                          NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false)
+                          NVA_Bot.infiltrateActivity(params, needDiceRoll = false, replaceVCBase = false)
         val operation = NVA_Bot.marchOp(params, marchActNum, withLoC = false, withLaosCambodia = false)
         if (infiltrated || operation.nonEmpty)
           TrungComplete(infiltrated)
@@ -7036,7 +7083,7 @@ object Bot {
         val result = NVA_Bot.attackOp(params, actNum, addAmbush = params.specialActivity)
         result match {
           case Some((_, true))  => TrungComplete(true)
-          case Some((_, false)) => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
+          case Some((_, false)) => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity(params))
           case None             => TrungNoOp
         }
       }
@@ -7048,8 +7095,8 @@ object Bot {
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       NVA_Bot.rallyOp(params, actNum) match {
         case Some(_) if params.specialActivity =>
-          val didSpecial = NVA_Bot.infiltrateActivity(needDiceRoll = true, replaceVCBase = true) ||
-                           NVA_Bot.bombardActivity()
+          val didSpecial = NVA_Bot.infiltrateActivity(params, needDiceRoll = true, replaceVCBase = true) ||
+                           NVA_Bot.bombardActivity(params)
           TrungComplete(didSpecial)
 
         case Some(_) =>
@@ -7074,7 +7121,7 @@ object Bot {
         flipCard(params)
       else {
         val infiltrated = params.specialActivity &&
-                          NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = true)
+                          NVA_Bot.infiltrateActivity(params, needDiceRoll = false, replaceVCBase = true)
         val operation = NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true)
 
         if (infiltrated || operation.nonEmpty)
@@ -7091,7 +7138,7 @@ object Bot {
       if (game.nonLocSpaces exists (sp => sp.support > Neutral && sp.pieces.has(NVAGuerrillas_U))) {
         NVA_Bot.terrorOp(params, actNum) match {
           case Some(_) =>
-            val bombarded = params.specialActivity && NVA_Bot.bombardActivity()
+            val bombarded = params.specialActivity && NVA_Bot.bombardActivity(params)
             TrungComplete(bombarded)
 
           case None =>
@@ -7106,7 +7153,7 @@ object Bot {
           if (canAmbush)
             ambushActivity(NVA, ambushCandidates, March, actNum, false)
 
-          canAmbush || NVA_Bot.bombardActivity()
+          canAmbush || NVA_Bot.bombardActivity(params)
         }
 
         NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true) match {
@@ -7134,8 +7181,8 @@ object Bot {
       else {
         NVA_Bot.rallyOp(params, actNum) match {
           case Some(_) if (params.specialActivity) =>
-            val didSpecial = NVA_Bot.infiltrateActivity(needDiceRoll = true, replaceVCBase = true) ||
-                             NVA_Bot.bombardActivity()
+            val didSpecial = NVA_Bot.infiltrateActivity(params, needDiceRoll = true, replaceVCBase = true) ||
+                             NVA_Bot.bombardActivity(params)
             TrungComplete(didSpecial)
 
           case Some(_) =>
@@ -7159,7 +7206,7 @@ object Bot {
         if (canAmbush)
           ambushActivity(VC, ambushCandidates, op, actNum, false)
 
-        canAmbush || NVA_Bot.bombardActivity()
+        canAmbush || NVA_Bot.bombardActivity(params)
       }
 
 
@@ -7192,7 +7239,7 @@ object Bot {
 
         result match {
           case Some((_, true)) => TrungComplete(true)
-          case Some(_)         => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
+          case Some(_)         => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity(params))
           case None            => TrungNoOp
         }
       }
@@ -7209,15 +7256,15 @@ object Bot {
 
       if (undergroundIn2PlusSpacesWithSupport) {
         NVA_Bot.terrorOp(params, actNum) match {
-          case Some(_) => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
+          case Some(_) => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity(params))
           case None    => TrungNoOp
         }
       }
       else {
         val didSpecial =
           params.specialActivity &&
-          (NVA_Bot.infiltrateActivity(needDiceRoll = true, replaceVCBase = true) ||
-           NVA_Bot.bombardActivity())
+          (NVA_Bot.infiltrateActivity(params, needDiceRoll = true, replaceVCBase = true) ||
+           NVA_Bot.bombardActivity(params))
         val operation = NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false)
 
         if (didSpecial || operation.nonEmpty)
@@ -7243,7 +7290,7 @@ object Bot {
       def doSpecialActivity(): Boolean = {
         val canSubvert = game.patronage >= 17 && (game.spaces exists VC_Bot.canSubvertSpace)
 
-        (canSubvert && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
+        (canSubvert && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }
 
       val threePlusGuerrillas = game.spaces exists (_.pieces.totalOf(VCGuerrillas) > 2)
@@ -7278,7 +7325,7 @@ object Bot {
         if (canAmbush)
           ambushActivity(VC, ambushCandidates, op, actNum, false)
 
-        canAmbush || (canTax && VC_Bot.taxActivity()) || VC_Bot.subvertActivity()
+        canAmbush || (canTax && VC_Bot.taxActivity(params)) || VC_Bot.subvertActivity(params)
       }
 
       // ------------------------------------------------------------
@@ -7311,7 +7358,7 @@ object Bot {
         val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
         val canSubvert       = game.spaces exists VC_Bot.canSubvertSpace
 
-        (canTax && VC_Bot.taxActivity()) || VC_Bot.subvertActivity()
+        (canTax && VC_Bot.taxActivity(params)) || VC_Bot.subvertActivity(params)
 
       }
 
@@ -7341,7 +7388,7 @@ object Bot {
 
       operation match {
         case Some(Attack) => TrungComplete(ambushed)
-        case Some(Terror) => TrungComplete(params.specialActivity && VC_Bot.subvertActivity())
+        case Some(Terror) => TrungComplete(params.specialActivity && VC_Bot.subvertActivity(params))
         case _            => TrungNoOp
       }
     }
@@ -7357,7 +7404,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (game.patronage >= 17 && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
+        (game.patronage >= 17 && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }
 
       val undergroundWithUSTroops = game.spaces exists { sp=>
@@ -7387,7 +7434,7 @@ object Bot {
 
       operation match {
         case Some(Attack) => TrungComplete(ambushed)
-        case Some(Terror) => TrungComplete(params.specialActivity && VC_Bot.subvertActivity())
+        case Some(Terror) => TrungComplete(params.specialActivity && VC_Bot.subvertActivity(params))
         case _            => TrungNoOp
       }
     }
@@ -7402,7 +7449,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (rollDice(2) > game.agitateTotal && VC_Bot.taxActivity()) || VC_Bot.subvertActivity()
+        (rollDice(2) > game.agitateTotal && VC_Bot.taxActivity(params)) || VC_Bot.subvertActivity(params)
       }
 
       // ------------------------------------------------------------
@@ -7432,7 +7479,7 @@ object Bot {
         if (canAmbush)
           ambushActivity(VC, ambushCandidates, March, actNum, false)
 
-        canAmbush || (canSubvert && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
+        canAmbush || (canSubvert && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }
 
       VC_Bot.marchOp(params, actNum) match {
@@ -7459,7 +7506,7 @@ object Bot {
 
         operation match {
           case Some(_) if ambushed => TrungComplete(true)
-          case Some(_)             => TrungComplete(params.specialActivity && VC_Bot.taxActivity())
+          case Some(_)             => TrungComplete(params.specialActivity && VC_Bot.taxActivity(params))
           case _                   => TrungNoOp
         }
       }
@@ -7473,7 +7520,7 @@ object Bot {
       def doSpecialActivity(): Boolean = {
         val canSubvert       = game.patronage >= 17
 
-        (canSubvert && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
+        (canSubvert && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }
 
       VC_Bot.rallyOp(params, actNum) match {
@@ -7493,7 +7540,7 @@ object Bot {
       def doSpecialActivity(): Boolean = {
         val canSubvert       = game.patronage >= 17
 
-        (canSubvert && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
+        (canSubvert && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }
 
       val numVCGuerrillas = (sp: Space) => sp.pieces.totalOf(VCGuerrillas)

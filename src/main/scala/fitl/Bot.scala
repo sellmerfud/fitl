@@ -151,7 +151,7 @@ object Bot {
   // to override the cards activation number when the trail is a 4
   trait NVATrung extends TrungCard {
     def marchActNum = if (game.trail == TrailMax) 1 else actNum
-  }  
+  }
 
   def logOpChoice(faction: Faction, op: Operation, notes: TraversableOnce[String] = Nil): Unit = {
     log(s"\n$faction chooses $op operation")
@@ -229,7 +229,7 @@ object Bot {
 
         // All routes from Can Tho to Hue blocked
   def allLocRoutesCanTho_HueBlocked: Boolean = !getPatrolDestinations(CanTho).contains(Hue)
-  
+
 
   def sweepEffective(faction: Faction, name: String): Boolean = {
     game.getSpace(name).sweepActivations(faction) > 0
@@ -240,14 +240,14 @@ object Bot {
   def canAmbushFrom(faction: Faction)(sp: Space): Boolean = {
     val GType = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
 
-    sp.pieces.has(GType) && 
-    (sp.pieces.has(CoinPieces) || 
-     sp.isLoC && numAdjacentPieces(sp: Space, CoinPieces) > 0)      
+    sp.pieces.has(GType) &&
+    (sp.pieces.has(CoinPieces) ||
+     sp.isLoC && numAdjacentPieces(sp: Space, CoinPieces) > 0)
   }
 
   // When an ambush Special Activity follows a March Operation
-  // The Bot may ambush only in spaces that were selected as 
-  // March destination.  And the Underground guerrilla used to 
+  // The Bot may ambush only in spaces that were selected as
+  // March destination.  And the Underground guerrilla used to
   // perform the Ambush must have marched into the space this turn.
   def marchAmbushCandidates(faction: Faction): List[String] = {
     val GType = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
@@ -291,7 +291,7 @@ object Bot {
       else           (if (nguyenCaoKy) 4 else 3)  // blowtorch only applies in coup round
     }
     else 0
-    
+
     // ARVN Bot will only pacify to Passive Support
     val maxLevel    = if (faction == ARVN || capabilityInPlay(CORDS_Shaded))
       PassiveSupport
@@ -367,6 +367,30 @@ object Bot {
     assaultResult(faction)(sp).pieces.totalOf(InsurgentForces) == 0
   }
 
+  //  Return the corresponding function for the given bot
+  def pickSpaceRemoveReplace(faction: Faction) = faction match {
+    case US   => US_Bot.pickSpaceRemoveReplace _
+    case ARVN => ARVN_Bot.pickSpaceRemoveReplace _
+    case NVA  => NVA_Bot.pickSpaceRemoveReplace _
+    case VC   => VC_Bot.pickSpaceRemoveReplace _
+  }
+
+  //  Return the corresponding function for the given bot
+  def pickSpacePlaceForces(faction: Faction, troops: Boolean = false) = faction match {
+    case US   => US_Bot.pickSpacePlaceCubesSpecialForces(troops = troops) _
+    case ARVN => ARVN_Bot.pickSpacePlaceCubesRangers _
+    case NVA  if troops => NVA_Bot.pickSpacePlaceTroops _
+    case NVA  => NVA_Bot.pickSpacePlaceGuerrillas _
+    case VC   => VC_Bot.pickSpacePlaceGuerrillas _
+  }
+
+  //  Return the corresponding function for the given bot
+  def pickSpacePlaceBases(faction: Faction) = faction match {
+    case US   => US_Bot.pickSpacePlaceBases _
+    case ARVN => ARVN_Bot.pickSpacePlaceBases _
+    case NVA  => NVA_Bot.pickSpacePlaceBases _
+    case VC   => VC_Bot.pickSpacePlaceBases _
+  }
 
   //  -------------------------------------------------------------
   //  NVA and VC Ambush Activity
@@ -379,7 +403,7 @@ object Bot {
   //  roll may be necesasry.
   //  if `checkFirst` is true then we must make an activation roll before the
   //  first ambush (Attack only)
-  //  
+  //
   //  Return the names of the spaces that were ambushed and true if no
   //  actvation roll was failed.
   //  This lets the calling Attack know whether or not it can continue
@@ -391,7 +415,7 @@ object Bot {
   //  BoobyTraps_Unshaded   - Ambush is max one space
   //  PT76_Unshaded         - If Attack, then NVA must first remove 1 Troop (if one is present)
   //  -------------------------------------------------------------
-  def ambushActivity(faction: Faction, 
+  def ambushActivity(faction: Faction,
                      ambushCandidates: List[String],
                      op: Operation,
                      actNum: Int,
@@ -415,7 +439,7 @@ object Bot {
       // Re-verify that we can ambush in the spaces because
       // a previous ambush may have removed a target piece
       val validSpaces = spaces(candidates) filter canAmbushFrom(faction)
-      
+
       if (validSpaces.nonEmpty && ambushSpaces.size < maxAmbush) {
 
         if (activateOK()) {
@@ -540,7 +564,7 @@ object Bot {
       killedPieces = killedPieces + killedExposed
       // Add any removed underground guerrilla that did NOT count toward remaining hits above
       killedPieces = killedPieces + killedUnderground
-      
+
       if (killedPieces.isEmpty)
         log("\nNo insurgemnt pieces were removed in the assault")
       else {
@@ -550,10 +574,10 @@ object Bot {
 
         // Trigger the M48 Patton capability if it is in play and would
         // be effective (max two non-Lowland spaces)
-        if (m48Patton && m48PattonSpaces.size < 2 && 
+        if (m48Patton && m48PattonSpaces.size < 2 &&
             !sp.isLowland && vulnerableInsurgents(pieces).nonEmpty) {
           val (m48Exposed, m48Tunnel) = selectRemoveEnemyInsurgentBasesLast(vulnerableInsurgents(pieces), 2)
-          log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")        
+          log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
           removePieces(name, m48Exposed)
           if (m48Tunnel.nonEmpty)
             removeTunnelMarker(name, m48Tunnel)
@@ -572,7 +596,7 @@ object Bot {
         log(s"\nEach insurgent base removed adds +6 Aid")
         increaseUsAid(6 * killedPieces.totalOf(InsurgentNonTunnels))
       }
-      
+
       // Cobras_Shaded
       //    Eash US assault space, 1 US Troop to Casualties on die roll of 1-3
       if (faction == US && pieces.has(USTroops) && capabilityInPlay(Cobras_Shaded)) {
@@ -907,7 +931,7 @@ object Bot {
 
   // VC space priority filters
   // -----------------------------------------------------------
-  
+
   val VulnerableVCBase = new BooleanPriority[Space](
     "Vulnerable VC Base",
     sp => sp.pieces.has(VCBases) && !sp.pieces.has(UndergroundGuerrillas)
@@ -973,7 +997,7 @@ object Bot {
         sp.pieces.except(VCPieces).total
     }
   )
-  
+
   val OnePlusEconLoc = new BooleanPriority[Space](
     "1+ Econ LoC",
     sp => sp.isLoC && sp.printedEconValue > 0
@@ -1129,7 +1153,7 @@ object Bot {
   //  If a Tunneled base is "vulnerable" is to be removed,
   //  we stop removing pieces.
   //  Roll a 1d6, 1-3 no effect, 4-6 remove tunnel marker
-  //  Return all pieces that should be removed, 
+  //  Return all pieces that should be removed,
   //  also return a max of one Tunneled Base if its marker should be removed.
   def selectRemoveEnemyInsurgentBasesLast(pieces: Pieces, num: Int): (Pieces, Pieces) = {
     val insurgentBases   = pieces.only(InsurgentNonTunnels)
@@ -1242,14 +1266,14 @@ object Bot {
       val numKeep    = (maxKeep - numOthers) max 0
       val toKeep     = selectFriendlyToKeepInPlace(candidates, numKeep)
       val newParams  = params.addPieces(toKeep)
-      
+
       logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
       newParams
     }
   }
-  
+
   //  Used by US and ARVN
-  //  If the destination is not in South Vietnam, 
+  //  If the destination is not in South Vietnam,
   //  add all of the COIN cubes to the kept pieces.
   val KP_KeepAllCubesInSouthVietnam = (params: MoveParams) => {
     val desc = "Keep all cubes in South Vietnam"
@@ -1260,7 +1284,7 @@ object Bot {
     else {
       val toKeep    = params.candidates.only(CoinCubes)
       val newParams = params.addPieces(toKeep)
-      
+
       logKept(newParams, desc, s"keep - ${andList(toKeep.descriptions)}")
       newParams
     }
@@ -1297,7 +1321,7 @@ object Bot {
         val numKeep   = numEnemy - numCubesNow
         val toKeep    = selectFriendlyToKeepInPlace(candidates.only(factionCubes), numKeep)
         val newParams = params.addPieces(toKeep)
-        
+
         logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
         newParams
       }
@@ -1335,7 +1359,7 @@ object Bot {
         val numKeep   = 3 - numCubesNow
         val toKeep    = selectFriendlyToKeepInPlace(candidates.only(factionCubes), numKeep)
         val newParams = params.addPieces(toKeep)
-        
+
         logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
         newParams
       }
@@ -1354,7 +1378,7 @@ object Bot {
     val vulnerable = vulnerableInsurgents(origin.pieces).total
 
     if (firepower >= vulnerable) {
-      
+
       def keepPieces(num: Int): Pieces = {
         if (num == candidates.total)
           candidates  // Must keep all of them in place
@@ -1372,7 +1396,7 @@ object Bot {
       // Start by see what happens if we don't keep any
       val toKeep    = keepPieces(0)
       val newParams = params.addPieces(toKeep)
-      
+
       logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
       newParams
     }
@@ -1408,12 +1432,12 @@ object Bot {
         val numKeep   = numUS + 1 - numARVNNow
         val toKeep    = selectFriendlyToKeepInPlace(candidates.only(ARVNCubes), numKeep)
         val newParams = params.addPieces(toKeep)
-        
+
         logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
         newParams
     }
   }
-  
+
   // Used by US
   val KP_USForcesGreaterOrEqualUndergroundGuerrilas = (params: MoveParams) => {
     import params._
@@ -1439,7 +1463,7 @@ object Bot {
       val numKeep   = needed - numUSNow
       val toKeep    = selectFriendlyToKeepInPlace(candidates.only(USForces), numKeep)
       val newParams = params.addPieces(toKeep)
-      
+
       logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
       newParams
     }
@@ -1465,7 +1489,7 @@ object Bot {
       else {
         val toKeep    = selectFriendlyToKeepInPlace(candidates.only(USTroops), 1)
         val newParams = params.addPieces(toKeep)
-        
+
         logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
         newParams
       }
@@ -1500,7 +1524,7 @@ object Bot {
         val numKeep   = numARVN - numUSNow
         val toKeep    = selectFriendlyToKeepInPlace(candidates.only(USTroops), numKeep)
         val newParams = params.addPieces(toKeep)
-        
+
         logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
         newParams
     }
@@ -1523,7 +1547,7 @@ object Bot {
     else {
       val toKeep    = selectFriendlyToKeepInPlace(candidates.only(FactionGuerrillas), 1)
       val newParams = params.addPieces(toKeep)
-      
+
       logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
       newParams
     }
@@ -1537,7 +1561,7 @@ object Bot {
 
     val numGNow = (origin.pieces - candidates).totalOf(FactionGuerrillas)
     val totalG  = numGNow + candidates.totalOf(FactionGuerrillas)
-  
+
     if (origin.totalBases == 2) {
       logKept(params, desc, "ignore [No room for a base in the origin space]")
       params
@@ -1558,7 +1582,7 @@ object Bot {
       val numKeep   = 3 - numGNow
       val toKeep    = selectFriendlyToKeepInPlace(candidates.only(FactionGuerrillas), numKeep)
       val newParams = params.addPieces(toKeep)
-      
+
       logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
       newParams
     }
@@ -1597,7 +1621,7 @@ object Bot {
       val numKeep   = numEnemy + 1 - numOursNow
       val toKeep    = selectFriendlyToKeepInPlace(candidates.only(ourTypes), numKeep)
       val newParams = params.addPieces(toKeep)
-      
+
       logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
       newParams
     }
@@ -1617,12 +1641,12 @@ object Bot {
       }
       else if (!candidates.has(VCGuerrillas_U)) {
         logKept(params, desc, "ignore [Do not have an Underground Guerrrilla to keep in the space]")
-        params        
+        params
       }
       else {
         val toKeep    = selectFriendlyToKeepInPlace(candidates.only(VCGuerrillas_U), 1)
         val newParams = params.addPieces(toKeep)
-        
+
         logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
         newParams
       }
@@ -1642,7 +1666,7 @@ object Bot {
     import params._
     val desc = "Get COIN Firepower equal to enemies"
     val numEnemy = dest.pieces.totalOf(InsurgentPieces)
-      
+
     def movePieces(num: Int): Pieces = {
       val toMove = selectFriendlyToPlaceOrMove(candidates, num)
       // If our firepower is sufficent then we are done
@@ -1657,7 +1681,7 @@ object Bot {
     // Start by see what happens if we don't move any
     val toMove    = movePieces(0)
     val newParams = params.addPieces(toMove)
-      
+
     logMoved(newParams, desc, s"move [${andList(toMove.descriptions)}]")
     newParams
   }
@@ -1667,7 +1691,7 @@ object Bot {
     import params._
     val desc = "Get ARVN Firepower equal to enemies"
     val numEnemy = dest.pieces.totalOf(InsurgentPieces)
-      
+
     def movePieces(num: Int): Pieces = {
       val toMove = selectFriendlyToPlaceOrMove(candidates, num)
       // If our firepower is sufficent then we are done
@@ -1680,10 +1704,10 @@ object Bot {
     }
 
 
-    // Start by see what happens if we don't move any  
+    // Start by see what happens if we don't move any
     val toMove    = movePieces(0)
     val newParams = params.addPieces(toMove)
-      
+
     logMoved(newParams, desc, s"move [${andList(toMove.descriptions)}]")
     newParams
   }
@@ -1761,7 +1785,7 @@ object Bot {
     val desc = "Get COIN Firepower equal to vulnerable enemies"
 
     val numVulnerable = vulnerableInsurgents(dest.pieces).total
-      
+
     def movePieces(num: Int): Pieces = {
       val toMove = selectFriendlyToPlaceOrMove(candidates, num)
       // If our firepower is sufficent then we are done
@@ -1776,7 +1800,7 @@ object Bot {
     // Start by see what happens if we don't move any
     val toMove    = movePieces(0)
     val newParams = params.addPieces(toMove)
-      
+
     logMoved(newParams, desc, s"move [${andList(toMove.descriptions)}]")
     newParams
   }
@@ -1822,13 +1846,13 @@ object Bot {
     val desc = "Get Coin Control"
 
     val nowAtDest = dest.pieces + selected
-    
+
     if (nowAtDest.totalOf(CoinPieces) > nowAtDest.totalOf(InsurgentPieces)) {
       logMoved(params, desc, "ignore [Destination already COIN controlled]")
       params
     }
     else {
-      val numMove   = (nowAtDest.totalOf(InsurgentPieces) + 1 - nowAtDest.totalOf(CoinPieces)) min maxCanMove 
+      val numMove   = (nowAtDest.totalOf(InsurgentPieces) + 1 - nowAtDest.totalOf(CoinPieces)) min maxCanMove
       val toMove    = selectFriendlyToPlaceOrMove(candidates, numMove)
       val newParams = params.addPieces(toMove)
 
@@ -1959,7 +1983,7 @@ object Bot {
 
   //  When moving pieces, this is used to determine which of the factions pieces must be
   //  kept in the origin space.
-  def selectPiecesToKeep(originName: String, 
+  def selectPiecesToKeep(originName: String,
                          destName: String,
                          faction: Faction,
                          action: MoveAction,
@@ -1969,15 +1993,15 @@ object Bot {
     val nva     = faction == NVA
     val vc      = faction == VC
     val usSweep = us && action == Sweep
-    
+
     def nextKeepPriority(priorities: List[MovePriority], params: MoveParams): Pieces = {
       priorities match {
         case _ if params.candidates.isEmpty => params.selected
         case Nil                            => params.selected
         case priority::rest                 => nextKeepPriority(rest, priority(params))
-      }      
+      }
     }
-    
+
     val keepPriorities = List(
       movePriIf(true,       KP_ChangeNoControlSouthVietnam),
       movePriIf(us || arvn, KP_KeepAllCubesInSouthVietnam),
@@ -1998,7 +2022,7 @@ object Bot {
     val dest       = game.getSpace(destName)
     val candidates = origin.pieces.only(moveTypes)
     val params     = MoveParams(origin, dest, faction, action, moveTypes, NO_LIMIT, candidates)
-    
+
     logKept(params, s"$faction is selecting pieces to keep in $originName", "")
     nextKeepPriority(keepPriorities, params)
   }
@@ -2027,9 +2051,9 @@ object Bot {
         case Nil            => params.selected
         case _ if exhausted => params.selected
         case priority::rest => nextMovePriority(rest, priority(params))
-      }      
+      }
     }
-    
+
     val movePriorities = if (dest.isLoC)
       List(
         movePriIf(us,        MP_GetCoinFirepowerEqualEnemies),
@@ -2048,13 +2072,13 @@ object Bot {
         movePriIf(nva || vc,            MP_Get1FactionGuerrillasToBase),
         movePriIf(nva,                  MP_GetNvaControlWithoutCoinForcesOrLaosCambodia)
       ).flatten
-    
+
     val candidates = origin.pieces.only(moveTypes) - mustKeep
     if (candidates.isEmpty)
       candidates  // No pieces were found that can move
     else {
       val params     = MoveParams(origin, dest, faction, action, moveTypes, maxPieces, candidates)
-      
+
       logMoved(params, s"$faction is selecting pieces to move from $originName to $destName", "")
       nextMovePriority(movePriorities, params)
     }
@@ -2076,7 +2100,7 @@ object Bot {
                  action: MoveAction,
                  moveTypes: Set[PieceType],
                  maxPieces: Int): Pieces = {
-  
+
     // First we determine which pieces to keep in the origin space
     val toKeep = selectPiecesToKeep(originName, destName, faction, action, moveTypes)
     // If this is an Air Lift we must limit the number of non USTroops moved to 4
@@ -2095,7 +2119,7 @@ object Bot {
 
   // Find the best space from which to move pieces to the given destination.
   // If no pieces can reach the destination, the return None.
-  
+
   def selectMoveOrigin(
     faction: Faction,
     destName: String,
@@ -2111,7 +2135,7 @@ object Bot {
       case March if faction == NVA => NVA_Bot.getNVAAdjacent(destName)
       case March                   => getAdjacent(destName)
     }
-    
+
     val isOrigin = (sp: Space) =>
       sp.pieces.has(moveTypes) &&
       !(moveDestinations.contains(sp.name) || previousOrigins(sp.name))
@@ -2171,7 +2195,7 @@ object Bot {
     }
   }
 
-  //  This function determines if we should attempt to find another 
+  //  This function determines if we should attempt to find another
   //  origin space for the given move destination.
   //  The rules are faction specific and correspond to the
   //  'B' conditions at the bottom of the Move Priorities Table.
@@ -2183,7 +2207,7 @@ object Bot {
     (faction, dest.isLoC) match {
       case (US|ARVN, true)  => numCoin < numInsurgent
       case (NVA|VC,  true)  => numInsurgent <= numCoin
-      case (US|ARVN, false) => !dest.coinControlled && 
+      case (US|ARVN, false) => !dest.coinControlled &&
                                coinFirepower(dest) < vulnerableInsurgents(dest.pieces).total
       case (NVA,     false) => !dest.nvaControlled
       case (VC,      false) => dest.coinControlled || dest.nvaControlled
@@ -2227,7 +2251,7 @@ object Bot {
 
       case NVA =>
         // 1 LoC adjacent to US without NVA
-        // Then spaces using March Priorities 
+        // Then spaces using March Priorities
         movePiecesToDestinations(NVA, March, NVAForces.toSet, false) {
           (_, needActivation, prohibited) => {
             val locQualifies = (sp: Space) => !prohibited(sp.name) && !sp.pieces.has(NVAPieces) && numAdjacentPieces(sp, USPieces) > 0
@@ -2242,10 +2266,10 @@ object Bot {
               None
           }
         }
-        
+
         case VC =>
           // 2 LoCs adjacent most underground VC guerrillas
-          // Then spaces using March Priorities 
+          // Then spaces using March Priorities
           movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false) {
             (_, needActivation, prohibited) => {
               val locQualifies = (sp: Space) => !prohibited(sp.name) && numAdjacentPieces(sp, Set(VCGuerrillas_U)) > 0
@@ -2312,7 +2336,7 @@ object Bot {
 
         case AirLift => selectAirLiftOrigin(allOrigins, canAddAirLiftOrigin)
 
-        // Select the top priority origin 
+        // Select the top priority origin
         case _ => selectMoveOrigin(faction, destName, action, moveTypes, previousOrigins)
       }
 
@@ -2387,7 +2411,7 @@ object Bot {
           case None => // No more destinations
             needActivationRoll  // Return so subsequent calls will know if activation is needed
 
-          case Some(destName) => 
+          case Some(destName) =>
             botLog(s"\n$faction Bot will attempt $action to $destName")
             tryOrigin(destName, Set.empty)            // pause()
             val dest = game.getSpace(destName)
@@ -2467,7 +2491,7 @@ object Bot {
          (sp.pieces.has(InsurgentBases) && !sp.pieces.has(UndergroundGuerrillas)))
       }
 
-    def spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops: Boolean = 
+    def spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops: Boolean =
       game.spaces exists { sp =>
         coinFirepower(sp) < sp.pieces.totalOf(NVATroops) &&
         sp.pieces.has(USTroops::USBase::Nil)
@@ -2521,7 +2545,7 @@ object Bot {
     }
 
     // US Spaces Priorities: Place Cubes or Special Forces
-    def pickSpacePlaceCubesSpecialForces(candidates: List[Space], troops: Boolean): Space = {
+    def pickSpacePlaceCubesSpecialForces(troops: Boolean)(candidates: List[Space]): Space = {
 
       val priorities = List(
         filterIf(true,   ProvinceWithUSBaseAndCubes),
@@ -2618,7 +2642,7 @@ object Bot {
            sp.isLoC          ||
            coinControlled(sp.name))
         }
-        val sp = pickSpacePlaceCubesSpecialForces(candidates, troops = true)
+        val sp = pickSpacePlaceCubesSpecialForces(troops = true)(candidates)
         moveCasualtiesToMap(Pieces(usTroops = 1), sp.name)
         placeNextTroop(numRemaining - 1)
       }
@@ -2738,7 +2762,7 @@ object Bot {
       def placeTroops(targetNum: Int): Unit = {
         if (troopsMoved < maxTroopsAllowed && avail.totalOf(USTroops) > targetNum) {
           val destCandidates = game.spaces filter validSpace
-          val dest = pickSpacePlaceCubesSpecialForces(destCandidates, troops = true)
+          val dest = pickSpacePlaceCubesSpecialForces(troops = true)(destCandidates)
           val troop = Pieces(usTroops = 1)
           placePieces(dest.name, troop)
           movedPieces.add(dest.name, troop)
@@ -2757,7 +2781,7 @@ object Bot {
           val originCandidates2 = game.spaces filter { sp => validSpace(sp) && numTroops(sp) > 0 }
 
           if (originCandidates1.nonEmpty || originCandidates2.nonEmpty) {
-            val origin = if (originCandidates1.nonEmpty) 
+            val origin = if (originCandidates1.nonEmpty)
               bestCandidate(originCandidates1, fewestTroopsPriorities)
             else
               bestCandidate(originCandidates2, leastPopPriorities)
@@ -2768,7 +2792,7 @@ object Bot {
           }
         }
       }
-      
+
       def placeOrWithdrawTroops(targetNum: Int): Unit = {
         val availTroops = avail.totalOf(USTroops)
         if (availTroops > targetNum)
@@ -2792,6 +2816,27 @@ object Bot {
       placeOrWithdrawTroops(troopTarget)
     }
 
+    def moveOutOfPlayToCities(maxNum: Int): Unit = {
+
+      // Place one piece at a time using the
+      // "Place Base"/"Place cubes or Special Forces/" priorities
+      def placeNext(toPlace: Pieces): Unit = if (toPlace.nonEmpty) {
+        val piece = selectFriendlyToPlaceOrMove(toPlace, 1)
+        val sp = if (piece.has(USBase))
+          pickSpacePlaceBases(spaces(Cities))
+        else
+          pickSpacePlaceCubesSpecialForces(troops = piece.has(USTroops))(spaces(Cities))
+
+        moveOutOfPlayToMap(piece, sp.name)
+        placeNext(toPlace - piece)
+      }
+
+      val outOfPlay = game.outOfPlay.only(USPieces)
+      val num = outOfPlay.total min maxNum
+      val toPlace = selectFriendlyToPlaceOrMove(outOfPlay, num)
+
+      placeNext(toPlace)
+    }
 
     //  -------------------------------------------------------------
     //  Implement the US Train instructions from the US Trung cards.
@@ -2828,7 +2873,7 @@ object Bot {
       def trainToPlaceCubes(once: Boolean): Unit = {
         val candidates = game.nonLocSpaces filter arvnCandidate
         if (canTrain(true) && game.availablePieces.has(ARVNCubes) && candidates.nonEmpty) {
-          val sp      = pickSpacePlaceCubesSpecialForces(candidates, troops = true)
+          val sp      = pickSpacePlaceCubesSpecialForces(troops = true)(candidates)
           val avail   = game.availablePieces.only(ARVNCubes)
           val num     = 6 min avail.total
           val toPlace = selectFriendlyToPlaceOrMove(avail, num)
@@ -2848,7 +2893,7 @@ object Bot {
       def trainToPlaceRangers(): Unit = {
         val candidates = game.nonLocSpaces filter arvnCandidate
         if (canTrain(true) && game.availablePieces.has(Rangers) && candidates.nonEmpty) {
-          val sp      = pickSpacePlaceCubesSpecialForces(candidates, troops = false)
+          val sp      = pickSpacePlaceCubesSpecialForces(troops = false)(candidates)
           val avail   = game.availablePieces.only(Rangers)
           val num     = 2 min avail.total
           val toPlace = selectFriendlyToPlaceOrMove(avail, num)
@@ -2867,7 +2912,7 @@ object Bot {
       def trainToPlaceIrregulars(): Unit = {
         val candidates = game.nonLocSpaces filter irregCandidate
         if (canTrain(false) && game.availablePieces.has(Irregulars) && candidates.nonEmpty) {
-          val sp      = pickSpacePlaceCubesSpecialForces(candidates, troops = false)
+          val sp      = pickSpacePlaceCubesSpecialForces(troops = false)(candidates)
           val avail   = game.availablePieces.only(Irregulars)
           val num     = 2 min avail.total
           val toPlace = selectFriendlyToPlaceOrMove(avail, num)
@@ -2927,7 +2972,7 @@ object Bot {
           (trainingSpaces(sp.name) || canTrain(false)) &&
           sp.coinControlled       &&
           sp.pieces.has(USPieces) &&
-          sp.support < ActiveSupport 
+          sp.support < ActiveSupport
         }
 
         if (candidates.nonEmpty && game.arvnResources >= costEach) {
@@ -2999,7 +3044,7 @@ object Bot {
             !prohibited(sp.name) &&
             sp.pieces.has(InsurgentForces)
           }
-          
+
           if (candidates.nonEmpty)
             Some(shuffle(candidates).head.name)
           else
@@ -3041,7 +3086,7 @@ object Bot {
     //  1. Use Move Priorities
     //  2. Sweep in place.
     //  *  If Shaded Booby Traps then sweep in max 2 spaces
-    //  
+    //
     //  Cobras_Unshaded - 2 US/ARVN sweep spaces each remove 1 Active untunneled enemy
     //                               (troops then  guerrillas then bases)
     //  CombActionPlatoons_Shaded - US may select max 2 spaces per sweep
@@ -3056,16 +3101,16 @@ object Bot {
         // If Shaded Booby Traps then limit spaces to 2 unless this is a limOp
         val maxTraps: Option[Int]  = if (capabilityInPlay(BoobyTraps_Shaded)) Some(2) else None
         val maxSweep = (maxTraps.toList ::: params.maxSpaces.toList).sorted.headOption
-  
+
         val nextSweepCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
           val candidates = game.nonLocSpaces filterNot (sp => sp.isNorthVietnam || prohibited(sp.name))
-  
+
           if (candidates.nonEmpty)
             Some(pickSpaceSweepDest(candidates).name)
           else
             None
         }
-  
+
         logOpChoice(US, Sweep)
         movePiecesToDestinations(US, Sweep, Set(USTroops), false, maxDests = maxSweep)(nextSweepCandidate)
         val maxCobras = 2  // Unshaded cobras can be used in up to 2 spaces
@@ -3076,9 +3121,9 @@ object Bot {
             activateGuerrillasForSweep(name, US)
             checkShadedBoobyTraps(name, US)
             if (numCobras < maxCobras && checkUnshadedCobras(name))
-              numCobras += 1 
+              numCobras += 1
           }
-  
+
           // Finally pay for the operation of applicable
           Some(Sweep)
         }
@@ -3210,7 +3255,7 @@ object Bot {
       def hasUndergroundForces(sp: Space) = sp.pieces.has(UndergroundSpecialForces)
       def specialForcesWouldRemoveBase(sp: Space) =
         hasUndergroundForces(sp) &&
-        sp.pieces.has(InsurgentNonTunnels) && 
+        sp.pieces.has(InsurgentNonTunnels) &&
         sp.pieces.totalOf(InsurgentForces) < 2
 
       def useSpecialForces(sp: Space): Unit = {
@@ -3223,7 +3268,7 @@ object Bot {
         val deadBases  = selectEnemyRemovePlaceActivate(sp.pieces.only(InsurgentNonTunnels), (2 - deadForces.total) max 0)
         removeToAvailable(sp.name, deadForces + deadBases)
       }
-      
+
       def arvnAssault(sp: Space): Unit = {
         log(s"\nAdvise in ${sp.name} using ARVN Assault")
         log(separator())
@@ -3232,7 +3277,7 @@ object Bot {
 
       val canRemoveBaseWithARVN = (sp: Space) => !prohibited(sp) && assaultWouldRemoveBase(ARVN)(sp)
       val canRemoveBaseWithSpecialForces = (sp: Space) => !prohibited(sp) && specialForcesWouldRemoveBase(sp)
-        
+
       val canArvnSweep = (sp: Space) =>
         !prohibited(sp) &&
         sp.support > Neutral &&
@@ -3333,16 +3378,16 @@ object Bot {
       else {
         // If Shaded Booby Traps then limit spaces to 2 unless this is a limOp
         val maxSpaces: Option[Int]  = Some(if (game.inMonsoon) 2 else 4)
-  
+
         val nextAirLiftCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
           val candidates = game.spaces filterNot (sp => sp.isNorthVietnam || prohibited(sp.name))
-  
+
           if (candidates.nonEmpty)
             Some(pickSpaceAirLiftDest(candidates).name)
           else
             None
         }
-  
+
         logSAChoice(US, AirLift)
         //  Since the air lift can be use during a sweep we must preserve the moveDestinations
         val savedMovedDestinations = moveDestinations
@@ -3364,7 +3409,7 @@ object Bot {
     //  1.  Degrade trail if at least 2 hits and trail not at 1
     //  2.  Use Air Strike column of Space Selection table to select spaces.
     //      In each space remove max pieces possible (unless Laser Guided Bombs in effect)
-    // 
+    //
     //  Destroy exposed insurent units and degrade trail
     //  Up to 6 spaces (2 in Monsoon) each with any US or ARVN piece
     //  Roll d6 to determine number of hits
@@ -3404,10 +3449,10 @@ object Bot {
         val minTrail   = if (aaa_shaded) 2 else 1
         val maxHits       = d6
         var hitsRemaining = maxHits
-        val wildWeasels = momentumInPlay(Mo_WildWeasels) && 
+        val wildWeasels = momentumInPlay(Mo_WildWeasels) &&
                         (!capabilityInPlay(LaserGuidedBombs_Shaded) ||
                          isEventMoreRecentThan(Mo_WildWeasels, LaserGuidedBombs_Shaded.name))
-        val laserShaded = capabilityInPlay(LaserGuidedBombs_Shaded) && 
+        val laserShaded = capabilityInPlay(LaserGuidedBombs_Shaded) &&
                           (!momentumInPlay(Mo_WildWeasels) ||
                           isEventMoreRecentThan(LaserGuidedBombs_Shaded.name, Mo_WildWeasels))
         val maxSpaces = if      (momentumInPlay(Mo_TyphoonKate)) 1
@@ -3417,7 +3462,7 @@ object Bot {
         var strikeSpaces = Set.empty[String]
         var arclight_unshaded_used = false
         var totalRemoved = 0
-  
+
         def logSelectAirStrike(): Unit = if (hitsRemaining == maxHits) {
           logSAChoice(US, AirStrike)
           log(s"Die roll to determine the number of hits = $maxHits")
@@ -3432,26 +3477,26 @@ object Bot {
               val newTrail = (game.trail - num) max minTrail
               game.trail - newTrail
             }
-      
+
             logSelectAirStrike()
             log(s"\nUS Air Strikes The Trail")
             log(separator())
-  
+
             if (capabilityInPlay(TopGun_Shaded))
               log(s"Die roll ($TopGun_Shaded): $die [${if (success) "Success!" else "Failure"}]")
-      
+
             if (success) {
               degradeTrail(numBoxes)
               hitsRemaining -= 2
-      
+
               if (adsid) {
                 log(s"Momentum: $Mo_ADSID reduces NVA resources at trail change")
                 decreaseResources(NVA, 6)
               }
-  
+
               if (migs_shaded && game.availablePieces.has(USTroops))
                   moveAvailableToCasualties(Pieces(usTroops = 1), Some(s"$MiGs_Shaded triggers"))
-      
+
               if (capabilityInPlay(SA2s_Unshaded)) {
                 val CanRemove = List(NVABase, NVATroops, NVAGuerrillas_U, NVAGuerrillas_A)
                 log(s"\n$SA2s_Unshaded triggers")
@@ -3467,24 +3512,24 @@ object Bot {
             }
           }
         }
-  
+
         def strikeASpace(): Unit = {
           val isCandidate = (sp: Space) =>
             !strikeSpaces(sp.name)         &&
             sp.pieces.hasExposedInsurgents &&
             (sp.pieces.has(CoinPieces) || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
-  
+
           val candidates = game.spaces filter isCandidate
-  
+
           if (hitsRemaining > 0 && strikeSpaces.size < maxSpaces && totalRemoved < maxPieces && candidates.nonEmpty) {
             val sp                = pickSpaceAirStrike(candidates)
             val (killedPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, hitsRemaining)
-  
+
             logSelectAirStrike()
             log(s"\nUS Air Strikes ${sp.name}")
             log(separator())
             removeToAvailable(sp.name, killedPieces)
-  
+
             if (killedPieces.total > 0) {
               val numShift = if (sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition)
                 0
@@ -3502,20 +3547,20 @@ object Bot {
               }
               decreaseSupport(sp.name, numShift)
             }
-  
+
             hitsRemaining -= killedPieces.total
             totalRemoved += killedPieces.total
             strikeSpaces += sp.name
             strikeASpace()
           }
         }
-  
+
         // Start of Air Lift Special Activity
         // ------------------------------------
         degradeTheTrail()
         if (!momentumInPlay(Mo_WildWeasels) || hitsRemaining == maxHits)
           strikeASpace()
-  
+
         if (hitsRemaining < maxHits)
           logEndSA(US, AirStrike)
         hitsRemaining < maxHits  // True if we did an airstrike action
@@ -3569,7 +3614,7 @@ object Bot {
     val mostOpposition = List(
       new LowestScore[Space]("Most Opposition", _.support.value)
     )
-  
+
     // Determine which ARVN troops/police are eligible to move
     // The Trung rules have instructions for which cubes
     // should remain in place
@@ -3608,7 +3653,7 @@ object Bot {
             1
           else
             0
-  
+
           val keepForControl = if (numCOIN > numNVA + numVC)
             (numNVA + numVC + 1 - numOtherCOIN) min numCubeType
           else if (numCOIN + numVC >= numNVA)
@@ -3631,7 +3676,7 @@ object Bot {
     }
 
     // =========================================================================
-    // Carry out the Troop Redeployment part of the 
+    // Carry out the Troop Redeployment part of the
     // Coup Round Redeploy phase.
     // This is called by redeployARVNForces(), see the comment for
     // that function for a summary of the Trung Troop redeployment
@@ -3646,16 +3691,16 @@ object Bot {
       //    then if the `mandatoryOnly` flag is not set from any spaces with
       //    troops that are eligible to move.
       def getTroopOrigin(mandatoryOnly: Boolean): Option[String] = {
-        val candidates1 = game.spaces filter { sp => 
+        val candidates1 = game.spaces filter { sp =>
           !destsUsed(sp.name) &&
           locOrProvinceNoBase(sp)  &&
           eligibleTroops(sp.name).nonEmpty
         }
-        
+
         if (candidates1.nonEmpty)
           Some(shuffle(candidates1).head.name)
         else if (!mandatoryOnly) {
-          val candidates2 = game.spaces filter { sp => 
+          val candidates2 = game.spaces filter { sp =>
             !destsUsed(sp.name) &&
             eligibleTroops(sp.name).nonEmpty
           }
@@ -3671,7 +3716,7 @@ object Bot {
       }
 
       // Move troops to the given destination using as many origin spaces
-      // as need to fullfil the number needed.  Or until we run out of 
+      // as need to fullfil the number needed.  Or until we run out of
       // eligible troops.
       // Returns true if we have exhausted the eligible moveable troops
       def moveTroopsTo(dest: String, numNeeded: Int, mandatoryOnly: Boolean): Boolean = {
@@ -3742,7 +3787,7 @@ object Bot {
           //    Provinces with a COIN Base
           val sp = pickSpacePlaceCubesRangers(candidates1)
           val numNeeded = sp.pieces.totalOf(InsurgentPieces) + 1 - sp.pieces.totalOf(CoinPieces)
-          
+
           moveTroopsTo(sp.name, numNeeded, mandatoryOnly = false)
         }
         else if (candidates2.nonEmpty) {
@@ -3750,7 +3795,7 @@ object Bot {
           //    most Opposition first
           // ActiveOpposition has the LOWEST support value.
           val sp = pickSpacePlaceCubesRangers(narrowCandidates(candidates2, mostOpposition))
-          
+
           moveTroopsTo(sp.name, 1, mandatoryOnly = false)
         }
         else if (candidates3.nonEmpty) {
@@ -3780,7 +3825,7 @@ object Bot {
     }
 
     // =========================================================================
-    // Carry out the Police Redeployment part of the 
+    // Carry out the Police Redeployment part of the
     // Coup Round Redeploy phase.
     // This is called by redeployARVNForces(), see the comment for
     // that function for a summary of the Trung Police redeployment
@@ -3796,11 +3841,11 @@ object Bot {
         val priorities = List(
           new HighestScore[Space]("Most ARVN Police", _.pieces.totalOf(ARVNPolice))
         )
-        val candidates = game.spaces filter { sp => 
+        val candidates = game.spaces filter { sp =>
           !destsUsed(sp.name) &&
           eligiblePolice(sp.name).nonEmpty
         }
-        
+
         if (candidates.nonEmpty)
           Some(bestCandidate(candidates, priorities).name)
         else
@@ -3808,7 +3853,7 @@ object Bot {
       }
 
       // Move troops to the given destination using as many origin spaces
-      // as need to fullfil the number needed.  Or until we run out of 
+      // as need to fullfil the number needed.  Or until we run out of
       // eligible troops.
       // Returns true if we have exhausted the eligible moveable troops
       def movePoliceTo(dest: String, numNeeded: Int): Boolean = {
@@ -3848,7 +3893,7 @@ object Bot {
       // as possible up to that number.
       // Then if we have not exhausted all of the eligible police
       // call recursively to do it again.
-      // 
+      //
       // Move Police Priorities
       // 1. Get Police to exceed enemies in all Provinces with COIN Control and
       //    NO Coin base
@@ -3887,7 +3932,7 @@ object Bot {
           //     COIN Control and NO Coin base
           val sp = pickSpacePlaceCubesRangers(candidates1)
           val numNeeded = sp.pieces.totalOf(InsurgentPieces) + 1 - sp.pieces.totalOf(ARVNPolice)
-          
+
           movePoliceTo(sp.name, numNeeded)
         }
         else if (candidates2.nonEmpty) {
@@ -3902,7 +3947,7 @@ object Bot {
           //    each 2-Pop space with both US Troops AND support.
           val sp = pickSpacePlaceCubesRangers(candidates3)
           val numNeeded = sp.pieces.totalOf(USTroops) + 1 - sp.pieces.totalOf(ARVNCubes)
-          
+
           movePoliceTo(sp.name, numNeeded)
         }
         else if (candidates4.nonEmpty) {
@@ -3910,7 +3955,7 @@ object Bot {
           //    highest Econ first.
           val sp = pickSpacePlaceCubesRangers(candidates4)
           val numNeeded = sp.pieces.totalOf(Guerrillas) - sp.pieces.totalOf(ARVNPolice)
-          
+
           movePoliceTo(sp.name, numNeeded)
         }
         else
@@ -3925,7 +3970,7 @@ object Bot {
     }
 
     // Coup Round ARVN Redeployment
-    // 
+    //
     // Summary of Trung Instructions
     // ===============================================================================
     // Keep in place
@@ -3936,7 +3981,7 @@ object Bot {
     // AND:
     // o  Keep COIN Pieces > Enemies, first
     //    then keep COIN+VC pieces >= NVA pieces
-    // 
+    //
     // Move cubes
     // -------------------------------------------------------------------------------
     // o  Within each instruction move cubes using "Place Cubes or Rangers" to
@@ -3953,7 +3998,7 @@ object Bot {
     // 3. Move Troops to get ARNV cubes to exceed US Troops in each 2-Pop Province
     //    with a COIN base, US Troops, and NO Support
     // 4. Move any Troops still in LoCs and Provinces without a COIN base
-    // 
+    //
     // Move Police Priorities
     // 1. Get Police to exceed enemies in all Provinces with COIN Control and
     //    NO Coin base
@@ -3974,18 +4019,18 @@ object Bot {
         redeployARVNTroops(troopDestinations)
       else
         log("There are no ARVN Troops that can Redeploy")
-      
+
       if (arvnCanRedeployPolice)
         redeployARVNPolice(policeDestinations)
       else
         log("There are no ARVN Police that can Redeploy")
     }
-    
+
     //  Used during ARVN operations
     //  If we are tracking ARVN resources, then after passing an activation
     //  roll we must also make sure that there are sufficient ARVN resources
     //  to pay for the operation.
-    def checkARVNActivation(needRoll: Boolean, actNum: Int, free: Boolean) = 
+    def checkARVNActivation(needRoll: Boolean, actNum: Int, free: Boolean) =
       checkActivation(ARVN, needRoll, actNum) &&
       (free || !game.trackResources(ARVN) || game.arvnResources >= 3)
 
@@ -4026,7 +4071,7 @@ object Bot {
       val candidates = spaces(transportDestinations) filter assaultEffective(ARVN)
       // General Landsdale prohibits assault
       if (capabilityInPlay(ArmoredCavalry_Unshaded) && !momentumInPlay(Mo_GeneralLansdale) && candidates.nonEmpty) {
-        val sp = pickSpaceRemoveReplace(candidates)    
+        val sp = pickSpaceRemoveReplace(candidates)
         log(s"\n$ArmoredCavalry_Unshaded triggers a free Assault")
         performAssault(ARVN, sp.name, Params(free = true))
       }
@@ -4120,8 +4165,11 @@ object Bot {
       bestCandidate(candidates, priorities)
     }
 
+    def pickSpaceRemoveReplace(candidates: List[Space]): Space = 
+      pickSpaceRemoveReplaceSpecific(candidates, false, false)
+
     // ARVN Spaces Priorities: Remove or Replace
-    def pickSpaceRemoveReplace(candidates: List[Space], assault: Boolean = false, raid: Boolean = false): Space = {
+    def pickSpaceRemoveReplaceSpecific(candidates: List[Space], assault: Boolean = false, raid: Boolean = false): Space = {
 
       val priorities = List(
         filterIf(true,     VulnerableBase),
@@ -4156,7 +4204,7 @@ object Bot {
                          checkARVNActivation(trained, actNum, params.free)
       def prohibited(sp: Space) = trainingSpaces(sp.name)
       val canTrainRangers = (sp: Space) => !(prohibited(sp) || sp.nvaControlled)
-      val canTrainCubes   = (sp: Space) => 
+      val canTrainCubes   = (sp: Space) =>
         !(prohibited(sp) || sp.nvaControlled) &&
         (sp.isCity || sp.pieces.has(CoinBases))
 
@@ -4268,8 +4316,8 @@ object Bot {
 
       logOpChoice(ARVN, Train)
       trainToPlaceRangers(game.nonLocSpaces filter canTrainRangers) &&
-      trainToPlaceCubes(game.nonLocSpaces filter canTrainCubes) 
-      if (!placeARVNBase()) 
+      trainToPlaceCubes(game.nonLocSpaces filter canTrainCubes)
+      if (!placeARVNBase())
         pacifyOneSpace()
 
       if (trained) {
@@ -4300,7 +4348,7 @@ object Bot {
         // ARVN Patrol never needs an activation roll
         val nextPatrolCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
           val candidates = game.patrolSpaces filter (sp => !prohibited(sp.name))
-          
+
           // No need to check activation since we are only trying LoCs
           if (candidates.nonEmpty)
             Some(ARVN_Bot.pickSpacePatrolDest(candidates).name)
@@ -4362,25 +4410,25 @@ object Bot {
         val maxAfford: Option[Int] = if (mustPay) Some(game.arvnResources / 3) else None
         val maxTraps: Option[Int]  = if (capabilityInPlay(BoobyTraps_Shaded)) Some(2) else None
         val maxSweep = (maxAfford.toList ::: maxTraps.toList ::: params.maxSpaces.toList).sorted.headOption
-  
+
         if (maxSweep.nonEmpty && maxSweep.get == 0)
           None  // Cannot afford to do any sweeping!
-        else {  
+        else {
           val nextSweepCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
             val candidates = game.nonLocSpaces filterNot (sp => sp.isNorthVietnam || prohibited(sp.name))
-  
+
             // Since a destination may get tossed out if there are not troops that can reach it
             // we don't use checkARVNActivation() because we don't want to pay for a space that
             // does not get used.  Instead we will pay for all of the selected destinations at the end
             // of the operation.
             lazy val activationOK = checkActivation(ARVN, needActivation, actNum)
-    
+
             if (candidates.nonEmpty && activationOK)
               Some(pickSpaceSweepTransportDest(candidates).name)
             else
               None
           }
-    
+
           logOpChoice(ARVN, Sweep)
           movePiecesToDestinations(ARVN, Sweep, Set(ARVNTroops), false, maxDests = maxSweep)(nextSweepCandidate)
           val maxCobras = 2  // Unshaded cobras can be used in up to 2 spaces
@@ -4391,9 +4439,9 @@ object Bot {
               activateGuerrillasForSweep(name, ARVN)
               checkShadedBoobyTraps(name, ARVN)
               if (numCobras < maxCobras && checkUnshadedCobras(name))
-                numCobras += 1 
+                numCobras += 1
             }
-    
+
             // Finally pay for the operation of applicable
             if (mustPay) {
               log(s"\nARVN pays for ${amountOf(moveDestinations.size, "sweep destination")}")
@@ -4499,7 +4547,7 @@ object Bot {
         sp.population > 0 &&
         sp.coinControlled &&
         sp.support > Neutral
-      
+
       def nextGovern(): Unit = {
         val candidates = game.nonLocSpaces filter isCandidate
 
@@ -4511,7 +4559,7 @@ object Bot {
 
           log(s"\nARVN Governs in ${sp.name} (population: ${sp.population})")
           log(separator())
-          
+
           val numPatronage = (game.usAid min sp.population)
           if (game.usAid == 0 && numPatronage < 2) {
             log("Add 3 times population value to Aid")
@@ -4561,7 +4609,7 @@ object Bot {
       if (momentumInPlay(Mo_TyphoonKate))
         false  // Typhoon Kate prohibits transport
       else {
-        val moveTypes: Set[PieceType] = 
+        val moveTypes: Set[PieceType] =
           if (capabilityInPlay(ArmoredCavalry_Shaded)) Rangers.toSet else ARVNForces.toSet
 
         val nextTransportCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
@@ -4573,7 +4621,7 @@ object Bot {
           else
             None
         }
-        
+
         logSAChoice(ARVN, Transport)
         movePiecesToDestinations(ARVN, Transport, moveTypes, false, maxPieces = 6)(nextTransportCandidate)
 
@@ -4594,14 +4642,14 @@ object Bot {
           false
       }
     }
-      
+
 
     // Mo_TyphoonKate - Single event (prohibits air lift, transport, and bombard, all other special activities are max 1 space)
     def raidActivity(): Boolean = {
       val maxRaid = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
       // Underground guerrillas can be targeted, Tunnels cannot and
       // base only if no other Insurgent pieces (forces?) exist
-      val hasRaidTarget = (sp: Space) => 
+      val hasRaidTarget = (sp: Space) =>
         sp.pieces.has(InsurgentForces) || sp.pieces.has(InsurgentNonTunnels)
 
       val canRemoveBase = (sp: Space) =>
@@ -4621,10 +4669,10 @@ object Bot {
         if (raidSpaces.size < maxRaid && candidates.nonEmpty) {
           val baseCandidates = candidates filter canRemoveBase
           val sp = if (baseCandidates.nonEmpty)
-            pickSpaceRemoveReplace(baseCandidates, raid = true)
+            pickSpaceRemoveReplaceSpecific(baseCandidates, raid = true)
           else
-            pickSpaceRemoveReplace(candidates, raid = true)
-  
+            pickSpaceRemoveReplaceSpecific(candidates, raid = true)
+
           val forcesPresent = sp.pieces.only(InsurgentForces)
           val basesPresent  = sp.pieces.only(InsurgentNonTunnels)
           val numForces     = 2 min forcesPresent.total
@@ -4698,7 +4746,7 @@ object Bot {
         eligibleTroops(sp.name).nonEmpty &&
         !(sp.pieces.has(NVABases) || sp.nvaControlled)
 
-      val isOtherOrigin = (sp: Space) => 
+      val isOtherOrigin = (sp: Space) =>
         !destsUsed(sp.name)   &&
         (sp.isNorthVietnam || isInLaosCambodia(sp.name)) &&
         eligibleTroops(sp.name).nonEmpty
@@ -4723,7 +4771,7 @@ object Bot {
 
       def nextDestination(): Unit = {
         val candidates = game.spaces filter destCandidate
-        
+
         if (candidates.nonEmpty) {
           var totalMoved = 0
           val dest       = pickSpacePlaceTroops(candidates).name
@@ -4763,7 +4811,7 @@ object Bot {
           val numNVA    = sp.pieces.totalOf(NVAPieces)
           val numVC     = sp.pieces.totalOf(VCPieces)
           val numCOIN   = sp.pieces.totalOf(CoinPieces)
-  
+
           val numEligible = if (numNVA > numCOIN + numVC)
             (numNVA - (numCOIN + numVC) - 1) min numTroops
           else if (numNVA + numVC >= numCOIN)
@@ -4774,7 +4822,7 @@ object Bot {
           if (numEligible > 0)
             eligibleTroops.set(sp.name, Pieces(nvaTroops = numEligible))
         }
-  
+
         // Now start choosing destinations and moving troops.
         log(s"Rolling 3d6 for number of troops per destination: $targetNumber")
         nextDestination()
@@ -4836,14 +4884,14 @@ object Bot {
     }
 
     def eightTroopsOutsideSouth: Boolean = {
-      game.spaces exists { sp => 
+      game.spaces exists { sp =>
         sp.pieces.totalOf(NVATroops) >= 8 &&
         isOutsideSouth(sp.name)
       }
     }
 
     def numSupportWithUndergroundGuerrillas: Int = {
-      game.spaces count { sp => 
+      game.spaces count { sp =>
         sp.support > Neutral &&
         sp.pieces.has(NVAGuerrillas_U)
       }
@@ -4977,8 +5025,8 @@ object Bot {
       // First find all possible target spaces and pick the best one.
       val targetCandidates = spaces(candidates flatMap (sp => ambushTargets(sp.name)))
       val targetSpace      = pickSpaceRemoveReplace(targetCandidates)
-      
-      // Now find all of the original candidate spaces that can target the 
+
+      // Now find all of the original candidate spaces that can target the
       // target space and pick the one with the must Undeground Guerrillas.
       val reachableCandidates = candidates filter (sp => ambushTargets(sp.name) contains targetSpace.name)
       val ambushSpace = bestCandidate(reachableCandidates, MostUndergroundGuerrillas)
@@ -5028,7 +5076,7 @@ object Bot {
         else
           true  // No failed activation, just ran out of candidates
       }
-      
+
       //  Return true if we can continue (no failed activation roll)
       def rallyToPlaceGuerrillas(candidates: List[Space]): Boolean = {
         if (game.availablePieces.has(NVAGuerrillas_U) && candidates.nonEmpty) {
@@ -5090,7 +5138,7 @@ object Bot {
     //    2. Select 1 space in Laos/Cambodia without NVA Base adjacent
     //       to the most NVA Guerrillas (Optional)
     //    3. Select spaces using March Destinations
-    //    
+    //
     //    March not allowed in Monsoon.
     //  -------------------------------------------------------------
     def marchOp(params: Params, actNum: Int, withLoC: Boolean, withLaosCambodia: Boolean): Option[InsurgentOp] = {
@@ -5105,7 +5153,7 @@ object Bot {
             !sp.pieces.has(NVAGuerrillas) &&
             numAdjacentPieces(sp, USForces) > 0
           val candidates = game.locSpaces filter qualifies
-          
+
           // No need to check activation since we are only trying LoCs
           if (!lastWasSuccess && candidates.nonEmpty)
             Some(NVA_Bot.pickSpaceMarchDest(candidates).name)
@@ -5130,7 +5178,7 @@ object Bot {
             (spaces(getNVAAdjacent(sp.name)) exists (_.pieces.has(NVAGuerrillas)))
           val candidates = game.locSpaces filter qualifies
           lazy val activationOK = checkActivation(NVA, needActivation, actNum)
-          
+
           if (!lastWasSuccess && candidates.nonEmpty && activationOK)
             Some(bestCandidate(candidates, LaosCambodiaPriorities).name)
           else
@@ -5190,7 +5238,7 @@ object Bot {
         sp.pieces.totalOf(VCGuerrillas) > 2 &&
         !sp.pieces.has(VCBases)
       }
-        
+
       val pt76_unshaded   = capabilityInPlay(PT76_Unshaded)
       var attackSpaces   = Set.empty[String]
       var usedPT76Shaded = false
@@ -5270,10 +5318,10 @@ object Bot {
       val troopCandidates = game.spaces filter { sp =>
         sp.pieces.totalOf(NVATroops) > 1 && sp.pieces.has(CoinPieces)
       }
-      
+
       // Attack where 2+ troops
       keepAttacking = nextAttack(troopCandidates, useTroops = true, false)
-      
+
       val ambushed = if (addAmbush && keepAttacking && params.specialActivity) {
         // Ambush in 1 or 2 spaces (if special activity allowed)
         lazy val ambushCandidates = spaceNames(game.spaces filter { sp =>
@@ -5286,7 +5334,7 @@ object Bot {
           else
             (Set.empty, true)
         }
-  
+
         attackSpaces ++= ambushSpaces
         keepAttacking  = canContinue
         ambushSpaces.nonEmpty
@@ -5303,7 +5351,7 @@ object Bot {
       // spaces the 4+ NVA Guerrillas
       if (keepAttacking)
         nextAttack(guerrillaCandidates, useTroops = false, needActivation = attackSpaces.nonEmpty)
-      
+
       if (attackSpaces.nonEmpty)
         Some(Attack, ambushed)
       else {
@@ -5370,12 +5418,12 @@ object Bot {
         var infiltrateSpaces = Set.empty[String]
         val limited          = momentumInPlay(Mo_TyphoonKate) || momentumInPlay(Mo_559TransportGrp)
         val maxInfiltrate    = if (limited) 1 else 2
-  
+
         val notes = List(
           noteIf(momentumInPlay(Mo_TyphoonKate),s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
           noteIf(momentumInPlay(Mo_559TransportGrp), s"Infiltrate is max 1 space [Momentum: $Mo_559TransportGrp]")
         ).flatten
-  
+
         val canReplaceBase = (sp: Space) =>
           !infiltrateSpaces(sp.name) &&
           sp.pieces.totalOf(NVAPieces) > sp.pieces.totalOf(VCPieces) &&
@@ -5384,7 +5432,7 @@ object Bot {
           !infiltrateSpaces(sp.name) &&
           sp.pieces.has(NVABases)
         val diceSuccess = rollDice(3) <= game.availablePieces.totalOf(NVATroops)
-        
+
         def placeTroops(): Unit = {
           val troopCandidates = game.nonLocSpaces filter canPlaceTroops
           val canPlace        = infiltrateSpaces.size < maxInfiltrate &&
@@ -5398,10 +5446,10 @@ object Bot {
             val toPlace   = Pieces(nvaTroops = numTroops)
             if (infiltrateSpaces.isEmpty)
               logSAChoice(NVA, Infiltrate, notes)
-  
+
             log(s"\nNVA Infiltrates in ${sp.name}")
               log(separator())
-  
+
             loggingControlChanges {
               removeToAvailable(sp.name, toRemove)
               placePieces(sp.name, toPlace)
@@ -5410,23 +5458,23 @@ object Bot {
             placeTroops()
           }
         }
-  
+
         if (!needDiceRoll || diceSuccess) {
           val baseCandidates = game.nonLocSpaces filter canReplaceBase
-  
+
           // First try to replace a VC base if requested
           if (replaceVCBase && game.availablePieces.has(NVABase) && baseCandidates.nonEmpty) {
             val sp      = pickSpaceRemoveReplace(baseCandidates)
             val vcPiece = selectEnemyRemovePlaceActivate(sp.pieces.only(VCBases), 1)
             val nvaType = getInsurgentCounterPart(vcPiece.explode().head)
-  
+
             logSAChoice(NVA, Infiltrate, notes)
             log(s"\nNVA Infiltrates in ${sp.name}")
               log(separator())
-  
+
             if (sp.support < Neutral)
               increaseSupport(sp.name, 1)
-  
+
             loggingControlChanges {
               removeToAvailable(sp.name, vcPiece)
               placePieces(sp.name, Pieces(nvaBases = 1))
@@ -5435,14 +5483,14 @@ object Bot {
               infiltrateSpaces += sp.name
             }
           }
-  
+
           // Next attempt to place troops at NVA bases
           placeTroops()
         }
-  
+
         if (infiltrateSpaces.nonEmpty)
           logEndSA(NVA, Infiltrate)
-  
+
         infiltrateSpaces.nonEmpty
       }
     }
@@ -5463,12 +5511,12 @@ object Bot {
                     else if (capabilityInPlay(LongRangeGuns_Shaded))   3
                     else                                               2
         val isCandidate = (sp: Space) => {
-          val enemyCondition = sp.pieces.totalOf(CoinTroops) > 2 || 
+          val enemyCondition = sp.pieces.totalOf(CoinTroops) > 2 ||
                                (sp.pieces.has(CoinTroops) && sp.pieces.has(CoinBases))
           lazy val hasAdjacentTroops = getAdjacent(sp.name) exists { name =>
             game.getSpace(name).pieces.totalOf(NVATroops) > 2
           }
-          
+
           !bombardSpaces(sp.name) &&
           enemyCondition          &&
           (sp.pieces.totalOf(NVATroops) > 2 || hasAdjacentTroops)
@@ -5485,10 +5533,10 @@ object Bot {
             val sp       = pickSpaceRemoveReplace(candidates)
             val troops   = sp.pieces.only(CoinTroops)
             val toRemove = selectEnemyRemovePlaceActivate(troops, troops.total min 1)
-    
+
             if (numBombarded == 0)
               logSAChoice(NVA, Bombard, notes)
-    
+
             log(s"\nNVA Bombards ${sp.name}")
             log(separator())
             removePieces(sp.name, toRemove)
@@ -5511,11 +5559,11 @@ object Bot {
   // VC Specific code
   // ================================================================
   object VC_Bot {
-    
+
     val canSubvertSpace = (sp: Space) => sp.pieces.has(VCGuerrillas_U) && sp.pieces.has(ARVNCubes)
     val canTaxSpace = (sp: Space) => {
       // Bot will only tax spaces with a VC Base if at least 2 underground guerrillas
-      val needed = if (sp.pieces.has(VCBases)) 2 else 1 
+      val needed = if (sp.pieces.has(VCBases)) 2 else 1
       val hasG = sp.pieces.totalOf(VCGuerrillas_U) >= needed
       hasG && ((sp.isLoC && sp.printedEconValue > 0) || (!sp.coinControlled && sp.population > 0))
     }
@@ -5581,7 +5629,7 @@ object Bot {
       botLog(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
-    
+
     // VC Spaces Priorities: Place Bases or Tunnels
     def pickSpacePlaceBases(candidates: List[Space]): Space = {
       val priorities = List(
@@ -5634,11 +5682,11 @@ object Bot {
     // VC Spaces Priorities: Tax
     def pickSpaceTax(candidates: List[Space]): Space = {
       val coinPlayer = game.isHuman(US) || game.isHuman(ARVN)
-      
+
       val priorities = List(
         filterIf(true,        MostTotalOpposition),
         filterIf(true,        CityProvinceMostVCGuerrillas),
-        filterIf(coinPlayer,  OnePlusEconLoc)        
+        filterIf(coinPlayer,  OnePlusEconLoc)
       ).flatten
 
       botLog(s"\nVC Select space (Tax): [${andList(candidates.sorted)}]")
@@ -5671,8 +5719,8 @@ object Bot {
       // First find all possible target spaces and pick the best one.
       val targetCandidates = spaces(candidates flatMap (sp => ambushTargets(sp.name)))
       val targetSpace = pickSpaceRemoveReplace(targetCandidates)
-      
-      // Now find all of the original candidate spaces that can target the 
+
+      // Now find all of the original candidate spaces that can target the
       // target space and pick the one with the must Undeground Guerrillas.
       val reachableCandidates = candidates filter (sp => ambushTargets(sp.name) contains targetSpace.name)
       val ambushSpace = bestCandidate(reachableCandidates, MostUndergroundGuerrillas)
@@ -5703,7 +5751,7 @@ object Bot {
 
         if (candidates1.nonEmpty || candidates2.nonEmpty) {
           val sp = pickSpaceTowardActiveSupport(if (candidates1.nonEmpty) candidates1 else candidates2)
-          
+
           decreaseSupport(sp.name, 1)
           shiftSpaces += sp.name
           nextShift(numRemaining - sp.population)
@@ -5799,7 +5847,7 @@ object Bot {
         else
           true  // No failed activation, ran out of candidates
       }
-      
+
       // Return true if we can continue (no failed activation)
       def rallyToPlaceGuerrillas(candidates: List[Space]): Boolean = {
         if (game.availablePieces.has(VCGuerrillas_U) && candidates.nonEmpty) {
@@ -5830,7 +5878,7 @@ object Bot {
         if (candidates.nonEmpty) {
           if (canRally) {
             val sp = bestCandidate(candidates, MostActiveGuerrillas)
-  
+
             log(s"\n$VC selects ${sp.name} for Rally")
             log(separator())
             hidePieces(sp.name, sp.pieces.only(VCGuerrillas_A))
@@ -5881,33 +5929,33 @@ object Bot {
           val qualifies = (sp: Space) => !prohibited(sp.name) &&
                                             numAdjacentPieces(sp, Set(VCGuerrillas_U)) > 0
           lazy val locCandidates = game.locSpaces filter qualifies
-  
+
           // No need to check activation since these are LoCs
-          // 
+          //
           if (moveDestinations.size < 2 && locCandidates.nonEmpty) {
             Some(bestCandidate(locCandidates, LocPriorities).name)
           }
           else
             None
         }
-  
+
         // Select the next march candidate
         // prohibited contains all previous march destinations plus failed
         // destinations.
         val nextGenericCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
           lazy val candidates    = game.spaces filterNot (sp => prohibited.contains(sp.name))
-  
-          if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) 
+
+          if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum))
             Some(VC_Bot.pickSpaceMarchDest(candidates).name)
           else
             None
         }
-  
+
         logOpChoice(VC, March)
         movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, maxDests = params.maxSpaces)(nextLoCCandidate)
         // First activation check is always false since previos 0-2 spaces were LoCs
         movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, maxDests = params.maxSpaces)(nextGenericCandidate)
-  
+
         if (moveDestinations.nonEmpty)
           Some(March)
         else {
@@ -5931,7 +5979,7 @@ object Bot {
         sp.pieces.totalOf(VCGuerrillas) > 2 &&
         !sp.pieces.has(VCBases)
       }
-        
+
       def nextAttack(candidates: List[Space], needActivation: Boolean): Unit = {
         if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
           val sp         = pickSpaceRemoveReplace(candidates)
@@ -5978,7 +6026,7 @@ object Bot {
       }
       else
         false
-      
+
       if (ambushed || attacked)
         (Some(Attack), ambushed)
       else {
@@ -6081,10 +6129,10 @@ object Bot {
           val sp       = pickSpaceRemoveReplace(candidates)
           val cubes    = sp.pieces.only(ARVNCubes)
           val toRemove = selectEnemyRemovePlaceActivate(cubes, cubes.total min 2)
-  
+
           if (numSubverted == 0)
             logSAChoice(VC, Subvert)
-  
+
           log(s"\nVC Subverts in ${sp.name}")
           log(separator())
           removeToAvailable(sp.name, toRemove)
@@ -6120,14 +6168,14 @@ object Bot {
     ActionEntry(Event, "Current Event is Critical and Effective?",
     (faction) => {
       val card = deck(game.currentCard)
-      card.eventPriority(faction) == Critical && card.eventEffective(faction)
+      card.botPriority(faction) == Critical && card.eventEffective(faction)
     }),
 
     // Event is critical for Next eligible faction?
     ActionEntry(OpOnly, "Next Eligible could choose Critical Event?",
     (faction) => {
       val card = deck(game.currentCard)
-      game.followingFaction map (next => card.eventPriority(next) == Critical) getOrElse false
+      game.followingFaction map (next => card.botPriority(next) == Critical) getOrElse false
     }),
 
     // Is first to act on next csrd and the event is Critical?
@@ -6135,7 +6183,7 @@ object Bot {
       (faction) => {
       val nextCard = deck(game.onDeckCard)
 
-      isFirstOnNextCard(faction) && nextCard.eventPriority(faction) == Critical
+      isFirstOnNextCard(faction) && nextCard.botPriority(faction) == Critical
     }),
 
     // Otherwise...
@@ -6151,9 +6199,9 @@ object Bot {
       val nextCard = deck(game.onDeckCard)
 
       isFirstOnNextCard(faction) &&
-      nextCard.eventPriority(faction) == Critical &&
+      nextCard.botPriority(faction) == Critical &&
       !(game.sequence.canDo(Event) &&
-        card.eventPriority(faction) == Critical &&
+        card.botPriority(faction) == Critical &&
         card.eventEffective(faction))
     }),
 
@@ -6161,7 +6209,7 @@ object Bot {
     ActionEntry(Event, "1st Eligibile chose Op+SA and Event is Performed/Critical and Effective?",
       (faction) => {
       val card     = deck(game.currentCard)
-      val priority = card.eventPriority(faction)
+      val priority = card.botPriority(faction)
 
       game.sequence.canDo(Event) &&
       (priority == Critical || priority == Performed) &&
@@ -6248,7 +6296,7 @@ object Bot {
           val sa    = action == OpPlusSpecial
           val maxsp = if (action == LimitedOp) Some(1) else None
           val params = Params(specialActivity = sa, maxSpaces = maxsp)
-          
+
           // If the first eligible was allowd to do a special
           // activity but was not able to do so then switch
           // it action to OpOnly
@@ -6630,7 +6678,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecial(): Boolean =
-        ARVN_Bot.governActivity() || 
+        ARVN_Bot.governActivity() ||
         ARVN_Bot.transportActivity()
 
       ARVN_Bot.trainOp(params, actNum) match {
@@ -6693,7 +6741,7 @@ object Bot {
     // ------------------------------------------------------------
     // Front Operation
     // ------------------------------------------------------------
-    def executeFront(params: Params): TrungResult = {      
+    def executeFront(params: Params): TrungResult = {
       if (!ARVN_Bot.any2PopSpaceWithSupportAndMoreArvnCubesThanUsCubes)
         TrungDraw
       else if (rollDice(3) > game.availablePieces.totalOf(ARVNPieces))
@@ -6719,7 +6767,7 @@ object Bot {
         (op == Patrol && ARVN_Bot.governActivity()) ||
         ARVN_Bot.raidActivity()                     ||
         ARVN_Bot.transportActivity()
-        
+
       val operation = if (allLocRoutesCanTho_HueBlocked)
         ARVN_Bot.patrolOp(params)
       else
@@ -6757,7 +6805,7 @@ object Bot {
           case Some(_) =>
             ARVN_Bot.armoredCavalryAssault()
             TrungComplete(didSpecial)
-          
+
           case None => TrungNoOp
         }
       }
@@ -6805,7 +6853,7 @@ object Bot {
               (ARVN_Bot.governActivity() || ARVN_Bot.transportActivity())
             ARVN_Bot.armoredCavalryAssault()
             TrungComplete(didSpecial)
-        
+
           case None => TrungNoOp
         }
       }
@@ -6826,7 +6874,7 @@ object Bot {
             (ARVN_Bot.raidActivity() || ARVN_Bot.transportActivity())
           ARVN_Bot.armoredCavalryAssault()
           TrungComplete(didSpecial)
-        
+
         case None => TrungNoOp
       }
     }
@@ -6905,7 +6953,7 @@ object Bot {
       }
       else {
         NVA_Bot.rallyOp(params, actNum) match {
-          case Some(_) => 
+          case Some(_) =>
             val infiltrated = params.specialActivity &&
                               NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = false)
             TrungComplete(infiltrated)
@@ -6950,7 +6998,7 @@ object Bot {
       if (rollDice(2) <= game.availablePieces.totalOf(NVAGuerrillas)) {
         NVA_Bot.rallyOp(params, actNum) match {
           case Some(_) =>
-            val infiltrated = params.specialActivity && 
+            val infiltrated = params.specialActivity &&
                               NVA_Bot.infiltrateActivity(needDiceRoll = false, replaceVCBase = true)
             TrungComplete(infiltrated)
 
@@ -7054,10 +7102,10 @@ object Bot {
         def doSpecialActivity(): Boolean = {
           val ambushCandidates = marchAmbushCandidates(NVA)
           val canAmbush        = ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
-        
+
           if (canAmbush)
             ambushActivity(NVA, ambushCandidates, March, actNum, false)
-          
+
           canAmbush || NVA_Bot.bombardActivity()
         }
 
@@ -7089,7 +7137,7 @@ object Bot {
             val didSpecial = NVA_Bot.infiltrateActivity(needDiceRoll = true, replaceVCBase = true) ||
                              NVA_Bot.bombardActivity()
             TrungComplete(didSpecial)
-            
+
           case Some(_) =>
             TrungComplete(false)
 
@@ -7097,7 +7145,7 @@ object Bot {
             TrungNoOp
         }
       }
-      
+
     }
 
     // ------------------------------------------------------------
@@ -7107,7 +7155,7 @@ object Bot {
       def doSpecialActivity(op: InsurgentOp): Boolean = {
         val ambushCandidates = marchAmbushCandidates(NVA)
         val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
-        
+
         if (canAmbush)
           ambushActivity(VC, ambushCandidates, op, actNum, false)
 
@@ -7158,7 +7206,7 @@ object Bot {
         sp.pieces.has(NVAGuerrillas_U) && sp.support > Neutral
       val undergroundIn2PlusSpacesWithSupport: Boolean =
         (game.nonLocSpaces count underGroundWithSupport) > 1
-      
+
       if (undergroundIn2PlusSpacesWithSupport) {
         NVA_Bot.terrorOp(params, actNum) match {
           case Some(_) => TrungComplete(params.specialActivity && NVA_Bot.bombardActivity())
@@ -7186,7 +7234,7 @@ object Bot {
   // ================================================================
 
   object Trung_VC_U extends TrungCard(VC, "U", actNum = 2) {
-    
+
     // ------------------------------------------------------------
     // Front Operation
     // ------------------------------------------------------------
@@ -7197,7 +7245,7 @@ object Bot {
 
         (canSubvert && VC_Bot.subvertActivity()) || VC_Bot.taxActivity()
       }
-      
+
       val threePlusGuerrillas = game.spaces exists (_.pieces.totalOf(VCGuerrillas) > 2)
 
       if (threePlusGuerrillas) {
@@ -7226,7 +7274,7 @@ object Bot {
         val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
         val agitateRoll      = rollDice(2)
         val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
-        
+
         if (canAmbush)
           ambushActivity(VC, ambushCandidates, op, actNum, false)
 
@@ -7253,7 +7301,7 @@ object Bot {
 
   // ---------------------------------------------------------------
   object Trung_VC_V extends TrungCard(VC, "V", actNum = 2) {
-    
+
     // ------------------------------------------------------------
     // Front Operation
     // ------------------------------------------------------------
@@ -7262,7 +7310,7 @@ object Bot {
         val agitateRoll      = rollDice(2)
         val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
         val canSubvert       = game.spaces exists VC_Bot.canSubvertSpace
-        
+
         (canTax && VC_Bot.taxActivity()) || VC_Bot.subvertActivity()
 
       }
@@ -7303,7 +7351,7 @@ object Bot {
 
   // ---------------------------------------------------------------
   object Trung_VC_W extends TrungCard(VC, "W", actNum = 2) {
-    
+
     // ------------------------------------------------------------
     // Front Operation
     // ------------------------------------------------------------
@@ -7315,7 +7363,7 @@ object Bot {
       val undergroundWithUSTroops = game.spaces exists { sp=>
         sp.pieces.has(VCGuerrillas_U) && sp.pieces.has(USTroops)
       }
-      
+
       if (!undergroundWithUSTroops)
         TrungDraw
       else if (rollDice(3) > game.availablePieces.totalOf(VCPieces))
@@ -7343,7 +7391,7 @@ object Bot {
         case _            => TrungNoOp
       }
     }
-    
+
   }
 
   // ---------------------------------------------------------------
@@ -7474,7 +7522,7 @@ object Bot {
     //  NOTE:  This flip side is only executed if the Special Activity
     //         from the front side has already been attempted.
     //         If the Special Activity was done and we cannot find
-    //         any valid spaces for the Operation we must still 
+    //         any valid spaces for the Operation we must still
     //         return TrungComplete(true)
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       val operation = if (VC_Bot.undergroundAtNoActiveOpposition)

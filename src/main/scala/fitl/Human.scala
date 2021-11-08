@@ -49,7 +49,7 @@ object Human {
 
   private val NO_LIMIT = 1000;          // When space selection is unlimited.
   private var pt76_shaded_used = false  // NVA attack in one space
-  
+
   case class Params(
     specialActivity: Boolean        = false, // May select a Special Activity
     maxSpaces: Option[Int]          = None,
@@ -204,7 +204,7 @@ object Human {
         askMenu(choices, "Choose destination:", allowAbort = false).head match {
           case "finished" =>
           case dest =>
-            val num = askInt("Move how many troops", 0, numTroops, 
+            val num = askInt("Move how many troops", 0, numTroops,
                             default = Some(numTroops), allowAbort = false)
             if (num > 0) {
               movePieces(Pieces(arvnTroops = num), origin, dest)
@@ -227,7 +227,7 @@ object Human {
         askMenu(choices, "Choose destination:", allowAbort = false).head match {
           case "finished" =>
           case dest =>
-            val num = askInt("Move how many police", 0, numPolice, 
+            val num = askInt("Move how many police", 0, numPolice,
                             default = Some(numPolice), allowAbort = false)
             if (num > 0) {
               movePieces(Pieces(arvnPolice = num), origin, dest)
@@ -287,7 +287,7 @@ object Human {
     }
     else
       log("There are no ARVN Troops that can Redeploy")
-    
+
     if (arvnCanRedeployPolice)
       doVoluntaryPoliceMoves()
     else
@@ -317,7 +317,7 @@ object Human {
         askMenu(choices, "Choose destination:", allowAbort = false).head match {
           case "finished" =>
           case dest =>
-            val num = askInt("Move how many troops", 0, numTroops, 
+            val num = askInt("Move how many troops", 0, numTroops,
                             default = Some(numTroops), allowAbort = false)
             if (num > 0) {
               movePieces(Pieces(nvaTroops = num), origin, dest)
@@ -367,7 +367,7 @@ object Human {
         val numLeft = amountOf(maxTroops, "Troop casualty", Some("Troop casualties"))
         val prompt = s"\n$numLeft remaining to place on the map\nChoose space to place Troops"
         val name = askSimpleMenu(candidates, prompt, allowAbort = false).head
-        val num  = askInt(s"Move how many Troops to $name", 0, maxTroops, allowAbort = false)        
+        val num  = askInt(s"Move how many Troops to $name", 0, maxTroops, allowAbort = false)
         moveCasualtiesToMap(Pieces(usTroops = num), name)
         placeTroops()
       }
@@ -475,7 +475,7 @@ object Human {
         choice(canMoveOldTroops, "old-troop", "Re-move troops that have already moved"),
         choice(canMoveOldBases,  "old-base",  "Re-move a base that has already moved"),
         choice(true,             "finished",  "Finished moving pieces")
-      ).flatten            
+      ).flatten
 
       println(s"\nMoved so far: $numTroopsMoved/$maxTroops troops and $numBasesMoved/$maxBases bases")
       askMenu(choices, "Choose one:", allowAbort = false).head match {
@@ -491,7 +491,7 @@ object Human {
         case "old-base"  =>
           moveOldBase()
           nextAction()
-        case _ =>        
+        case _ =>
       }
     }
 
@@ -519,7 +519,7 @@ object Human {
         if (candidates.nonEmpty) {
           val choices = candidates.map(name => name -> s"$name [pop: ${pop(name)}]") :+
                         "finished" -> "Finished shifting spaces toward Opposition"
-          
+
           val remaining = s"${amountOf(numRemaining, "population shift")} remaining"
           val prompt = s"\nChoose space to shift: ($remaining)"
           askMenu(choices, prompt, allowAbort = false).head match {
@@ -665,15 +665,34 @@ object Human {
     if (capabilityInPlay(ArmoredCavalry_Unshaded) && !momentumInPlay(Mo_GeneralLansdale)) {
       val isCandidate = (sp: Space) => sp.pieces.has(InsurgentPieces) &&sp.pieces.has(ARVNCubes)
       val candidates = spaceNames(Special.transportDestinations map game.getSpace filter isCandidate)
-  
+
       if (candidates.nonEmpty && askYorN(s"\nDo you wish to perform a free assault in 1 transport destinaion via [$ArmoredCavalry_Unshaded]? (y/n) ")) {
           val name = askCandidate("Free Assault in which space: ", candidates)
-  
+
           log(s"\n$ArmoredCavalry_Unshaded triggers a free Assault")
           performAssault(ARVN, name, Params(free = true))
       }
     }
   }
+
+  def moveUSOutOfPlayToCities(maxNum: Int): Unit = {
+
+    def placeInCity(pieces: Pieces): Unit = if (pieces.nonEmpty) {
+
+      val name = askSimpleMenu(Cities, "Place pieces in which City:").head
+      val num  = askInt(s"Place how many pieces in $name", 0, pieces.total)
+      val toPlace = askPieces(pieces, num)
+      moveOutOfPlayToMap(toPlace, name)
+      placeInCity(pieces - toPlace)
+    }
+
+    val numPieces = maxNum min game.casualties.totalOf(USPieces)
+    val prompt = "Choose US Pieces to remove from Out of Play"
+    val pieces = askPieces(game.casualties, numPieces, USPieces, Some(prompt))
+
+    placeInCity(pieces)
+  }
+
 
   // Carry out an ambush in the given space
   // MainForceBns_Shaded   - 1 VC Ambush space may remove 2 enemy pieces
@@ -923,7 +942,7 @@ object Human {
 
       println(s"\n${amountOf(Special.selectedSpaces.size, "space")} of $maxAdvise selected for Advise")
       println(separator())
-      wrap("", Special.selectedSpaces.toList) foreach println
+      wrap("", Special.selectedSpaces.toList, showNone = false) foreach println
 
       askMenu(choices, "\nChoose Advise option:").head match {
         case "sweep" =>
@@ -1052,8 +1071,8 @@ object Human {
 
       println(s"\n${amountOf(airLiftSpaces.size, "space")} of $maxAirLiftSpaces selected for Air Lift")
       println(separator())
-      wrap("", airLiftSpaces) foreach println
-      
+      wrap("", airLiftSpaces, showNone = false) foreach println
+
       askMenu(choices, "\nSelect one:").head match {
         case "select" =>
           askCandidateOrBlank("\nAir Lift in which space: ", airLiftCandidates) foreach { name =>
@@ -1107,10 +1126,10 @@ object Human {
     val maxSpaces = if      (momentumInPlay(Mo_TyphoonKate)) 1
                     else if (game.inMonsoon) 2
                     else 6
-    val wildWeasels = momentumInPlay(Mo_WildWeasels) && 
+    val wildWeasels = momentumInPlay(Mo_WildWeasels) &&
                     (!capabilityInPlay(LaserGuidedBombs_Shaded) ||
                       isEventMoreRecentThan(Mo_WildWeasels, LaserGuidedBombs_Shaded.name))
-    val laserShaded = capabilityInPlay(LaserGuidedBombs_Shaded) && 
+    val laserShaded = capabilityInPlay(LaserGuidedBombs_Shaded) &&
                       (!momentumInPlay(Mo_WildWeasels) ||
                       isEventMoreRecentThan(LaserGuidedBombs_Shaded.name, Mo_WildWeasels))
     val maxPieces = if (wildWeasels) 1 else if (laserShaded) 2 else maxHits
@@ -1224,11 +1243,11 @@ object Human {
           Nil
 
         val choices = (topChoices:::strikeChoices) :+ ("finished" -> "Finished with Air Strike activity")
-        
+
         println(s"\n${amountOf(strikeSpaces.size, "space")} of $maxSpaces selected for Air Strike")
         println(separator())
-        wrap("", strikeSpaces.toList) foreach println
-        
+        wrap("", strikeSpaces.toList, showNone = false) foreach println
+
         if (!oriskany) {
           if (hasDegraded)
             println("\nYou have already degraded the trail")
@@ -1239,7 +1258,7 @@ object Human {
         val canRemove = (maxPieces - totalRemoved) min hitsRemaining
         if (choices.size == 1) {
           val degradeMsg = if (hasDegraded) "" else " and you cannot degrade the trail"
-          println(s"\n ${amountOf(hitsRemaining, "hit")} remaining}")
+          println(s"\n ${amountOf(hitsRemaining, "hit")} remaining")
           println(s"There are no strike targets $degradeMsg")
         }
         else
@@ -1322,7 +1341,7 @@ object Human {
 
       println(s"\n${amountOf(Special.selectedSpaces.size, "space")} of $maxSpaces selected for Govern")
       println(separator())
-      wrap("", Special.selectedSpaces.toList) foreach println
+      wrap("", Special.selectedSpaces.toList, showNone = false) foreach println
 
       askMenu(choices, "\nGovern:").head match {
         case "select" =>
@@ -1463,12 +1482,12 @@ object Human {
       val sp = game.getSpace(name)
       sp.pieces.only(Rangers) - frozen(name)
     }
-    
+
     def adjWithRangers(name: String) = (getAdjacent(name) filter (n => canMoveFrom(n).nonEmpty)).toList.sorted
 
     def moveRangersInto(name: String): Unit = {
       val choices = (adjWithRangers(name) map (n => n -> n)) :+ ("finished" -> s"Finished moving Rangers into $name")
-      
+
       askMenu(choices, s"\nMove Rangers into $name from:").head match {
         case "finished" =>
         case fromName =>
@@ -1496,7 +1515,7 @@ object Human {
 
       println(s"\n${amountOf(raidSpaces.size, "space")} of $maxSpaces selected for Raid")
       println(separator())
-      wrap("", raidSpaces.toList) foreach println
+      wrap("", raidSpaces.toList, showNone = false) foreach println
 
       askMenu(choices, "\nRaid:").head match {
         case "select" =>
@@ -1534,18 +1553,18 @@ object Human {
           }
           else
             Pieces()
-          
+
           log(s"\nARVN uses an underground ranger to remove enemy pieces in $name")
           log(separator())
           revealPieces(name, Pieces(rangers_U = 1))
           removeToAvailable(name, killedForces + killedBases)
-          nextRaidAction(raided + name)          
+          nextRaidAction(raided + name)
       }
     }
 
     // Start of Transport Special Activity
     // ------------------------------------
-    
+
     val notes = List(
       noteIf(kate, s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]")
     ).flatten
@@ -1562,33 +1581,33 @@ object Human {
   // Mo_McNamaraLine    - prohibits infiltrate
   // Mo_559TransportGrp - Infiltrate is max 1 space
   def doInfiltrate(params: Params): Unit = {
-    val NVABases         = NVABase::NVATunnel::Nil  
+    val NVABases         = NVABase::NVATunnel::Nil
     val kate             = momentumInPlay(Mo_TyphoonKate)
     val transportGrp     = momentumInPlay(Mo_559TransportGrp)
     val maxSpaces        = if (kate || transportGrp) 1 else 2
     var infiltrateSpaces = Set.empty[String]
-    
+
     val canSuborn = (sp: Space) =>
       sp.pieces.totalOf(NVAPieces) > sp.pieces.totalOf(VCPieces) &&
       (sp.pieces.has(VCPieces) || sp.support < Neutral)
-      
+
     val isCandidate = (sp: Space) =>
       sp.pieces.has(NVABases) || canSuborn(sp)
-    
-    
+
+
     def placeTroops(name: String): Unit = {
       def sp            = game.getSpace(name)
       val toPlaceTroops = game.piecesToPlace.totalOf(NVATroops)
       val trailNum      = game.trail + sp.pieces.totalOf(NVABases)
       val maxGuerrillas = sp.pieces.totalOf(NVAGuerrillas)
-      
+
       log(s"\nNVA Infiltrates in $name")
       log(separator())
       loggingControlChanges {
         val trailTroops = askInt("Place how many troops for Trail + Bases", 0, trailNum min toPlaceTroops)
         ensurePieceTypeAvailable(NVATroops, trailTroops)
         placePieces(name, Pieces(nvaTroops = trailTroops))
-      
+
         val numGuerrillas = askInt("\nReplace how many NVA guerrillas with troops", 0, maxGuerrillas)
         val guerrillas    = askPieces(sp.pieces, numGuerrillas,  NVAGuerrillas, prompt = Some("Selecting guerrilas to replace with troops"))
         removeToAvailable(name, guerrillas)
@@ -1596,19 +1615,19 @@ object Human {
         placePieces(name, Pieces(nvaTroops = guerrillas.total))
       }
     }
-    
+
     def subornVC(name: String): Unit = {
       val sp = game.getSpace(name)
       log(s"\nNVA Infiltrates in $name")
       log(separator())
       if (sp.support < Neutral)
         increaseSupport(name, 1)
-      
+
       if (askYorN("\nDo you wish to replace one VC piece with its NVA counterpart? (y/n) "))
         loggingControlChanges {
           val vcPiece = askPieces(sp.pieces, 1, VCPieces,  Some("Selecting a VC piece to replace"))
           val nvaType = getInsurgentCounterPart(vcPiece.explode().head)
-          
+
           if (vcPiece.has(VCBase) || vcPiece.has(VCTunnel)) {
             removeToAvailable(name, vcPiece)
             ensurePieceTypeAvailable(NVABase, 1)
@@ -1622,9 +1641,9 @@ object Human {
             placePieces(name, Pieces().set(1, nvaType))
           }
         }
-      
+
     }
-    
+
     def infiltrateSpace(name: String): Unit = {
       val sp        = game.getSpace(name)
       val canPlace  = sp.pieces.has(NVABases)
@@ -1632,13 +1651,13 @@ object Human {
         choice(canPlace,      "place",  "Place NVA Troops"),
         choice(canSuborn(sp), "suborn", "Shift Opposition toward Neutral/Replace VC piece")
       ).flatten
-      
+
       askMenu(choices, s"\nInfiltrate in $name").head match {
         case "place" => placeTroops(name)
         case _       => subornVC(name)
       }
     }
-    
+
     def nextInfiltrateAction(): Unit = {
       val candidates = spaceNames(game.spaces filter isCandidate)
       val canSelect  = infiltrateSpaces.size < maxSpaces && candidates.nonEmpty
@@ -1646,28 +1665,28 @@ object Human {
         choice(canSelect, "select",   "Select a space to Infiltrate"),
         choice(true,      "finished", "Finished with Infiltrate special activity")
       ).flatten
-      
+
       println(s"\n${amountOf(infiltrateSpaces.size, "space")} of $maxSpaces selected for Infiltrate")
       println(separator())
-      wrap("", infiltrateSpaces.toList) foreach println
-      
-      
+      wrap("", infiltrateSpaces.toList, showNone = false) foreach println
+
+
       askMenu(choices, "\nInfiltrate:").head match {
-        case "select" => 
+        case "select" =>
           askCandidateOrBlank("\nInfiltrate in which space: ", candidates) foreach { name =>
             infiltrateSpace(name)
             infiltrateSpaces = infiltrateSpaces + name
           }
           nextInfiltrateAction()
-          
+
         case _ =>
       }
     }
-    
-    
+
+
     // Start of Infiltrate Special Activity
     // ------------------------------------
-    
+
     val notes = List(
       noteIf(kate,         s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
       noteIf(transportGrp, s"Infiltrate is max 1 space [Momentum: $Mo_559TransportGrp]")
@@ -1689,27 +1708,27 @@ object Human {
     val maxSpaces = if      (longRange_unshaded) 1
                     else if (longRange_shaded)   3
                     else                         2
-                      
+
     val isCandidate = (sp: Space) => {
       val enemyCondition = sp.pieces.totalOf(CoinTroops) > 2 ||
                            (sp.pieces.has(CoinTroops) && sp.pieces.has(CoinBases))
       lazy val hasAdjacentTroops = getAdjacent(sp.name) exists { name =>
         game.getSpace(name).pieces.totalOf(NVATroops) > 2
       }
-      
+
       enemyCondition && (sp.pieces.totalOf(NVATroops) > 2 || hasAdjacentTroops)
     }
-    
+
     def bombardSpace(name: String): Unit = {
       val sp = game.getSpace(name)
-      
+
       log(s"\nNVA Bombards in $name")
       log(separator())
-      
+
       val toRemove  = askPieces(sp.pieces, 1, CoinTroops, Some("Bombarding a Coin Troop"))
       removePieces(name, toRemove)
     }
-    
+
     def nextBombardAction(): Unit = {
       val candidates = spaceNames(game.spaces filter isCandidate)
       val canSelect  = bombardSpaces.size < maxSpaces && candidates.nonEmpty
@@ -1717,36 +1736,36 @@ object Human {
         choice(canSelect, "select",   "Select a space to Bombard"),
         choice(true,      "finished", "Finished with Bombard special activity")
       ).flatten
-      
+
       println(s"\n${amountOf(bombardSpaces.size, "space")} of $maxSpaces selected for Bombard")
       println(separator())
-      wrap("", bombardSpaces.toList) foreach println
-      
+      wrap("", bombardSpaces.toList, showNone = false) foreach println
+
       askMenu(choices, "\nBombard:").head match {
         case "select" =>
           askCandidateOrBlank("\nBombard in which space: ", candidates) foreach { name =>
             bombardSpace(name)
             bombardSpaces = bombardSpaces + name
           }
-        nextBombardAction()  
-          
+        nextBombardAction()
+
         case _ =>
       }
     }
-    
+
     // Start of Bombard Special Activity
     // ------------------------------------
-    
+
     val notes = List(
       noteIf(longRange_unshaded, s"NVA Bombard is max 1 space [$LongRangeGuns_Unshaded]"),
       noteIf(longRange_shaded,   s"NVA Bombard is max 3 space [$LongRangeGuns_Unshaded]")
     ).flatten
 
     logSAChoice(NVA, Bombard, notes)
-      
+
     nextBombardAction()
   }
-  
+
 
   // NVA/VC special activity
   // The ambush activity is noted in the Special object.
@@ -1781,12 +1800,12 @@ object Human {
     val kate      = momentumInPlay(Mo_TyphoonKate)
     var taxSpaces = Set.empty[String]
     val maxSpaces = if (kate) 1 else 4
-    
+
     val isCandidate = (sp: Space) => if (sp.isLoC)
       sp.printedEconValue > 0 && sp.pieces.has(VCGuerrillas_U)
     else
       sp.population > 0 && sp.pieces.has(VCGuerrillas_U) && !sp.coinControlled
-    
+
     def taxSpace(name: String): Unit = {
       val sp  = game.getSpace(name)
       val num = if (sp.isLoC) sp.printedEconValue else 2 * sp.population
@@ -1797,7 +1816,7 @@ object Human {
       if (!sp.isLoC && sp.support != ActiveSupport)
         increaseSupport(name, 1)
     }
-    
+
     def nextTaxAction(): Unit = {
       val candidates = spaceNames(game.spaces filter isCandidate)
       val canSelect  = taxSpaces.size < maxSpaces && candidates.nonEmpty
@@ -1805,32 +1824,32 @@ object Human {
         choice(canSelect, "select",   "Select a space to Tax"),
         choice(true,      "finished", "Finished with Tax special activity")
       ).flatten
-      
+
       println(s"\n${amountOf(taxSpaces.size, "space")} of $maxSpaces selected for Tax")
       println(separator())
-      wrap("", taxSpaces.toList) foreach println
-      
+      wrap("", taxSpaces.toList, showNone = false) foreach println
+
       askMenu(choices, "\nTax:").head match {
         case "select" =>
           askCandidateOrBlank("\nTax in which space: ", candidates) foreach { name =>
             taxSpace(name)
             taxSpaces = taxSpaces + name
           }
-        nextTaxAction()  
-          
+        nextTaxAction()
+
         case _ =>
-      } 
-    }    
-    
+      }
+    }
+
     // Start of Tax Special Activity
     // ------------------------------------
-    
+
     val notes = List(
       noteIf(kate, s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]")
     ).flatten
 
     logSAChoice(VC, Tax, notes)
-      
+
     nextTaxAction()
   }
 
@@ -1841,7 +1860,7 @@ object Human {
     val maxSpaces     = if (kate) 1 else 2
     var subvertSpaces = Set.empty[String]
     var cubesRemoved  = 0
-    
+
     val isCandidate = (sp: Space) => sp.pieces.has(VCGuerrillas_U) && sp.pieces.has(ARVNCubes)
 
     def removeCubes(name: String): Unit = {
@@ -1849,18 +1868,18 @@ object Human {
       val eligible = sp.pieces.only(ARVNCubes)
       val num      = eligible.total min 2
       val toRemove = askPieces(eligible, num)
-      
+
       log(s"\nVC Subverts in $name")
       log(separator())
       removeToAvailable(name, toRemove)
       cubesRemoved += toRemove.total
     }
-    
+
     def replaceCube(name: String): Unit = {
       val sp       =  game.getSpace(name)
       val eligible = sp.pieces.only(ARVNCubes)
       val toRemove = askPieces(eligible, 1, prompt = Some("Select ARVN cube to replace"))
-      
+
       log(s"\nVC Subverts in $name")
       log(separator())
       removeToAvailable(name, toRemove)
@@ -1868,20 +1887,20 @@ object Human {
       placePieces(name, Pieces().set(1, VCGuerrillas_U))
       cubesRemoved += toRemove.total
     }
-    
+
     def subvertSpace(name: String): Unit = {
         val sp = game.getSpace(name)
         val choices = List(
           "remove"  -> "Remove ARVN Cubes",
           "replace" -> "Replace 1 ARVN Cube with a VC Guerrilla"
         )
-        
+
         askMenu(choices, s"\nSubvert in $name").head match {
           case "remove" => removeCubes(name)
           case _        => replaceCube(name)
         }
     }
-    
+
     def nextSubvertAction(): Unit = {
       val candidates = spaceNames(game.spaces filter isCandidate)
       val canSelect  = subvertSpaces.size < maxSpaces && candidates.nonEmpty
@@ -1889,35 +1908,35 @@ object Human {
         choice(canSelect, "select",   "Select a space to Subvert"),
         choice(true,      "finished", "Finished with Subvert special activity")
       ).flatten
-      
+
       println(s"\n${amountOf(subvertSpaces.size, "space")} of $maxSpaces selected for Subvert")
       println(separator())
-      wrap("", subvertSpaces.toList) foreach println
-      
+      wrap("", subvertSpaces.toList, showNone = false) foreach println
+
       askMenu(choices, "\nSubvert:").head match {
         case "select" =>
           askCandidateOrBlank("\nSubvert in which space: ", candidates) foreach { name =>
             subvertSpace(name)
             subvertSpaces = subvertSpaces + name
           }
-        nextSubvertAction()  
-          
+        nextSubvertAction()
+
         case _ =>
           log(s"\nTotal ARVN pieces removed by the Subvert activity: $cubesRemoved")
           decreasePatronage(cubesRemoved / 2)
-      } 
-    }    
-    
-    
+      }
+    }
+
+
     // Start of Subvert Special Activity
     // ------------------------------------
-    
+
     val notes = List(
       noteIf(kate, s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]")
     ).flatten
 
     logSAChoice(VC, Subvert, notes)
-      
+
     nextSubvertAction()
 
   }
@@ -1986,8 +2005,18 @@ object Human {
 
 
   def executeEvent(faction: Faction): Unit = {
-    println("executeEvent() not implemented")
 
+    val card = deck(game.currentCard)
+
+    if (card.dual) {
+      val choices = List("Unshaded", "Shaded")
+      askSimpleMenu(choices, "\nExecute which part of the event:").head match {
+        case "Unshaded" => card.executeUnshaded(faction)
+        case _          => card.executeShaded(faction)
+      }
+    }
+    else // Non dual events are always use the unshaded function
+      card.executeUnshaded(faction)
   }
 
   def executeOp(faction: Faction, params: Params = Params()): Unit = {
@@ -2174,7 +2203,7 @@ object Human {
 
       println(s"\n${amountOf(selectedSpaces.size, "space")} selected for Training")
       println(separator())
-      wrap("", selectedSpaces) foreach println
+      wrap("", selectedSpaces, showNone = false) foreach println
 
       if (candidates.isEmpty) {
         val more = if (selectedSpaces.nonEmpty) " more" else ""
@@ -2582,7 +2611,7 @@ object Human {
 
       println(s"\n${amountOf(sweepSpaces.size, "space")} selected for Sweep")
       println(separator())
-      wrap("", sweepSpaces.toList) foreach println
+      wrap("", sweepSpaces.toList, showNone = false) foreach println
 
       askMenu(choices, "\nSweep spaces:").head match {
         case "sweep" =>
@@ -2722,7 +2751,7 @@ object Human {
       killedPieces = killedPieces + killExposedInsurgents(name, remaining, canRevealTunnel = true)
       // Add any removed underground guerrilla that did NOT count toward remaining hits above
       killedPieces = killedPieces + killedUnderground
-      
+
       // Body Count momentum
       if (momentumInPlay(Mo_BodyCount) && killedPieces.totalOf(Guerrillas) > 0) {
         log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]")
@@ -2980,7 +3009,7 @@ object Human {
 
       println(s"\n${amountOf(rallySpaces.size, "space")} selected for Rally")
       println(separator())
-      wrap("", rallySpaces) foreach println
+      wrap("", rallySpaces, showNone = false) foreach println
 
       askMenu(choices, "\nRally:").head match {
         case "select" =>

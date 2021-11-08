@@ -290,7 +290,7 @@ object Cards {
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
       (faction: Faction) => {
-        game.pivotCardsAvailable(US) || (game.isHuman(NVA) && game.nvaResources > 0)
+        game.pivotCardsAvailable(US) || (game.trackResources(NVA) && game.nvaResources > 0)
       },
       (faction: Faction) => {
         // Bot does not play to incement resources since they are not used.
@@ -317,10 +317,16 @@ object Cards {
               ARVN -> (Performed -> Unshaded),
               NVA  -> (Critical  -> Shaded),
               VC   -> (Performed -> Shaded)),
-      (faction: Faction) => false,
-      (faction: Faction) => false,
-      (faction: Faction) => unshadedNotYet(),
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => true,
+      (faction: Faction) => true,
+      (faction: Faction) => {
+        playCapability(TopGun_Unshaded)
+        if (capabilityInPlay(MiGs_Shaded))
+          removeCapabilityFromPlay(MiGs_Shaded)
+      },
+      (faction: Faction) => {
+        playCapability(TopGun_Shaded)
+      }
     )),
 
     // ------------------------------------------------------------------------
@@ -330,10 +336,23 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
-      (faction: Faction) => false,
-      (faction: Faction) => false,
-      (faction: Faction) => unshadedNotYet(),
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        capabilityInPlay(SA2s_Shaded) ||
+        game.trail > TrailMin         ||
+        (game.trackResources(NVA) && game.nvaResources > 0)
+      },
+      (faction: Faction) => true,
+      (faction: Faction) => {
+        if (capabilityInPlay(SA2s_Shaded))
+          removeCapabilityFromPlay(SA2s_Shaded)
+        else {
+          degradeTrail(2)
+          decreaseResources(NVA, 9)
+        }
+      },
+      (faction: Faction) => {
+        playMomentum(Mo_WildWeasels)
+      }
     )),
 
     // ------------------------------------------------------------------------
@@ -694,10 +713,17 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Critical    -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
-      (faction: Faction) => false,
-      (faction: Faction) => false,
-      (faction: Faction) => unshadedNotYet(),
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => true,
+      (faction: Faction) => !capabilityInPlay(TopGun_Unshaded),
+      (faction: Faction) => {
+          playCapability(MiGs_Unshaded)
+      },
+      (faction: Faction) => {
+        if (capabilityInPlay(TopGun_Unshaded))
+          log(s"\nThe shaded MiGS capability has been blocked [$TopGun_Unshaded]")
+        else
+          playCapability(MiGs_Shaded)
+      }
     )),
 
     // ------------------------------------------------------------------------

@@ -1596,7 +1596,7 @@ object FireInTheLake {
     def remainEligible(faction: Faction): SequenceOfPlay =
       copy(eligibleNextTurn = eligibleNextTurn + faction, ineligibleNextTurn = ineligibleNextTurn - faction)
 
-    def remainIneligible(faction: Faction): SequenceOfPlay =
+    def ineligibleThroughNextTurn(faction: Faction): SequenceOfPlay =
       copy(eligibleThisTurn   = eligibleThisTurn - faction,   // Ineligible now and through next turn
            ineligibleNextTurn = ineligibleNextTurn + faction,
            eligibleNextTurn   = eligibleNextTurn - faction)
@@ -1613,6 +1613,14 @@ object FireInTheLake {
                                         eligibleNextTurn   --
                                         ineligibleNextTurn)
     }
+  }
+
+  def makeIneligibleThroughNextTurn(faction: Faction): Unit = {
+    log(s"\n$faction is ineligible through the next card")
+    if (game.sequence.eligibleThisTurn(faction))
+      log(s"Move the $faction cylinder to the Ineligible Factions box")
+
+    game = game.copy(sequence = game.sequence.ineligibleThroughNextTurn(faction))
   }
 
   //  In force pool, casualties, and out of play box:
@@ -4032,7 +4040,7 @@ object FireInTheLake {
               println
               if (askYorN("Do you wish to voluntarily remove pieces to make up the difference? (y/n) ")) {
                 val numToRemove = askInt("How many pieces do you wish to remove from the map", 0, num - numAvail)
-                voluntaryRemoval(numToRemove, pieceType)
+                voluntaryRemoval(numToRemove, pieceType, prohibitedSpaces = Set(spaceName))
                 numAvail + numToRemove
               }
               else
@@ -4070,7 +4078,8 @@ object FireInTheLake {
   def askToPlaceBase(spaceName: String, baseType: PieceType): Pieces = {
     // Get number of each type in available box plus on map
     val piecesToPlace = game.piecesToPlace.only(baseType)
-    if (piecesToPlace.isEmpty) {
+    
+    if (piecesToPlace.isEmpty || (piecesToPlace.total == 1 && game.getSpace(spaceName).pieces.has(baseType))) {
       println(s"\nThere are no ${baseType.plural} available to be placed.")
       Pieces()
     }
@@ -4082,7 +4091,7 @@ object FireInTheLake {
         // None available, so ask where to remove one voluntarily
         println(s"\nThere are no ${baseType.genericPlural} in the available box")
         if (askYorN("Do you wish to voluntarily remove a base from the map? (y/n) ")) {
-          voluntaryRemoval(1, baseType)
+          voluntaryRemoval(1, baseType, prohibitedSpaces = Set(spaceName))
           Pieces().set(1, baseType)
         }
         else

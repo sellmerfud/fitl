@@ -2033,12 +2033,21 @@ object Human {
     if (card.dual) {
       val choices = List("Unshaded", "Shaded")
       askSimpleMenu(choices, "\nExecute which part of the event:").head match {
-        case "Unshaded" => card.executeUnshaded(faction)
-        case _          => card.executeShaded(faction)
+        case "Unshaded" =>
+          log(s"\n$faction executes the unshaded Event: ${card.name}")
+          log(separator())
+          card.executeUnshaded(faction)
+          case _ =>
+          log(s"\n$faction executes the shaded Event: ${card.name}")
+          log(separator())
+          card.executeShaded(faction)
       }
     }
-    else // Non dual events are always use the unshaded function
+    else { // Non dual events are always use the unshaded function
+      log(s"\n$faction executes the Event: ${card.name}")
+      log(separator())
       card.executeUnshaded(faction)
+    }
   }
 
   def executeOp(faction: Faction, params: Params = Params()): Unit = {

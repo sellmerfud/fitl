@@ -300,9 +300,7 @@ object Cards {
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => {
-        game.pivotCardsAvailable(US) || (game.trackResources(NVA) && game.nvaResources > 0)
-      },
+      (faction: Faction) => game.pivotCardsAvailable(US),
       // executeUnshaded()
       (faction: Faction) => {
         decreaseResources(NVA, 9)
@@ -313,7 +311,7 @@ object Cards {
       },
       // shadedEffective()
       (faction: Faction) => {
-        // Bot does not play to incement resources since they are not used.
+        // Bot does not play to increment resources since they are not used.
         game.trail <= 2
       },
       // executeShaded()
@@ -342,9 +340,7 @@ object Cards {
       // shadedEffective()
       (faction: Faction) => true,
       // executeShaded()
-      (faction: Faction) => {
-        playCapability(TopGun_Shaded)
-      }
+      (faction: Faction) => playCapability(TopGun_Shaded)
     )),
 
     // ------------------------------------------------------------------------
@@ -372,9 +368,7 @@ object Cards {
       // shadedEffective()
       (faction: Faction) => true,
       // executeShaded()
-      (faction: Faction) => {
-        playMomentum(Mo_WildWeasels)
-      }
+      (faction: Faction) => playMomentum(Mo_WildWeasels)
     )),
 
     // ------------------------------------------------------------------------
@@ -427,11 +421,9 @@ object Cards {
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => true,
+      (faction: Faction) => game.trackResources(NVA),
       // executeUnshaded()
-      (faction: Faction) => {
-        playMomentum(Mo_ADSID)
-      },
+      (faction: Faction) => playMomentum(Mo_ADSID),
       // shadedEffective()
       (faction: Faction) => {
         game.trail < TrailMax || (game.trackResources(ARVN) && game.arvnResources > 0)
@@ -454,13 +446,13 @@ object Cards {
               NVA  -> (Performed -> Shaded),
               VC   -> (Critical  -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => playCapability(ArcLight_Unshaded),
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => playCapability(ArcLight_Shaded)
     )),
 
     // ------------------------------------------------------------------------
@@ -471,13 +463,120 @@ object Cards {
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => {
+        // For Nixon policy, US bot will move troops to available (from out of play first)
+        // For LBJ and JFK it will move troops to S. Vietnam
+        if (game.usPolicy == USPolicy_Nixon)
+          game.outOfPlay.has(USTroops) || game.totalOnMap(_.pieces.totalOf(USTroops)) > 0
+        else
+          game.outOfPlay.has(USTroops)
+      },
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => {
+        val numOutOfPlay = game.outOfPlay.totalOf(USTroops) min 3
+        val numOnMap     = game.totalOnMap(_.pieces.totalOf(USTroops)) min 3
+        if (game.isHuman(US)) {
+          def outOfPlayToAvailableOrMap(numRemaining: Int): Unit = if (numRemaining > 0) {
+            val choices = List(
+              "available" -> "Move troops from Out of play to Available",
+              "map"       -> "Move troops form Out of play to South Vietnam",
+              "finished"  -> "Finished moving troops from Out of play"
+            )
+            println(s"\n${numOnMap - numRemaining} of $numOnMap troops moved from Out of play")
+            askMenu(choices, "\nChoose one:").head match {
+              case "available" =>
+                val num = askInt("Move how many troops to Available", 0, numRemaining)
+                moveOutOfPlayToAvailable(Pieces(usTroops = num))
+                outOfPlayToAvailableOrMap(numRemaining - num)
+
+              case "map" =>
+                val candidates = spaceNames(game.spaces filter (sp => isInSouthVietnam(sp.name)))
+                val name = askCandidate("\nMove troops to which space: ", candidates)
+                val num = askInt(s"Move how many troops to $name", 0, numRemaining)
+                moveOutOfPlayToMap(Pieces(usTroops = num), name)
+                outOfPlayToAvailableOrMap(numRemaining - num)
+                
+              case _ =>
+            }
+          }
+
+          def mapToAvailable(numRemaining: Int): Unit = if (numRemaining > 0) {
+            val candidates = spaceNames(game.spaces filter (_.pieces.has(USTroops)))
+            if (candidates.nonEmpty) {
+              println(s"\n${numOnMap - numRemaining} of $numOnMap troops removed to Available")
+              if (askYorN("\nDo you wish to remove troops to Available? (y/n) ")) {
+                val name   = askCandidate("\nRemove troops from which space: ", candidates)
+                val sp     = game.getSpace(name)
+                val maxNum = sp.pieces.totalOf(USTroops) min numRemaining
+                val num    = askInt(s"Remove how many troops from $name", 0, maxNum)
+                removeToAvailable(name, Pieces(usTroops = num))
+                mapToAvailable(numRemaining - num)
+              }
+            }
+          }
+
+          val choices = List(
+            "from-oop" -> "Move US Troops from Out of Play to Available or South Vietname",
+            "from-map" -> "Move US Troops from the map to Available"
+          )
+          askMenu(choices, "\nChoose one:").head match {
+            case "from-oop" => loggingControlChanges(outOfPlayToAvailableOrMap(numOutOfPlay))
+            case _          => loggingControlChanges(mapToAvailable(numOnMap))
+          }
+        }
+        else if (game.usPolicy == USPolicy_Nixon) {
+          if (numOutOfPlay > 0)
+            moveOutOfPlayToAvailable(Pieces(usTroops = numOutOfPlay))
+          else {
+            loggingControlChanges {
+              for (i <- 1 to numOnMap) {
+                val candidates = game.spaces filter (_.pieces.has(USTroops))
+                val sp = Bot.pickSpaceRemoveFriendlyPieces(candidates, Set(USTroops))
+                removeToAvailable(sp.name, Pieces(usTroops = 1))
+              }
+            }
+          }
+        }
+        else { // JFK or LBJ
+          loggingControlChanges{
+            for (i <- 1 to numOutOfPlay) {
+                val candidates = game.spaces filter (sp => isInSouthVietnam(sp.name))
+                val sp = Bot.pickSpacePlaceForces(US, troops = true)(candidates)
+                moveOutOfPlayToMap(Pieces(usTroops = 1), sp.name)
+            }
+          }
+        }
+      },
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => game.totalOnMap(_.pieces.totalOf(USTroops)) > 0,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        val totalTroops = game.totalOnMap(_.pieces.totalOf(USTroops)) min 3
+
+        if (game.isHuman(US)) {
+
+          def removeFromMap(numRemaining: Int): Unit = if (numRemaining > 0) {
+              val candidates = spaceNames(game.spaces filter (_.pieces.has(USTroops)))
+              println(s"\n${totalTroops - numRemaining} of $totalTroops troops removed to Out of Play")
+              val name = askCandidate("\nRemove troops from which space: ", candidates)
+                val num = askInt(s"Remove how many troops from $name", 0, numRemaining)
+                removeToOutOfPlay(name, Pieces(usTroops = num))
+                removeFromMap(numRemaining - num)
+
+          }
+
+          loggingControlChanges(removeFromMap(totalTroops))
+        }
+        else {
+          loggingControlChanges {
+            for (i <- 1 to totalTroops) {
+              val candidates = game.spaces filter (_.pieces.has(USTroops))
+              val sp = Bot.pickSpaceRemoveFriendlyPieces(candidates, Set(USTroops))
+              removeToOutOfPlay(sp.name, Pieces(usTroops = 1))
+            }
+          }
+        }
+      }
     )),
 
     // ------------------------------------------------------------------------

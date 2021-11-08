@@ -142,18 +142,10 @@ object FireInTheLake {
     def orderString  = factionOrder map (_.name) mkString ", "
     def fullString = if (isCoup) numAndName else s"$numAndName ($orderString)"
 
-    def eventEffective(faction: Faction) = eventType(faction) match {
-      case Unshaded => unshadedEffective(faction)
-      case Shaded   => shadedEffective(faction)
-    }
-
-    def executeEvent(faction: Faction): Unit = {
-      log(s"\n$faction executes the Event: $name")
-      log(separator())
-      eventType(faction) match {
-        case Unshaded => executeUnshaded(faction)
-        case Shaded   => executeShaded(faction)
-      }
+    def eventEffective(faction: Faction) = (dual, eventType(faction)) match {
+      case (false, _)       => unshadedEffective(faction)
+      case (true, Unshaded) => unshadedEffective(faction)
+      case (true, Shaded)   => shadedEffective(faction)
     }
 
     def isCritical(faction: Faction)  = botPriority(faction) == Critical
@@ -3104,7 +3096,8 @@ object FireInTheLake {
   }
 
   // Resolve the action for the next eligible faction.
-  @tailrec def processActorCommand(faction: Faction): Unit = {
+  @tailrec def processActorCommand(): Unit = {
+    val faction   = game.actingFaction.get
     val upNext    = s"  ($faction is up next)"
     val actorCmds = if (game.isBot(faction)) List(BotCmd) else List(ActCmd)
     val opts      = orList((actorCmds map (_.name)) :+ "?")
@@ -3131,7 +3124,7 @@ object FireInTheLake {
 
       case _ =>
         doCommonCommand(cmd, param)
-        processActorCommand(faction)
+        processActorCommand()
     }
   }
 
@@ -3247,7 +3240,7 @@ object FireInTheLake {
           }
         }
         else {
-          processActorCommand(game.actingFaction.get)
+          processActorCommand()
 
           // If no more factions can act on the current card
           // prompt prompt for a new Event card.
@@ -3701,7 +3694,17 @@ object FireInTheLake {
       game = game.copy(outOfPlay = game.outOfPlay - pieces.normalized).updateSpace(newSp)
 
       for (desc <- pieces.descriptions)
-        log(s"Move $desc from OUT OF PLAy to $name")
+        log(s"Move $desc from OUT OF PLAY to $name")
+    }
+  }
+
+  def moveOutOfPlayToAvailable(pieces: Pieces): Unit = if (pieces.total > 0) {
+    loggingPointsChanges {
+      assert(game.outOfPlay contains pieces, s"All requested pieces are not in out of play: $pieces")
+      game = game.copy(outOfPlay = game.outOfPlay - pieces.normalized)
+
+      for (desc <- pieces.descriptions)
+        log(s"Move $desc from OUT OF PLAY to AVAILABLE")
     }
   }
 
@@ -5323,17 +5326,17 @@ object FireInTheLake {
           val canElig   = !seq.eligibleThisTurn(faction)
           val canInelig = !seq.ineligibleThisTurn(faction)
           val options = List(
-            choice(canEvent,  "event",   s"Move $faction cylinder to Event box"),
-            choice(canOpSa,   "op-sa",   s"Move $faction cylinder to Op+Special Activity box"),
-            choice(canOpOnly, "on-only", s"Move $faction cylinder to Op Only box"),
-            choice(canLimOp,  "lim-op",  s"Move $faction cylinder to Limited Op box"),
-            choice(canPass,   "pass",    s"Move $faction cylinder to Passed box"),
-            choice(canElig,   "elig",    s"Move $faction cylinder to Eligible box"),
-            choice(canInelig, "inelig",  s"Move $faction cylinder to Ineligible box"),
+            choice(canEvent,  "event",   s"Event box"),
+            choice(canOpSa,   "op-sa",   s"Op+Special Activity box"),
+            choice(canOpOnly, "on-only", s"Op Only box"),
+            choice(canLimOp,  "lim-op",  s"Limited Op box"),
+            choice(canPass,   "pass",    s"Passed box"),
+            choice(canElig,   "elig",    s"Eligible box"),
+            choice(canInelig, "inelig",  s"Ineligible box"),
             choice(true,      "no-op",   s"Do not move the $faction cylinder")
           ).flatten
 
-          val opt = askMenu(options, "Choose one:").head
+          val opt = askMenu(options, s"\nChoose location for $faction cylinder:").head
           opt match {
             case "event"   => seq = removeFaction(faction, seq).addActor(faction, Event)
             case "op-sa"   => seq = removeFaction(faction, seq).addActor(faction, OpPlusSpecial)

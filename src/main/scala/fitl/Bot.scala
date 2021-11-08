@@ -378,6 +378,14 @@ object Bot {
     case VC   => VC_Bot.pickSpacePlaceBases _
   }
 
+  // When removing friendly pieces the Bots will always remove from the space with the most
+  // eligible pieces.
+  def pickSpaceRemoveFriendlyPieces(candidates: List[Space], pieceTypes: TraversableOnce[PieceType]): Space = {
+    val priorities = List(new HighestScore[Space]("Most pieces", _.pieces.totalOf(pieceTypes)))
+
+    bestCandidate(candidates, priorities)
+  }
+
   //  -------------------------------------------------------------
   //  NVA and VC Ambush Activity
   //  This function should be called with a list of all spaces that
@@ -6288,6 +6296,26 @@ object Bot {
     movedPieces.reset()
   }
 
+  def executeEvent(faction: Faction, card: EventCard): Unit = {
+      if (card.dual) {
+        card.eventType(faction) match {
+          case Unshaded =>
+            log(s"\n$faction executes the unshaded Event: ${card.name}")
+            log(separator())
+            card.executeUnshaded(faction)
+          case Shaded =>
+            log(s"\n$faction executes the shaded Event: ${card.name}")
+            log(separator())
+            card.executeShaded(faction)
+        }
+      }
+      else {
+        log(s"\n$faction executes the Event: ${card.name}")
+        log(separator())
+        card.executeUnshaded(faction)
+      }
+  }
+
   //  A bot is the next eligible faction
   //  Decide what type of action the Bot will take.
   //  We use the NP Elgibility Table.
@@ -6302,7 +6330,8 @@ object Bot {
 
     if (game.executingPivotalEvent) {
       //  The Pivotal events are single events which are always in the executeUnshaded() function.
-      card.executeEvent(faction)
+      log(s"\n$faction executes its Pivotal Event: ${card.name}")
+      card.executeUnshaded(faction)
     }
     else {
       chooseAction(faction) match {
@@ -6313,7 +6342,7 @@ object Bot {
           factionPasses(faction)
 
         case Some(ActionEntry(Event, _, _)) =>
-          card.executeEvent(faction)
+          executeEvent(faction, card)
 
         case entry @ Some(ActionEntry(action, _, _)) =>
           // LimitedOp, OpOnly, or OpPlusSpecial

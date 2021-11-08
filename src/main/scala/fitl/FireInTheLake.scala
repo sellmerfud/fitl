@@ -125,8 +125,8 @@ object FireInTheLake {
     val factionOrder: List[Faction],
     val botPriorities: ListMap[Faction, (BotEventPriority, EventType)],  // Empty
     val unshadedEffective: EventEffective,
-    val shadedEffective: EventEffective,
     val executeUnshaded: EventExecution,
+    val shadedEffective: EventEffective,
     val executeShaded: EventExecution) {
 
 
@@ -941,6 +941,18 @@ object FireInTheLake {
       collection.foldLeft(Pieces()) { (pieces, t) => pieces.add(1, t) }
   }
 
+  def vulnerableBases(pieces: Pieces) = {
+    if (pieces.has(UndergroundGuerrillas))
+      Pieces()
+    else
+      pieces.only(InsurgentBases)
+  }
+
+  def vulnerableInsurgents(pieces: Pieces) = {
+    val forces = pieces.only(NVATroops::ActiveGuerrillas)
+    forces + vulnerableBases(pieces)
+  }
+
 
   // Used during a turn to keep track of pieces that have already moved
   // in each space.
@@ -1488,6 +1500,24 @@ object FireInTheLake {
   case object Tax        extends SpecialActivity("Tax")
   case object Subvert    extends SpecialActivity("Subvert")
 
+  // Parameters used when executing operations and special activities
+  // This is used by both the Humand and Bot objects.
+  case class Params(
+    specialActivity: Boolean        = false, // May select a Special Activity
+    maxSpaces: Option[Int]          = None,
+    free: Boolean                   = false, // Events grant free commands
+    assaultRemovesTwoExtra: Boolean = false, // M48 Patton (unshaded)
+    onlyIn: Option[Set[String]]     = None,  // Limit command to the given spaces
+    event: Boolean                  = false,
+    strikeHits: Option[Int]         = None,
+    strikeNoCoin: Boolean           = false
+  ) {
+    val limOpOnly = maxSpaces == Some(1)
+
+    def spaceAllowed(name: String) = {
+      (onlyIn map (allowed =>  allowed.contains(name)) getOrElse true)
+    }
+  }
 
   // The following momentum events prohibit special activities
   // Mo_TyphoonKate     - prohibits air lift, transport, and bombard

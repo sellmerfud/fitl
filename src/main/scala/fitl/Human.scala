@@ -50,22 +50,6 @@ object Human {
   private val NO_LIMIT = 1000;          // When space selection is unlimited.
   private var pt76_shaded_used = false  // NVA attack in one space
 
-  case class Params(
-    specialActivity: Boolean        = false, // May select a Special Activity
-    maxSpaces: Option[Int]          = None,
-    free: Boolean                   = false, // Events grant free commands
-    assaultRemovesTwoExtra: Boolean = false, // M48 Patton (unshaded)
-    onlyIn: Option[Set[String]]     = None,  // Limit command to the given spaces
-    event: Boolean                  = false
-  ) {
-    val limOpOnly = maxSpaces == Some(1)
-
-    def spaceAllowed(name: String) = {
-      (onlyIn map (allowed =>  allowed.contains(name)) getOrElse true)
-    }
-
-  }
-
   def logOpChoice(faction: Faction, op: Operation, notes: TraversableOnce[String] = Nil): Unit = {
     log(s"\n$faction chooses $op operation")
     log(separator())
@@ -1132,7 +1116,7 @@ object Human {
     val migs_shaded = capabilityInPlay(MiGs_Shaded) && !capabilityInPlay(TopGun_Unshaded)
     val aaa_shaded = capabilityInPlay(AAA_Shaded)
     val arclight_unshaded = capabilityInPlay(ArcLight_Unshaded)
-    val maxHits     = d6
+    val maxHits     = params.strikeHits getOrElse d6
     val maxSpaces = if      (params.maxSpaces.nonEmpty) params.maxSpaces.get
                     else if (momentumInPlay(Mo_TyphoonKate)) 1
                     else if (game.inMonsoon) 2
@@ -1152,7 +1136,7 @@ object Human {
       params.spaceAllowed(sp.name)   &&   // Event may limit to certain spaces
       !strikeSpaces(sp.name)         &&
       sp.pieces.hasExposedInsurgents &&
-      (sp.pieces.has(CoinPieces) || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
+      (sp.pieces.has(CoinPieces) || params.strikeNoCoin || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
     }
 
     def nextAirStrikeAction(hitsRemaining: Int, hasDegraded: Boolean): Unit = {
@@ -1219,13 +1203,15 @@ object Human {
           val maxNumber    = numExposedInsurgents(pieces) min hitsRemaining
           val num          = askInt(s"\nRemove how many pieces from $name", 1, maxNumber)
           val killedPieces = killExposedInsurgents(name, num, canRevealTunnel = false)
-
+          val sp           = game.getSpace(name)
+          
           log(s"\nUS Air Strikes $name")
           log(separator())
           removeToAvailable(name, killedPieces)
+          if (!sp.pieces.has(CoinPieces) && arclight_unshaded)
+            arclight_unshaded_used = true
 
           if (num > 0) {
-            val sp = game.getSpace(name)
             val numShift = if (sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition)
               0
             else if (num > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
@@ -1315,7 +1301,10 @@ object Human {
     // Start of Air Lift Special Activity
     // ------------------------------------
     logSAChoice(US, AirStrike, notes)
-    log(s"Die roll to determine the number of hits = $maxHits")
+    if (params.strikeHits.nonEmpty)
+      log(s"Number of hits = $maxHits")
+    else
+      log(s"Die roll to determine the number of hits = $maxHits")
 
     nextAirStrikeAction(maxHits, false)
   }

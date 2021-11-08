@@ -85,21 +85,6 @@ object Bot {
       logNext(choices)
   }
 
-  case class Params(
-    specialActivity: Boolean        = false, // May select a Special Activity
-    maxSpaces: Option[Int]          = None,
-    free: Boolean                   = false, // Events grant free commands
-    assaultRemovesTwoExtra: Boolean = false, // M48 Patton (unshaded)
-    onlyIn: Option[Set[String]]     = None,  // Limit command to the given spaces
-    event: Boolean                  = false
-  ) {
-    val limOpOnly = maxSpaces == Some(1)
-
-    def spaceAllowed(name: String) = {
-      (onlyIn map (allowed =>  allowed.contains(name)) getOrElse true)
-    }
-  }
-
   // Variable Global within the Bot object
   // ---------------------------------------
   // Used to keep track of moveDestinations during and operation
@@ -668,18 +653,6 @@ object Bot {
         entries filter (score(_) == low)
       }
     }
-  }
-
-  def vulnerableBases(pieces: Pieces) = {
-    if (pieces.has(UndergroundGuerrillas))
-      Pieces()
-    else
-      pieces.only(InsurgentBases)
-  }
-
-  def vulnerableInsurgents(pieces: Pieces) = {
-    val forces = pieces.only(NVATroops::ActiveGuerrillas)
-    forces + vulnerableBases(pieces)
   }
 
   //  Assault firepower of the space plus any modifiers for
@@ -3456,7 +3429,7 @@ object Bot {
         val aaa_shaded = capabilityInPlay(AAA_Shaded)
         val arclight_unshaded = capabilityInPlay(ArcLight_Unshaded)
         val minTrail   = if (aaa_shaded) 2 else 1
-        val maxHits       = d6
+        val maxHits       = params.strikeHits getOrElse d6
         var hitsRemaining = maxHits
         val wildWeasels = momentumInPlay(Mo_WildWeasels) &&
                         (!capabilityInPlay(LaserGuidedBombs_Shaded) ||
@@ -3475,7 +3448,10 @@ object Bot {
 
         def logSelectAirStrike(): Unit = if (hitsRemaining == maxHits) {
           logSAChoice(US, AirStrike)
-          log(s"Die roll to determine the number of hits = $maxHits")
+          if (params.strikeHits.nonEmpty)
+            log(s"Number of hits = $maxHits")
+          else
+            log(s"Die roll to determine the number of hits = $maxHits")
         }
         // Degrade the trail if possible
         def degradeTheTrail(): Unit = {
@@ -3528,7 +3504,7 @@ object Bot {
             params.spaceAllowed(sp.name)   &&
             !strikeSpaces(sp.name)         &&
             sp.pieces.hasExposedInsurgents &&
-            (sp.pieces.has(CoinPieces) || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
+            (sp.pieces.has(CoinPieces) || params.strikeNoCoin || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
 
           val candidates = game.spaces filter isCandidate
 
@@ -3540,6 +3516,8 @@ object Bot {
             log(s"\nUS Air Strikes ${sp.name}")
             log(separator())
             removeToAvailable(sp.name, killedPieces)
+            if (!sp.pieces.has(CoinPieces) && arclight_unshaded)
+              arclight_unshaded_used = true
 
             if (killedPieces.total > 0) {
               val numShift = if (sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition)

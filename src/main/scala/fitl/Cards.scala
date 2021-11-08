@@ -57,6 +57,10 @@ object Cards {
     log(s"\n${deck(game.currentCard)}: Coup event not yet implemented")
   }
 
+  private def pivotalNotYet(faction: Faction): Unit = {
+    log(s"\n${deck(game.currentCard)}: $faction pivotal event not yet implemented")
+  }
+
   // ------------------------------------------------------------------------
   // Helper functions
 
@@ -231,23 +235,27 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => {
         airStrikeEffective || game.outOfPlay.has(USPieces)
       },
-      (faction: Faction) => {
-        isInsurgent(faction) && game.casualties.nonEmpty
-      },
+      // executeUnshaded()
       (faction: Faction) => {
         val numCasualties = game.casualties.totalOf(USPieces) min 6
         if (game.isHuman(US)) {
-          Human.doAirStrike(Human.Params(event = true))
+          Human.doAirStrike(Params(event = true))
           Human.moveUSOutOfPlayToCities(6)
         }
         else {
-          US_Bot.airStrikeActivity(Bot.Params(event = true))
+          US_Bot.airStrikeActivity(Params(event = true))
           US_Bot.moveOutOfPlayToCities(6)
         }
       },
+      // shadedEffective()
+      (faction: Faction) => {
+        isInsurgent(faction) && game.casualties.nonEmpty
+      },
+      // executeShaded()
       (faction: Faction) => {
         // Aid -1 per Casualty.  All Casualties out of play.
         decreaseUsAid(game.casualties.total)
@@ -262,18 +270,20 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Critical    -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => {
         spaces(LaosCambodia).exists(_.pieces.except(InsurgentTunnels).has(InsurgentPieces))
       },
-      (faction: Faction) => {
-        true  // Always effective
-      },
+      // executeUnshaded()
       (faction: Faction) => {
         val pieceTypes = InsurgentPieces.toSet -- InsurgentTunnels.toSet
         val num = d6
         log(s"\nRolling d6 to determine number of pieces: $num")
         removePiecesFromMap(faction, num, pieceTypes, LaosCambodia)
       },
+      // shadedEffective()
+      (faction: Faction) => true,
+      // executeShaded()
       (faction: Faction) => {
         val cambodia = Set(NortheastCambodia, TheFishhook, TheParrotsBeak, Sihanoukville)
         placePiecesOnMap(NVA, 2, NVAPieces, cambodia)
@@ -289,13 +299,11 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => {
         game.pivotCardsAvailable(US) || (game.trackResources(NVA) && game.nvaResources > 0)
       },
-      (faction: Faction) => {
-        // Bot does not play to incement resources since they are not used.
-        game.trail <= 2
-      },
+      // executeUnshaded()
       (faction: Faction) => {
         decreaseResources(NVA, 9)
         if (game.pivotCardsAvailable(US)) {
@@ -303,6 +311,12 @@ object Cards {
           game = game.copy(peaceTalks = true)
         }
       },
+      // shadedEffective()
+      (faction: Faction) => {
+        // Bot does not play to incement resources since they are not used.
+        game.trail <= 2
+      },
+      // executeShaded()
       (faction: Faction) => {
         increaseResources(NVA, 9)
         if (game.trail <= 2)
@@ -317,13 +331,17 @@ object Cards {
               ARVN -> (Performed -> Unshaded),
               NVA  -> (Critical  -> Shaded),
               VC   -> (Performed -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => true,
-      (faction: Faction) => true,
+      // executeUnshaded()
       (faction: Faction) => {
         playCapability(TopGun_Unshaded)
         if (capabilityInPlay(MiGs_Shaded))
           removeCapabilityFromPlay(MiGs_Shaded)
       },
+      // shadedEffective()
+      (faction: Faction) => true,
+      // executeShaded()
       (faction: Faction) => {
         playCapability(TopGun_Shaded)
       }
@@ -336,12 +354,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => {
         capabilityInPlay(SA2s_Shaded) ||
         game.trail > TrailMin         ||
         (game.trackResources(NVA) && game.nvaResources > 0)
       },
-      (faction: Faction) => true,
+      // executeUnshaded()
       (faction: Faction) => {
         if (capabilityInPlay(SA2s_Shaded))
           removeCapabilityFromPlay(SA2s_Shaded)
@@ -350,6 +369,9 @@ object Cards {
           decreaseResources(NVA, 9)
         }
       },
+      // shadedEffective()
+      (faction: Faction) => true,
+      // executeShaded()
       (faction: Faction) => {
         playMomentum(Mo_WildWeasels)
       }
@@ -362,10 +384,39 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
-      (faction: Faction) => false,
-      (faction: Faction) => false,
-      (faction: Faction) => unshadedNotYet(),
-      (faction: Faction) => shadedNotYet()
+      // unshadedEffective()
+      (faction: Faction) => {
+        val validSpaces = spaces(NorthVietnam::LaosCambodia)
+        val canStrike = validSpaces exists (sp => vulnerableInsurgents(sp.pieces).nonEmpty)
+        canStrike || game.trail > TrailMin
+      },
+      // executeUnshaded()
+      (faction: Faction) => {
+        val validNames = NorthVietnam::LaosCambodia
+        val params = Params(
+          event        = true,
+          maxSpaces    = Some(1),
+          strikeHits   = Some(6),
+          strikeNoCoin = true,
+          onlyIn       = Some(validNames.toSet)
+        )
+
+        if (game.isHuman(US))
+          Human.doAirStrike(params)
+        else
+          US_Bot.airStrikeActivity(params)
+        degradeTrail(2)
+      },
+      // shadedEffective()
+      (faction: Faction) => {
+        game.availablePieces.has(USTroops) || game.trail < TrailMax
+      },
+      // executeShaded()
+      (faction: Faction) => {
+        val numTroops = game.availablePieces.totalOf(USTroops) min 2
+        moveAvailableToCasualties(Pieces(usTroops = numTroops))
+        improveTrail(2)
+      }
     )),
 
     // ------------------------------------------------------------------------
@@ -375,10 +426,24 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
-      (faction: Faction) => false,
-      (faction: Faction) => false,
-      (faction: Faction) => unshadedNotYet(),
-      (faction: Faction) => shadedNotYet()
+      // unshadedEffective()
+      (faction: Faction) => true,
+      // executeUnshaded()
+      (faction: Faction) => {
+        playMomentum(Mo_ADSID)
+      },
+      // shadedEffective()
+      (faction: Faction) => {
+        game.trail < TrailMax || (game.trackResources(ARVN) && game.arvnResources > 0)
+      },
+      // executeShaded()
+      (faction: Faction) => {
+        if (game.trail < TrailMax) {
+          val num = if (game.trail < 2) 2 - game.trail else 1
+          improveTrail(num)
+          decreaseResources(ARVN, 9)
+        }
+      }
     )),
 
     // ------------------------------------------------------------------------
@@ -388,9 +453,13 @@ object Cards {
               ARVN -> (Critical  -> Unshaded),
               NVA  -> (Performed -> Shaded),
               VC   -> (Critical  -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -401,9 +470,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -414,9 +487,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -427,9 +504,13 @@ object Cards {
               ARVN -> (Performed -> Unshaded),
               NVA  -> (Critical  -> Shaded),
               VC   -> (Critical  -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -440,9 +521,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Critical    -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -453,9 +538,13 @@ object Cards {
               ARVN -> (Critical -> Unshaded),
               NVA  -> (Critical -> Shaded),
               VC   -> (Critical -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -466,9 +555,13 @@ object Cards {
               ARVN -> (Performed -> Unshaded),
               NVA  -> (Critical  -> Shaded),
               VC   -> (Critical  -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -479,9 +572,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -492,9 +589,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -505,9 +606,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -518,9 +623,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Critical    -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -531,9 +640,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Critical    -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -544,9 +657,13 @@ object Cards {
               ARVN -> (Performed -> Unshaded),
               NVA  -> (Critical  -> Shaded),
               VC   -> (Critical  -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -557,9 +674,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -570,9 +691,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -583,9 +708,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -596,9 +725,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -609,9 +742,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -622,9 +759,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -635,9 +776,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -648,9 +793,13 @@ object Cards {
               ARVN -> (Critical  -> Unshaded),
               NVA  -> (Performed -> Shaded),
               VC   -> (Critical  -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -661,9 +810,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -674,9 +827,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -687,9 +844,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Critical    -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -700,9 +861,13 @@ object Cards {
               ARVN -> (Critical    -> Unshaded),
               NVA  -> (Critical    -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -713,11 +878,15 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Critical    -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => true,
-      (faction: Faction) => !capabilityInPlay(TopGun_Unshaded),
+      // executeUnshaded()
       (faction: Faction) => {
-          playCapability(MiGs_Unshaded)
+        playCapability(MiGs_Unshaded)
       },
+      // shadedEffective()
+      (faction: Faction) => !capabilityInPlay(TopGun_Unshaded),
+      // executeShaded()
       (faction: Faction) => {
         if (capabilityInPlay(TopGun_Unshaded))
           log(s"\nThe shaded MiGS capability has been blocked [$TopGun_Unshaded]")
@@ -733,9 +902,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Critical    -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -746,9 +919,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -759,9 +936,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -772,9 +953,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -785,10 +970,14 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Unshaded),
               VC   -> (NotExecuted -> Unshaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => singleNotYet(),
-      (faction: Faction) => ()
+      // shadedEffective()
+      (faction: Faction) => false,  // Not used for single event
+      // executeShaded()
+      (faction: Faction) => ()      // Not used for single event
     )),
 
     // ------------------------------------------------------------------------
@@ -798,9 +987,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -811,9 +1004,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -824,10 +1021,14 @@ object Cards {
               ARVN -> (Critical    -> Unshaded),
               NVA  -> (NotExecuted -> Unshaded),
               VC   -> (NotExecuted -> Unshaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => singleNotYet(),
-      (faction: Faction) => ()
+      // shadedEffective()
+      (faction: Faction) => false,  // Not used for single event
+      // executeShaded()
+      (faction: Faction) => ()      // Not used for single event
     )),
 
     // ------------------------------------------------------------------------
@@ -837,9 +1038,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -851,9 +1056,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -864,9 +1073,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -878,9 +1091,13 @@ object Cards {
               ARVN -> (Critical  -> Unshaded),
               NVA  -> (Critical  -> Shaded),
               VC   -> (Performed -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -891,9 +1108,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -904,9 +1125,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -917,9 +1142,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -930,9 +1159,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -943,9 +1176,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -956,9 +1193,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -969,9 +1210,13 @@ object Cards {
               ARVN -> (Critical -> Unshaded),
               NVA  -> (Critical -> Shaded),
               VC   -> (Critical -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -982,9 +1227,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -995,9 +1244,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1008,9 +1261,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1021,9 +1278,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1034,9 +1295,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1047,9 +1312,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1060,9 +1329,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1073,9 +1346,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1086,9 +1363,13 @@ object Cards {
               ARVN -> (Critical  -> Unshaded),
               NVA  -> (Critical  -> Shaded),
               VC   -> (Critical  -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1099,9 +1380,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1112,9 +1397,13 @@ object Cards {
               ARVN -> (Critical  -> Shaded),
               NVA  -> (Performed -> Shaded),
               VC   -> (Performed -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1125,10 +1414,14 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Unshaded),
               VC   -> (Performed   -> Unshaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => singleNotYet(),
-      (faction: Faction) => ()
+      // shadedEffective()
+      (faction: Faction) => false,  // Not used for single event
+      // executeShaded()
+      (faction: Faction) => ()      // Not used for single event
     )),
 
     // ------------------------------------------------------------------------
@@ -1138,9 +1431,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1151,9 +1448,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1164,9 +1465,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1178,9 +1483,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1191,10 +1500,14 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Unshaded),
               VC   -> (Performed   -> Unshaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => singleNotYet(),
-      (faction: Faction) => ()
+      // shadedEffective()
+      (faction: Faction) => false,  // Not used for single event
+      // executeShaded()
+      (faction: Faction) => ()      // Not used for single event
     )),
 
     // ------------------------------------------------------------------------
@@ -1204,9 +1517,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1217,9 +1534,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1230,9 +1551,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1245,9 +1570,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1258,9 +1587,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1271,9 +1604,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1284,9 +1621,13 @@ object Cards {
               ARVN -> (Critical    -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1297,9 +1638,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1310,9 +1655,13 @@ object Cards {
               ARVN -> (Critical  -> Shaded),
               NVA  -> (Performed -> Shaded),
               VC   -> (Performed -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1323,9 +1672,13 @@ object Cards {
               ARVN -> (Critical    -> Shaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1336,10 +1689,14 @@ object Cards {
               ARVN -> (Critical    -> Unshaded),
               NVA  -> (Performed   -> Unshaded),
               VC   -> (Critical    -> Unshaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => singleNotYet(),
-      (faction: Faction) => ()
+      // shadedEffective()
+      (faction: Faction) => false,  // Not used for single event
+      // executeShaded()
+      (faction: Faction) => ()      // Not used for single event
     )),
 
     // ------------------------------------------------------------------------
@@ -1349,9 +1706,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1362,9 +1723,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1375,9 +1740,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1388,9 +1757,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1401,9 +1774,13 @@ object Cards {
               ARVN -> (Critical  -> Shaded),
               NVA  -> (Performed -> Shaded),
               VC   -> (Performed -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1414,9 +1791,13 @@ object Cards {
               ARVN -> (Critical    -> Unshaded),
               NVA  -> (Critical    -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1427,9 +1808,13 @@ object Cards {
               ARVN -> (Critical  -> Shaded),
               NVA  -> (Performed -> Shaded),
               VC   -> (Performed -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1440,9 +1825,13 @@ object Cards {
               ARVN -> (Critical  -> Unshaded),
               NVA  -> (Performed -> Shaded),
               VC   -> (Performed -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1453,9 +1842,13 @@ object Cards {
               ARVN -> (Critical    -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1466,9 +1859,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1479,9 +1876,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1492,9 +1893,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1505,9 +1910,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1518,9 +1927,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1531,9 +1944,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1544,9 +1961,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1557,9 +1978,13 @@ object Cards {
               ARVN -> (Performed -> Unshaded),
               NVA  -> (Performed -> Unshaded),
               VC   -> (Critical  -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1570,9 +1995,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1583,9 +2012,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1596,9 +2029,13 @@ object Cards {
               ARVN -> (Performed -> Unshaded),
               NVA  -> (Performed -> Shaded),
               VC   -> (Critical  -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1609,9 +2046,13 @@ object Cards {
               ARVN -> (Performed -> Unshaded),
               NVA  -> (Critical  -> Shaded),
               VC   -> (Critical  -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1622,9 +2063,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1635,9 +2080,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1648,9 +2097,13 @@ object Cards {
               ARVN -> (Critical  -> Unshaded),
               NVA  -> (Performed -> Shaded),
               VC   -> (Critical  -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1661,9 +2114,13 @@ object Cards {
               ARVN -> (Critical    -> Shaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1674,10 +2131,14 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Unshaded),
               VC   -> (Critical    -> Unshaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => singleNotYet(),
-      (faction: Faction) => ()
+      // shadedEffective()
+      (faction: Faction) => false,  // Not used for single event
+      // executeShaded()
+      (faction: Faction) => ()      // Not used for single event
     )),
 
     // ------------------------------------------------------------------------
@@ -1687,9 +2148,13 @@ object Cards {
               ARVN -> (Critical    -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1700,9 +2165,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1713,9 +2182,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1726,9 +2199,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1739,9 +2216,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1752,9 +2233,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1765,9 +2250,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1778,9 +2267,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1791,10 +2284,14 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Unshaded),
               VC   -> (NotExecuted -> Unshaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => singleNotYet(),
-      (faction: Faction) => ()
+      // shadedEffective()
+      (faction: Faction) => false,  // Not used for single event
+      // executeShaded()
+      (faction: Faction) => ()      // Not used for single event
     )),
 
     // ------------------------------------------------------------------------
@@ -1804,9 +2301,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Critical    -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1817,9 +2318,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1830,9 +2335,13 @@ object Cards {
               ARVN -> (Performed   -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1843,9 +2352,13 @@ object Cards {
               ARVN -> (Critical    -> Unshaded),
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1856,9 +2369,13 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (NotExecuted -> Shaded)),
+      // unshadedEffective()
       (faction: Faction) => false,
-      (faction: Faction) => false,
+      // executeUnshaded()
       (faction: Faction) => unshadedNotYet(),
+      // shadedEffective()
+      (faction: Faction) => false,
+      // executeShaded()
       (faction: Faction) => shadedNotYet()
     )),
 
@@ -1872,13 +2389,19 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Unshaded),
               VC   -> (NotExecuted -> Unshaded)),
+      // unshadedEffective()
+      // Is US pivotal event playable?
       (faction: Faction) => {
         val threshold = if (game.peaceTalks) 25 else 40
         game.numCardsInLeaderBox >= 2 && game.usPoints > threshold
       },
-      (faction: Faction) => false,
-      (faction: Faction) => singleNotYet(),
-      (faction: Faction) => ()
+      // executeUnshaded()
+      // Carries out US pivotal event
+      (faction: Faction) => pivotalNotYet(US),
+      // shadedEffective()
+      (faction: Faction) => false,  // Not used for pivotal event
+      // executeShaded()
+      (faction: Faction) => ()      // Not used for pivotal event
     )),
 
     // With the Pivotal events only the Unshaded functions are used.
@@ -1891,13 +2414,19 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (Critical    -> Unshaded),
               VC   -> (NotExecuted -> Unshaded)),
+      // unshadedEffective()
+      // Is NVA pivotal event playable?
       (faction: Faction) => {
         game.numCardsInLeaderBox >= 2 &&
         game.totalOnMap(_.pieces.totalOf(NVATroops)) > game.totalOnMap(_.pieces.totalOf(USTroops))
       },
-      (faction: Faction) => false,
-      (faction: Faction) => singleNotYet(),
-      (faction: Faction) => ()
+      // executeUnshaded()    
+      // Carries out NVA pivotal event
+      (faction: Faction) => pivotalNotYet(NVA),
+      // shadedEffective()
+      (faction: Faction) => false,  // Not used for pivotal event
+      // executeShaded()
+      (faction: Faction) => ()      // Not used for pivotal event
     )),
 
     // ------------------------------------------------------------------------
@@ -1907,12 +2436,18 @@ object Cards {
               ARVN -> (Critical    -> Unshaded),
               NVA  -> (NotExecuted -> Unshaded),
               VC   -> (NotExecuted -> Unshaded)),
+      // unshadedEffective()
+      // Is VC pivotal event playable?
       (faction: Faction) => {
         game.numCardsInLeaderBox >= 2 && game.totalOnMap(_.pieces.totalOf(USTroops)) < 20
       },
-      (faction: Faction) => false,
-      (faction: Faction) => singleNotYet(),
-      (faction: Faction) => ()
+      // executeUnshaded()
+      // Carries out VC pivotal event
+      (faction: Faction) => pivotalNotYet(VC),
+      // shadedEffective()
+      (faction: Faction) => false,  // Not used for pivotal event
+      // executeShaded()
+      (faction: Faction) => ()      // Not used for pivotal event
     )),
 
     // ------------------------------------------------------------------------
@@ -1922,12 +2457,18 @@ object Cards {
               ARVN -> (NotExecuted -> Unshaded),
               NVA  -> (NotExecuted -> Unshaded),
               VC   -> (Critical    -> Unshaded)),
+      // unshadedEffective()
+      // Is ARVN pivotal event playable?
       (faction: Faction) => {
         game.numCardsInLeaderBox >= 2 && numVCGuerrillasInSouth > 20
       },
-      (faction: Faction) => false,
-      (faction: Faction) => singleNotYet(),
-      (faction: Faction) => ()
+      // executeUnshaded()
+      // Carries out ARVN pivotal event
+      (faction: Faction) => pivotalNotYet(ARVN),
+      // shadedEffective()
+      (faction: Faction) => false,  // Not used for pivotal event
+      // executeShaded()
+      (faction: Faction) => ()      // Not used for pivotal event
     )),
 
     // ------------------------------------------------------------------------
@@ -1936,60 +2477,62 @@ object Cards {
     entry(new EventCard(125, "Coup! Nguyen Khanh", SingleEvent,
       List.empty,
       ListMap.empty,
-      (faction: Faction) => false,
-      (faction: Faction) => false,
-      (faction: Faction) => coupNotYet(),
-      (faction: Faction) => ()
+      (faction: Faction) => false,  // unshadedEffective() not used for Coup cards
+      (faction: Faction) => (),     // executeUnshaded() no event for this Coup Card
+      (faction: Faction) => false,  // shadedEffective() not used for Coup cards
+      (faction: Faction) => ()      // executeShaded() not used for Coup cards
     )),
 
     // ------------------------------------------------------------------------
     entry(new EventCard(126, "Coup! Young Turks", SingleEvent,
       List.empty,
       ListMap.empty,
-      (faction: Faction) => false,
-      (faction: Faction) => false,
-      (faction: Faction) => coupNotYet(),
-      (faction: Faction) => ()
+      (faction: Faction) => false,  // unshadedEffective() not used for Coup cards
+      (faction: Faction) => (),     // executeUnshaded() no event for this Coup Card
+      (faction: Faction) => false,  // shadedEffective() not used for Coup cards
+      (faction: Faction) => ()      // executeShaded() not used for Coup cards
     )),
 
     // ------------------------------------------------------------------------
     entry(new EventCard(127, "Coup! Nguyen Cao Ky", SingleEvent,
       List.empty,
       ListMap.empty,
-      (faction: Faction) => false,
-      (faction: Faction) => false,
-      (faction: Faction) => coupNotYet(),
-      (faction: Faction) => ()
+      (faction: Faction) => false,  // unshadedEffective() not used for Coup cards
+      (faction: Faction) => (),     // executeUnshaded() no event for this Coup Card
+      (faction: Faction) => false,  // shadedEffective() not used for Coup cards
+      (faction: Faction) => ()      // executeShaded() not used for Coup cards
     )),
 
     // ------------------------------------------------------------------------
     entry(new EventCard(128, "Coup! Nguyen Van Thieu", SingleEvent,
       List.empty,
       ListMap.empty,
-      (faction: Faction) => false,
-      (faction: Faction) => false,
-      (faction: Faction) => coupNotYet(),
-      (faction: Faction) => ()
+      (faction: Faction) => false,  // unshadedEffective() not used for Coup cards
+      (faction: Faction) => (),     // executeUnshaded() no event for this Coup Card
+      (faction: Faction) => false,  // shadedEffective() not used for Coup cards
+      (faction: Faction) => ()      // executeShaded() not used for Coup cards
     )),
 
     // ------------------------------------------------------------------------
     entry(new EventCard(129, "Coup! Failed Attempt",SingleEvent,
       List.empty,
       ListMap.empty,
-      (faction: Faction) => false,
-      (faction: Faction) => false,
-      (faction: Faction) => coupNotYet(),  // ARVN removed 1 in 3 of its cubes per space
-      (faction: Faction) => ()
+      (faction: Faction) => false,  // unshadedEffective() not used for Coup cards
+      // executeUnshaded() -- Coup round event
+      // ARVN removes 1 in 3 of its cubes per space (rounded down)
+      (faction: Faction) => coupNotYet(),
+      (faction: Faction) => false,  // shadedEffective() not used for Coup cards
+      (faction: Faction) => ()  // executeShaded() not used for Coup cards
     )),
 
     // ------------------------------------------------------------------------
     entry(new EventCard(130, "Coup! Failed Attempt", SingleEvent,
       List.empty,
       ListMap.empty,
-      (faction: Faction) => false,
-      (faction: Faction) => false,
+      (faction: Faction) => false,  // unshadedEffective() not used for Coup cards
       (faction: Faction) => deck(129).executeUnshaded(faction),
-      (faction: Faction) => ()
+      (faction: Faction) => false,  // shadedEffective() not used for Coup cards
+      (faction: Faction) => ()      // executeShaded() not used for Coup cards
     ))
   )
 }

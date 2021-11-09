@@ -5289,7 +5289,10 @@ object Bot {
         !sp.pieces.has(VCBases)
       }
 
+      //  The delta of pieces killed if pt76_shaded used in the space
+      case class PT76_Space(name: String, nvaTroops: Int, delta: Int)
       val pt76_unshaded   = capabilityInPlay(PT76_Unshaded)
+      var pt76_space: Option[PT76_Space] = None
       var attackSpaces   = Set.empty[String]
       var usedPT76Shaded = false
 
@@ -5303,17 +5306,20 @@ object Bot {
             val numTroops  = (if (pt76_unshaded) sp.pieces.totalOf(NVATroops) - 1 else sp.pieces.totalOf(NVATroops)) max 0
             val coinPieces = sp.pieces.only(CoinPieces)
             val toActivate = if (useTroops) Pieces() else guerrillas.only(NVAGuerrillas_U)
-            val num        = if (useTroops)
-              (numTroops / 2) min coinPieces.total
-            else
-              2 min coinPieces.total
-            val pt76Num = if (useTroops && capabilityInPlay(PT76_Shaded) && !usedPT76Shaded)
-            {
-              val n = numTroops min coinPieces.total
-              if (n != 0 && n > num) Some(n) else None
+            val num        = (if (useTroops) (numTroops / 2) else 2) min coinPieces.total
+
+            // If PT76 shaded in effect check to see if it
+            // would be effective in this space and this space
+            // has more NVA Troops than any previous effective space.
+            if (useTroops && capabilityInPlay(PT76_Shaded)) {
+              val prevTroops = pt76_space map (_.nvaTroops) getOrElse 0 
+              val prevDelta  = pt76_space map (_.delta) getOrElse 0 
+              val delta = (numTroops min coinPieces.total) - num
+
+              if (delta > 0 && (numTroops > prevTroops || (numTroops == prevTroops && delta > prevDelta)))
+                pt76_space = Some(PT76_Space(sp.name, numTroops, delta))
             }
-            else
-              None
+
             val die        = d6
             val success    = useTroops || die <= guerrillas.total
             val forceDisplay = if (useTroops) "Troops" else "Guerrillas"
@@ -5329,27 +5335,20 @@ object Bot {
 
             if (success) {
               // Bases only removed if no other Coin forces (of either faction)
-              val numToKill = pt76Num match {
-                case Some(n) =>
-                  log(s"NVA elects to use [$PT76_Shaded]")
-                  n
-                case None => num
-              }
-
               val deadPieces = selectRemoveEnemyCoinBasesLast(coinPieces, num)
-              val attritionPieces = if (useTroops) {
-                val attritionNum  = deadPieces.only(USTroops::USBase::Nil).total min numTroops
+              val attrition  = if (useTroops) {
+                val attritionNum  = deadPieces.totalOf(USTroops::USBase::Nil) min numTroops
                 Pieces(nvaTroops = attritionNum)
               }
               else {
-                val attritionNum  = deadPieces.only(USTroops::USBase::Nil).total min guerrillas.total
+                val attritionNum  = deadPieces.totalOf(USTroops::USBase::Nil) min guerrillas.total
                 Pieces(nvaGuerrillas_A = attritionNum) // All NVA guerrillas will have been activated
               }
 
               revealPieces(sp.name, toActivate)
               loggingControlChanges {
                 removePieces(sp.name, deadPieces)
-                removeToAvailable(sp.name, attritionPieces, Some("Attrition:"))
+                removeToAvailable(sp.name, attrition, Some("Attrition:"))
               }
             }
             nextAttack(candidates filterNot (_.name == sp.name), useTroops, needActivation = true)
@@ -5402,8 +5401,27 @@ object Bot {
       if (keepAttacking)
         nextAttack(guerrillaCandidates, useTroops = false, needActivation = attackSpaces.nonEmpty)
 
-      if (attackSpaces.nonEmpty)
+      if (attackSpaces.nonEmpty) {
+        // If PT76 shaded is in effect and was found to be useful
+        // then apply it now.
+        pt76_space foreach { pt76 =>
+          val sp           = game.getSpace(pt76.name)
+          val coinPieces   = sp.pieces.only(CoinPieces)
+          val deadPieces   = selectRemoveEnemyCoinBasesLast(coinPieces, pt76.delta)
+          val attritionNum = deadPieces.totalOf(USTroops::USBase::Nil) min pt76.delta
+          val attrition    = Pieces(nvaTroops = attritionNum)
+          val disp         = pluralize(pt76.delta, "piece")
+
+          log(s"\nNVA elects to use [$PT76_Shaded] in ${pt76.name}")
+          log(separator())
+          log(s"This eliminates ${pt76.delta} more COIN $disp")
+          loggingControlChanges {
+            removePieces(pt76.name, deadPieces)
+            removeToAvailable(pt76.name, attrition, Some("Attrition:"))
+          }
+        }
         Some(Attack, ambushed)
+      }
       else {
         logNoOp(NVA, Attack)
         None
@@ -6050,14 +6068,14 @@ object Bot {
           log(s"Die roll: $die [${if (success) "Success!" else "Failure"}]")
 
           if (success) {
-            val deadPieces = selectRemoveEnemyCoinBasesLast(coinPieces, num)
-            val attrition  = deadPieces.only(USTroops::USBase::Nil).total min guerrillas.total
-            val attritionPieces = Pieces(vcGuerrillas_A = attrition) // All VC guerrillas are now active
+            val deadPieces    = selectRemoveEnemyCoinBasesLast(coinPieces, num)
+            val attritionNum  = deadPieces.totalOf(USTroops::USBase::Nil) min guerrillas.total
+            val attrition     = Pieces(vcGuerrillas_A = attritionNum) // All VC guerrillas are now active
 
             revealPieces(sp.name, toActivate)
             loggingControlChanges {
               removePieces(sp.name, deadPieces)
-              removeToAvailable(sp.name, attritionPieces, Some("Attrition:"))
+              removeToAvailable(sp.name, attrition, Some("Attrition:"))
             }
           }
           nextAttack(candidates filterNot (_.name == sp.name), needActivation = true)

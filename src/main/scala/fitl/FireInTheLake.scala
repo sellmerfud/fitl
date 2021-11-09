@@ -1623,6 +1623,11 @@ object FireInTheLake {
     game = game.copy(sequence = game.sequence.ineligibleThroughNextTurn(faction))
   }
 
+  def remainEligibleNextTurn(faction: Faction): Unit = {
+    log(s"\n$faction will remain eligible for the next card")
+    game = game.copy(sequence = game.sequence.remainEligible(faction))
+  }
+
   //  In force pool, casualties, and out of play box:
   //  - all bases are non-tunnels
   //  - all guerrillas, rangers, irregulars are underground
@@ -2739,7 +2744,7 @@ object FireInTheLake {
 
       if (canAgitate && candidates.nonEmpty) {
         if (game.isBot(VC)) {
-          val sp = Bot.VC_Bot.pickSpaceTowardActiveSupport(candidates)
+          val sp = Bot.VC_Bot.pickSpaceTowardActiveOpposition(candidates)
           Bot.VC_Bot.agitateSpace(sp.name, coupRound = true)
           agitateSpaces += sp.name
           agitate()
@@ -3319,10 +3324,8 @@ object FireInTheLake {
   }
 
   def factionPasses(faction: Faction): Unit = {
-    game = game.copy(sequence = game.sequence.addActor(faction, Pass))
     val amount = if (faction == US || faction == ARVN) 3 else 1
-    log()
-    log(s"$faction faction passes")
+    log(s"\n$faction faction passes")
     log(separator())
     increaseResources(faction, amount)
   }

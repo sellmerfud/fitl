@@ -5624,7 +5624,7 @@ object Bot {
     )
 
     // VC Spaces Priorities: Shift Toward Active Opposition
-    def pickSpaceTowardActiveSupport(candidates: List[Space]): Space = {
+    def pickSpaceTowardActiveOpposition(candidates: List[Space]): Space = {
 
       val priorities = List(
         filterIf(true,             CityProvinceNoActiveOpposition),
@@ -5774,7 +5774,7 @@ object Bot {
         }
 
         if (candidates1.nonEmpty || candidates2.nonEmpty) {
-          val sp = pickSpaceTowardActiveSupport(if (candidates1.nonEmpty) candidates1 else candidates2)
+          val sp = pickSpaceTowardActiveOpposition(if (candidates1.nonEmpty) candidates1 else candidates2)
 
           decreaseSupport(sp.name, 1)
           shiftSpaces += sp.name
@@ -6328,21 +6328,25 @@ object Bot {
 
     initTurnVariables()
 
-    if (game.executingPivotalEvent) {
+    val action = if (game.executingPivotalEvent) {
       //  The Pivotal events are single events which are always in the executeUnshaded() function.
       log(s"\n$faction executes its Pivotal Event: ${card.name}")
       card.executeUnshaded(faction)
+      Event
     }
     else {
       chooseAction(faction) match {
         case None =>  // Could not carry out an action so Pass
           factionPasses(faction)
+          Pass
 
         case Some(ActionEntry(Pass, _, _)) => // Table resolve to Pass
           factionPasses(faction)
+          Pass
 
         case Some(ActionEntry(Event, _, _)) =>
           executeEvent(faction, card)
+          Event
 
         case entry @ Some(ActionEntry(action, _, _)) =>
           // LimitedOp, OpOnly, or OpPlusSpecial
@@ -6363,14 +6367,13 @@ object Bot {
 
           if (actualAction == Pass)
             factionPasses(faction)
-          else {
-            game = game.copy(sequence = game.sequence.addActor(faction, actualAction))
-            log()
-            log(s"Move the $faction cylinder to the $actualAction box")
-          }
+          actualAction
       }
     }
-  }
+    
+    game = game.copy(sequence = game.sequence.addActor(faction, action))
+    log(s"\nMove the $faction cylinder to the $action box")
+}
 
   sealed trait ExecuteResult
   case object ER_OpPlusSpecial extends ExecuteResult

@@ -82,6 +82,17 @@ object Cards {
       game.spaces exists canAirStrike
   }
 
+  val isBlowtorchKomerSpace = (sp: Space) =>
+    sp.support > ActiveOpposition &&
+    sp.pieces.has(USTroops::ARVNTroops::Nil) &&
+    sp.pieces.has(ARVNPolice)
+
+  val isClaymoresSpace = (sp: Space) =>
+    sp.pieces.has(CoinBases) &&
+    sp.pieces.has(UndergroundGuerrillas)
+
+
+
   // Remove the given number pieces from the map.
   // US pieces are removed to casualties all other are removed
   // to available.
@@ -732,13 +743,13 @@ object Cards {
               NVA  -> (Critical -> Shaded),
               VC   -> (Critical -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => playCapability(Cobras_Unshaded),
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => playCapability(Cobras_Shaded)
     )),
 
     // ------------------------------------------------------------------------
@@ -749,13 +760,13 @@ object Cards {
               NVA  -> (Critical  -> Shaded),
               VC   -> (Critical  -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => playCapability(M48Patton_Unshaded),
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => playCapability(M48Patton_Shaded)
     )),
 
     // ------------------------------------------------------------------------
@@ -766,13 +777,13 @@ object Cards {
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => playMomentum(Mo_Medevac_Unshaded),
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => playMomentum(Mo_Medevac_Shaded)
     )),
 
     // ------------------------------------------------------------------------
@@ -783,13 +794,29 @@ object Cards {
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => {
+        playMomentum(Mo_BlowtorchKomer)
+        increaseUsAid(10)
+      },
+        
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => {
+        game.usAid > 0 || (game.spaces exists isBlowtorchKomerSpace)
+      },
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        decreaseUsAid(10)
+        val candidates = game.spaces filter isBlowtorchKomerSpace
+        if (candidates.nonEmpty) {
+          val name = if (game.isHuman(faction))
+            askCandidate("\nShift which space toward Active Opposition: ", spaceNames(candidates))
+          else 
+            VC_Bot.pickSpaceTowardActiveOpposition(candidates).name
+          decreaseSupport(name, 1)
+        }
+      }
     )),
 
     // ------------------------------------------------------------------------
@@ -800,13 +827,32 @@ object Cards {
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => {
+        remainEligibleNextTurn(faction)
+        playMomentum(Mo_Claymores)
+      },
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => game.nonLocSpaces exists isClaymoresSpace,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        val candidates = game.nonLocSpaces filter isClaymoresSpace
+        if (candidates.nonEmpty) {
+          val name = if (game.isHuman(faction))
+            askCandidate("\nRemove pieces from which space: ", spaceNames(candidates))
+          else
+            Bot.pickSpaceRemoveReplace(faction)(candidates).name
+          val pieces = game.getSpace(name).pieces
+          val (base, guerrilla) = if (game.isHuman(faction))
+            (askPieces(pieces.only(CoinBases), 1, prompt = Some("Remove which base")),
+            askPieces(pieces.only(UndergroundGuerrillas), 1, prompt = Some("Remove which guerrilla")))
+          else
+            (Bot.selectEnemyRemovePlaceActivate(pieces.only(CoinBases), 1),
+             Bot.selectEnemyRemovePlaceActivate(pieces.only(UndergroundGuerrillas), 1))
+          removePieces(name, base + guerrilla)
+        }
+      }
     )),
 
     // ------------------------------------------------------------------------

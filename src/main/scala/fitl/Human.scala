@@ -52,14 +52,14 @@ object Human {
 
   def logOpChoice(faction: Faction, op: Operation, notes: TraversableOnce[String] = Nil): Unit = {
     log(s"\n$faction chooses $op operation")
-    log(separator())
+    log(separator(char = '='))
     for (note <- notes)
       log(note)
   }
 
   def logSAChoice(faction: Faction, sa: SpecialActivity, notes: TraversableOnce[String] = Nil): Unit = {
     log(s"\n$faction chooses $sa special activity")
-    log(separator())
+    log(separator(char = '='))
     for (note <- notes)
       log(note)
   }

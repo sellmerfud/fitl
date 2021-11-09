@@ -141,7 +141,7 @@ object Bot {
 
   def logOpChoice(faction: Faction, op: Operation, notes: TraversableOnce[String] = Nil): Unit = {
     log(s"\n$faction chooses $op operation")
-    log(separator())
+    log(separator(char = '='))
     for (note <- notes)
       log(note)
   }
@@ -152,7 +152,7 @@ object Bot {
 
   def logSAChoice(faction: Faction, sa: SpecialActivity, notes: TraversableOnce[String] = Nil): Unit = {
     log(s"\n$faction chooses $sa special activity")
-    log(separator())
+    log(separator(char = '='))
     for (note <- notes)
       log(note)
   }
@@ -4564,15 +4564,14 @@ object Bot {
     //  RVN_Leader_YoungTurks    - Each ARVN Govern adds +2 Patronage
     def governActivity(params: Params): Boolean = {
       val kate        = momentumInPlay(Mo_TyphoonKate)
-      val mandate     = capabilityInPlay(MandateOfHeaven_Shaded)
+      val mandates1   = capabilityInPlay(MandateOfHeaven_Shaded)
       val maxGovern   = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
-                        else if (kate || mandate) 1 else 2
-      var usedMandate = false
-      var governSpaces = Set.empty[String]
+                        else if (kate || mandates1) 1 else 2
+      var governSpaces = List.empty[String]
       val prohibited = (sp: Space) =>
         !params.spaceAllowed(sp.name) ||
         trainingSpaces(sp.name) ||
-        governSpaces(sp.name) ||
+        governSpaces.contains(sp.name) ||
         sp.name == Saigon
       val isCandidate = (sp: Space) =>
         !prohibited(sp)   &&
@@ -4580,49 +4579,97 @@ object Bot {
         sp.coinControlled &&
         sp.support > Neutral
 
-      def nextGovern(): Unit = {
+      // In order to implement the Mandate of Heaven Unshaded capability
+      // we must first pick our spaces, then determine which space will
+      // use the capability
+
+      // First pick our spaces
+      for (i <- 1 to maxGovern) {
         val candidates = game.nonLocSpaces filter isCandidate
+        if (candidates.nonEmpty) {
+          governSpaces = governSpaces :+ pickSpaceGovern(candidates).name
+        }
+      }
 
-        if (governSpaces.size < maxGovern && candidates.nonEmpty) {
-          val sp = pickSpaceGovern(candidates)
+      case class GovernAction(name: String, addAid: Boolean)
 
-          if (governSpaces.isEmpty)
-            logSAChoice(ARVN, Govern)
+      // Find the order of the spaces that produces the most patronage.
+      def getGovernActions(): List[GovernAction] = {
+
+        def doSpaces(spaceList: List[String]): (List[GovernAction], Int) = {
+          var usAid     = game.usAid
+          var patronage = game.patronage
+
+          val governActions = for (name <- spaceList) yield {
+            val sp = game.getSpace(name)
+            if (usAid < 2) {
+              usAid += sp.population * 3
+              GovernAction(name, true)
+            }
+            else {
+              val num    = usAid min sp.population
+              usAid     -= num
+              patronage += num 
+              GovernAction(name, false)
+            }
+          }
+          (governActions, patronage - game.patronage)
+        }
+
+        val (actions1, increase1) = doSpaces(governSpaces)
+        val (actions2, increase2) = doSpaces(governSpaces.reverse)
+
+        if (increase1 > increase2) actions1 else actions2
+      }
+
+      if (governSpaces.nonEmpty) {
+        val governActions = getGovernActions()        
+        val mandateSpace  = if (capabilityInPlay(MandateOfHeaven_Unshaded)) {
+          val patronageSpaces = governActions filterNot (_.addAid)
+          patronageSpaces.sortBy(x => game.getSpace(x.name).support.value).map(_.name).headOption
+        }
+        else
+          None
+
+        logSAChoice(ARVN, Govern)
+
+        for (GovernAction(name, addAid) <- governActions) {
+          val sp = game.getSpace(name)
 
           log(s"\nARVN Governs in ${sp.name} (population: ${sp.population})")
           log(separator())
 
-          val numPatronage = (game.usAid min sp.population)
-          if (game.usAid == 0 && numPatronage < 2) {
-            log("Add 3 times population value to Aid")
-            increaseUsAid(sp.population * 3)
-          }
-          else {
-            log("Transfer population value from Aid to Patronage")
-            decreaseUsAid(numPatronage)
-            increasePatronage(numPatronage)
-            if (capabilityInPlay(MandateOfHeaven_Unshaded) && sp.support == PassiveSupport && !usedMandate) {
-              usedMandate = true
-              log(s"No shift in support. Used [$MandateOfHeaven_Unshaded]")
+          loggingPointsChanges {
+            if (addAid) {
+              log("Add 3 times population value to Aid")
+              increaseUsAid(sp.population * 3)
             }
-            else
-              decreaseSupport(sp.name, 1)
-          }
+            else {
+              val num = (game.usAid min sp.population)
 
-          //  Young turks always applies if in play
-          if (isRVNLeader(RVN_Leader_YoungTurks)) {
-            log(s"$RVN_Leader_YoungTurks leader effect triggers")
-            increasePatronage(2)
+              log("Transfer population value from Aid to Patronage")
+              decreaseUsAid(num)
+              increasePatronage(num)
+              mandateSpace match {
+                case Some(mandate) if mandate == name =>
+                  log(s"No shift in support. Using [$MandateOfHeaven_Unshaded]")
+                case _ =>
+                  decreaseSupport(sp.name, 1)
+              }
+            }
+  
+            //  Young turks always applies if in play
+            if (isRVNLeader(RVN_Leader_YoungTurks)) {
+              log(s"$RVN_Leader_YoungTurks leader effect triggers")
+              increasePatronage(2)
+            }
           }
-
-          nextGovern()
         }
-      }
-
-      nextGovern()
-      if (governSpaces.nonEmpty)
         logEndSA(ARVN, Transport)
-      governSpaces.nonEmpty
+        true
+      }
+      else
+        false 
     }
 
     //  -------------------------------------------------------------

@@ -3477,6 +3477,16 @@ object FireInTheLake {
     log(s"Decrease Agitate Total by -$amount to ${game.vcResources}")
   }
 
+  def setSupport(name: String, newSupport: SupportType): Unit = {
+    loggingPointsChanges {
+      val sp = game.getSpace(name)
+      if (!sp.isLoC && sp.population > 0 && sp.support != newSupport) {
+        val updated = sp.copy(support = newSupport)
+        game = game.updateSpace(updated)
+        logSupportChange(sp, updated)
+      }
+    }
+  }
 
   def increaseSupport(name: String, num: Int): Unit = if (num > 0) {
     loggingPointsChanges {
@@ -3579,6 +3589,21 @@ object FireInTheLake {
       game = game.updateSpace(sp.copy(pieces = sp.pieces + pieces))
       for (desc <- pieces.descriptions)
         log(s"Place $desc from AVAILABLE into $spaceName")
+    }
+  }
+
+  // Place pieces from the OUT OF PLAY box in the given map space.
+  // There must be enough pieces in the out of play box or an exception is thrown.
+  def placePiecesFromOutOfPlay(spaceName: String, pieces: Pieces): Unit = if (pieces.total > 0) {
+    assert(game.outOfPlay contains pieces, "Insufficent pieces in the out of play box")
+
+    loggingControlChanges {
+      val sp      = game.getSpace(spaceName)
+
+      assert(pieces.totalBases + sp.pieces.totalBases <= 2, s"Cannot place more than 2 bases in $spaceName")
+      game = game.copy(outOfPlay = game.outOfPlay - pieces).updateSpace(sp.copy(pieces = sp.pieces + pieces))
+      for (desc <- pieces.descriptions)
+        log(s"Place $desc from OUT OF PLAY into $spaceName")
     }
   }
 

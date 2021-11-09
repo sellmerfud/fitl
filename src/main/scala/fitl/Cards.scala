@@ -91,17 +91,23 @@ object Cards {
     sp.pieces.has(CoinBases) &&
     sp.pieces.has(UndergroundGuerrillas)
 
+  val isAmericalVCSpace = (sp: Space) =>
+    sp.isProvince &&
+    sp.population > 0 &&
+    sp.pieces.has(USTroops) &&
+    sp.pieces.has(VCBase::VCGuerrillas)  // Not Tunneled bases
 
 
   // Remove the given number pieces from the map.
-  // US pieces are removed to casualties all other are removed
-  // to available.
+  // US pieces are removed to casualties unless available is specified
+  // all other pieces are removed to available.
   def removePiecesFromMap(
     faction: Faction,
     numToRemove: Int,
     pieceTypes: TraversableOnce[PieceType],
     friendly: Boolean,
-    validSpaces: TraversableOnce[String]): Unit = {
+    validSpaces: TraversableOnce[String],
+    usToAvailable: Boolean = false): Unit = {
     val validNames = validSpaces.toSet
     val hasPieces = (sp: Space) => validNames(sp.name) && sp.pieces.has(pieceTypes)
     val desc = andList(pieceTypes)
@@ -114,7 +120,10 @@ object Cards {
         val pieces   = sp.pieces.only(pieceTypes)
         val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
         val toRemove = askPieces(pieces, num)
-        removePieces(name, toRemove)
+        if (usToAvailable)
+          removeToAvailable(sp.name, toRemove)
+        else
+          removePieces(name, toRemove)
         nextHumanRemoval(numRemaining - num)
       }
     }
@@ -131,7 +140,11 @@ object Cards {
           Bot.selectFriendlyRemoval(pieces, 1)
         else
           Bot.selectEnemyRemovePlaceActivate(pieces, 1)
-        removeToAvailable(sp.name, toRemove)
+
+        if (usToAvailable)
+          removeToAvailable(sp.name, toRemove)
+        else
+          removePieces(sp.name, toRemove)
         nextBotRemoval(numRemaining - 1)
       }
     }
@@ -254,6 +267,49 @@ object Cards {
       nextHumanPlacement(numToPlace min game.piecesToPlace.only(pieceTypes).total)
     else
       nextBotPlacement(numToPlace, game.availablePieces.only(pieceTypes))
+  }
+
+  // Move the given number pieces one or more spaces on the map to
+  // the given destination space.
+  def moveMapPiecesToSpace(
+    faction: Faction,
+    numToMove: Int,
+    destName: String,
+    pieceTypes: TraversableOnce[PieceType],
+    validSpaces: TraversableOnce[String]): Unit = {
+    val validNames = validSpaces.toSet - destName
+    val hasPieces = (sp: Space) => validNames(sp.name) && sp.pieces.has(pieceTypes)
+    val desc = andList(pieceTypes)
+
+    def nextHumanMove(numRemaining: Int): Unit = if (numRemaining > 0) {
+      val candidates = spaceNames(game.spaces filter hasPieces)
+      if (candidates.nonEmpty) {
+        println(s"\nNumber of $desc moved to $destName: ${numToMove - numRemaining} of ${numToMove}")
+        val name   = askCandidate("Move pieces from which space: ", candidates)
+        val sp     = game.getSpace(name)
+        val pieces = sp.pieces.only(pieceTypes)
+        val num    = askInt(s"Move how many pieces from $name", 0, numRemaining min pieces.total)
+        val toMove = askPieces(pieces, num)
+        movePieces(toMove, name, destName)
+        nextHumanMove(numRemaining - num)
+      }
+    }
+
+    def nextBotMove(numRemaining: Int): Unit = if (numRemaining > 0) {
+      val candidates = game.spaces filter hasPieces
+      if (candidates.nonEmpty) {
+        val sp = Bot.pickSpacePlaceForces(faction)(candidates)
+        val pieces   = sp.pieces.only(pieceTypes)
+        val toMove = Bot.selectFriendlyToPlaceOrMove(pieces, 1)
+        movePieces(toMove, sp.name, destName)
+        nextBotMove(numRemaining - 1)
+      }
+    }
+
+    if (game.isHuman(faction))
+      nextHumanMove(numToMove)
+    else
+      nextBotMove(numToMove)
   }
 
 
@@ -863,13 +919,13 @@ object Cards {
               NVA  -> (Critical    -> Shaded),
               VC   -> (Critical    -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => playCapability(CombActionPlatoons_Unshaded),
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => playCapability(CombActionPlatoons_Shaded)
     )),
 
     // ------------------------------------------------------------------------
@@ -880,13 +936,13 @@ object Cards {
               NVA  -> (Critical    -> Shaded),
               VC   -> (Critical    -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => playCapability(CORDS_Unshaded),
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => playCapability(CORDS_Shaded)
     )),
 
     // ------------------------------------------------------------------------
@@ -897,13 +953,13 @@ object Cards {
               NVA  -> (Critical  -> Shaded),
               VC   -> (Critical  -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => playCapability(LaserGuidedBombs_Unshaded),
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => playCapability(LaserGuidedBombs_Shaded)
     )),
 
     // ------------------------------------------------------------------------
@@ -914,13 +970,107 @@ object Cards {
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => {
+        game.outOfPlay.totalOf(USTroops) > 0 ||
+        game.totalOnMap(_.pieces.totalOf(USTroops)) > 0
+      },
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => {
+        // Move up to 2 US Troops EACH from the map and Out of Play
+        // All Troops moved must go to either Available or to a single space on the map.
+        // US alwasy does the removal regardless of who is executing the event.
+        val (destName: Option[String], oopTroops: Pieces, numMapTroops: Int) = if (game.isHuman(US)) {
+          val destChoices = List("available" -> "Available", "map" -> "A space on the map")
+          val destName = askMenu(destChoices, "\nChoose destination for US Troops:").head match {
+            case "available" => None // Destination is the available Box
+            case _ =>
+              val candidates = spaceNames(game.spaces filterNot (_.isNorthVietnam))
+              Some(askCandidate("Move US Troops to which space: ", candidates))
+          }
+
+          val maxOOP    = game.outOfPlay.totalOf(USTroops) min 2
+          val numOOP    = askInt("\nMove how many US Troops from Out Of Play", 0, maxOOP)
+          val oopTroops = Pieces(usTroops = numOOP)
+          val origins   = game.spaces filter { sp =>
+            Some(sp.name) != destName &&
+            sp.pieces.has(USTroops)
+          }
+          val numOnMap  = (origins map (_.pieces.totalOf(USTroops))).sum
+          val maxMap    = numOnMap min 2
+          val numMap    = askInt("Move how many US Troops from the map", 0, maxMap)
+          (destName, oopTroops, numMap)
+        }
+        else {
+          // JFK/LBJ: move Troops to South Vietnam
+          // Nixon:   move Troops to Available
+          val destName = if (game.usPolicy == USPolicy_Nixon)
+            None  // To available
+          else
+            Some(Bot.pickSpacePlaceForces(US)(game.spaces filter (sp => isInSouthVietnam(sp.name))).name)
+          val oopTroops  = Pieces(usTroops = game.outOfPlay.totalOf(USTroops) min 2)
+          val totalOnMap = game.totalOnMap(_.pieces.totalOf(USTroops))
+          val numMap     = destName match {
+            case None => totalOnMap min 2
+            case Some(dest) => (totalOnMap - game.getSpace(dest).pieces.totalOf(USTroops)) min 2
+          }
+          (destName, oopTroops, numMap)
+        }
+
+        val originNames = spaceNames(game.spaces)
+        loggingControlChanges {
+          destName match {
+            case None =>
+              moveOutOfPlayToAvailable(oopTroops)
+              removePiecesFromMap(US, numMapTroops, Set(USTroops), true, originNames, usToAvailable = true)
+            case Some(dest) =>
+              placePiecesFromOutOfPlay(dest, oopTroops)
+              moveMapPiecesToSpace(US, numMapTroops, dest, Set(USTroops), originNames)
+          }
+        }
+      },
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => {
+        game.nonLocSpaces exists (sp => isAmericalVCSpace(sp) && sp.support != ActiveOpposition)
+      },
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        if (game.isHuman(faction)) {
+          def nextProvince(spaceNum: Int): Unit = if (spaceNum <= 2) {
+            val candidates = spaceNames(game.nonLocSpaces filter (sp => isAmericalVCSpace(sp)))
+            if (candidates.nonEmpty) {
+              val choices = candidates.map(n => n -> n) :+ "finished" -> "Finished selecting spaces for the Americal Event"
+              askMenu(choices, s"\nSelect ${ordinal(spaceNum)} Americal space:").head match {
+                case "finished" => 
+                case name =>
+                  val sp      = game.getSpace(name)
+                  val allowed = if (faction == VC) VCGuerrillas :+ VCBase else VCBase::VCGuerrillas
+                  val piece   = askPieces(sp.pieces, 1, allowed, Some(s"\nSelecting piece to remove from $name"))
+                  loggingControlChanges {
+                    removePieces(name, piece)
+                    setSupport(name, ActiveOpposition)
+                  }
+                  nextProvince(spaceNum + 1)
+              }
+            }
+          }
+
+          nextProvince(1)          
+        }
+        else {
+          // VC Bot
+          def nextProvince(numRemaining: Int): Unit = if (numRemaining > 0) {
+            val candidates = game.nonLocSpaces filter (sp => isAmericalVCSpace(sp) && sp.support != ActiveOpposition)
+            if (candidates.nonEmpty) {
+              val sp    = Bot.pickSpaceRemoveFriendlyPieces(candidates, VCBase::VCGuerrillas)
+              val piece = Bot.selectFriendlyRemoval(sp.pieces.only(VCBase::VCGuerrillas), 1)
+              removePieces(sp.name, piece)
+              setSupport(sp.name, ActiveOpposition)
+              nextProvince(numRemaining - 1)
+            }
+          }
+          nextProvince(2)
+        }
+      }
     )),
 
     // ------------------------------------------------------------------------

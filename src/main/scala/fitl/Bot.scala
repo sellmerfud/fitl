@@ -3044,11 +3044,14 @@ object Bot {
         val assaultLoC = if (params.limOpOnly)
           moveDestinations.headOption filter { name =>
             val sp = game.getSpace(name)
-            sp.isLoC && assaultEffective(US)(sp)
+            sp.isLoC &&
+            assaultEffective(US)(sp) &&
+            (!capabilityInPlay(SearchAndDestroy_Shaded) || sp.pieces.has(NVATroops))
           }
-        else {
-          val unblockCandidates = spaceNames(game.locSpaces filter { sp =>
-            assaultInWouldUnblockAlongCanTho_HueRoute(US)(sp)
+          else {
+            val unblockCandidates = spaceNames(game.locSpaces filter { sp =>
+              assaultInWouldUnblockAlongCanTho_HueRoute(US)(sp) &&
+              (!capabilityInPlay(SearchAndDestroy_Shaded) || sp.pieces.has(NVATroops))
           })
 
           shuffle(unblockCandidates).headOption
@@ -3143,18 +3146,30 @@ object Bot {
       else {
         var assaultSpaces = Set.empty[String]
         val paramsMax     = params.maxSpaces getOrElse NO_LIMIT
-        val abramsMax     = if (capabilityInPlay(Abrams_Shaded)) 2 else NO_LIMIT
-        val maxAssault    = paramsMax min abramsMax
+        val capMax        = if (capabilityInPlay(Abrams_Shaded)) 2 
+                       else if (capabilityInPlay(Cobras_Shaded)) 2
+                       else NO_LIMIT
+        val maxAssault    = paramsMax min capMax
+
+        val wouldKillNVATroopsOrBase = (sp: Space) => {
+          val targets = Set(NVATroops, NVABase)
+          val result = assaultResult(US)(sp)
+          sp.pieces.totalOf(targets) > result.pieces.totalOf(targets)
+        }
+
 
         val assaultRemovesAllVulnerable = (sp: Space) =>
           !assaultSpaces(sp.name)  &&
           assaultEffective(US)(sp) &&
-          noVulnerableInsurgents(assaultResult(US)(sp))
+          noVulnerableInsurgents(assaultResult(US)(sp)) &&
+          (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
+
 
         val assaultWithArvn = (sp: Space) => {
           if (assaultEffective(US)(sp)) {
             val afterUS = assaultResult(US)(sp)
-            assaultEffective(ARVN)(afterUS)
+            assaultEffective(ARVN)(afterUS) &&
+           (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
           }
           else
             false
@@ -3171,7 +3186,10 @@ object Bot {
           })
         )
 
-        val assaultWithTroops = (sp: Space) => assaultEffective(US)(sp)
+        val assaultWithTroops = (sp: Space) =>
+          assaultEffective(US)(sp) &&
+          (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
+
 
         def nextAssault(candidates: List[Space], addARVN: Boolean = false): Unit = {
           if (assaultSpaces.size < maxAssault && candidates.nonEmpty) {
@@ -3442,9 +3460,11 @@ object Bot {
         val wildWeasels = momentumInPlay(Mo_WildWeasels) &&
                         (!capabilityInPlay(LaserGuidedBombs_Shaded) ||
                          isEventMoreRecentThan(Mo_WildWeasels, LaserGuidedBombs_Shaded.name))
+        val laserUnshaded = capabilityInPlay(LaserGuidedBombs_Unshaded)
         val laserShaded = capabilityInPlay(LaserGuidedBombs_Shaded) &&
                           (!momentumInPlay(Mo_WildWeasels) ||
                           isEventMoreRecentThan(LaserGuidedBombs_Shaded.name, Mo_WildWeasels))
+        val arcLightShaded = capabilityInPlay(ArcLight_Shaded)
         val maxSpaces = if      (params.maxSpaces.nonEmpty) params.maxSpaces.get
                         else if (momentumInPlay(Mo_TyphoonKate)) 1
                         else if (game.inMonsoon) 2
@@ -3498,7 +3518,12 @@ object Bot {
                 if (sa2Candidates.isEmpty)
                   log("There are no NVA outside the south that can be removed") // Very unlikely!
                 else {
-                  val sp = pickSpaceAirStrike(sa2Candidates)
+                  val priorities = List(
+                    new BooleanPriority[Space]("NVA Base", _.pieces.has(NVABase)),
+                    new BooleanPriority[Space]("NVA Troops", _.pieces.has(NVATroops)),
+                    new BooleanPriority[Space]("NVA Guerrillas", _.pieces.has(NVAGuerrillas))
+                  )
+                  val sp = pickSpaceRemoveReplace(narrowCandidates(sa2Candidates, priorities))
                   val toRemove = selectEnemyRemovePlaceActivate(sp.pieces.only(CanRemove), 1)
                   removeToAvailable(sp.name, toRemove)
                 }
@@ -3517,7 +3542,10 @@ object Bot {
           val candidates = game.spaces filter isCandidate
 
           if (hitsRemaining > 0 && strikeSpaces.size < maxSpaces && totalRemoved < maxPieces && candidates.nonEmpty) {
-            val sp                = pickSpaceAirStrike(candidates)
+            val sp  = pickSpaceAirStrike(candidates)
+            val num = if (laserUnshaded && sp.support != ActiveOpposition)  1
+                 else if (arcLightShaded && sp.support > PassiveOpposition) 1
+                 else hitsRemaining
             val (killedPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, hitsRemaining)
 
             logSelectAirStrike()
@@ -3534,7 +3562,7 @@ object Bot {
                 log(s"Shift 2 levels toward Active Opposition [$ArcLight_Shaded]")
                 2
               }
-              else if (killedPieces.total == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded)) {
+              else if (killedPieces.total == 1 && laserUnshaded) {
                 log(s"No shift toward Active Opposition [$LaserGuidedBombs_Unshaded]")
                 0
               }
@@ -4573,7 +4601,7 @@ object Bot {
             log("Transfer population value from Aid to Patronage")
             decreaseUsAid(numPatronage)
             increasePatronage(numPatronage)
-            if (capabilityInPlay(MandateOfHeaven_Unshaded) && !usedMandate) {
+            if (capabilityInPlay(MandateOfHeaven_Unshaded) && sp.support == PassiveSupport && !usedMandate) {
               usedMandate = true
               log(s"No shift in support. Used [$MandateOfHeaven_Unshaded]")
             }
@@ -5064,7 +5092,10 @@ object Bot {
     def rallyOp(params: Params, actNum: Int): Option[InsurgentOp] = {
       var rallySpaces      = Set.empty[String]
       val cadres       = capabilityInPlay(Cadres_Shaded)
-      val maxRally     = params.maxSpaces getOrElse NO_LIMIT
+      val aaa          = capabilityInPlay(AAA_Unshaded)
+      val maxRally     = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
+                    else if (aaa && game.trail <= 2) 1 // Nva priorites trail improvement if it is low
+                    else NO_LIMIT
       def rallied      = rallySpaces.nonEmpty
       def canRally     = rallySpaces.size < maxRally && checkActivation(NVA, rallied, actNum)
       val canRallyBase = (sp: Space) => {
@@ -5123,7 +5154,7 @@ object Bot {
           log(s"\nNo trail improvement. Momentum: $Mo_McNamaraLine")
         else if (game.trail == TrailMax)
           log("\nNo trail improvement. The Trail is at 4.")
-        else if (capabilityInPlay(AAA_Unshaded) && rallySpaces.size > 1)
+        else if (aaa && rallySpaces.size > 1)
             log(s"\nNo trail improvement. Rallied in more than one space. [$AAA_Unshaded]")
         else {
           val maxNum = if (capabilityInPlay(SA2s_Shaded)) 2 else 1
@@ -6370,7 +6401,7 @@ object Bot {
           actualAction
       }
     }
-    
+
     game = game.copy(sequence = game.sequence.addActor(faction, action))
     log(s"\nMove the $faction cylinder to the $action box")
 }

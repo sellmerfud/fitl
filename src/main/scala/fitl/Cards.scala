@@ -114,7 +114,7 @@ object Cards {
         val pieces   = sp.pieces.only(pieceTypes)
         val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
         val toRemove = askPieces(pieces, num)
-        removeToAvailable(name, toRemove)
+        removePieces(name, toRemove)
         nextHumanRemoval(numRemaining - num)
       }
     }

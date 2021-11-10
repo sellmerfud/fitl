@@ -388,6 +388,7 @@ object Bot {
                      ambushCandidates: List[String],
                      op: Operation,
                      actNum: Int,
+                     params: Params,
                      checkFirst: Boolean): (Set[String], Boolean) = {
     var ambushSpaces     = Set.empty[String]
     var mainForceBnsUsed = false
@@ -426,7 +427,7 @@ object Bot {
             coinPieces
           val deadPieces = selectEnemyRemovePlaceActivate(targetPieces, num)
 
-          if (ambushSpaces.isEmpty)
+          if (!params.event && ambushSpaces.isEmpty)
             logSAChoice(faction, Ambush, notes)
 
           if (sp.name == target.name)
@@ -2948,7 +2949,8 @@ object Bot {
         }
       }
 
-      logOpChoice(US, Train)
+      if (!params.event)
+        logOpChoice(US, Train)
       if (game.usPolicy == USPolicy_JFK || game.usPolicy == USPolicy_LBJ)
         trainToPlaceCubes(once = true)
 
@@ -3007,7 +3009,8 @@ object Bot {
             None
         }
 
-        logOpChoice(US, Patrol)
+        if (!params.event)
+          logOpChoice(US, Patrol)
         movePiecesToDestinations(US, Patrol, Set(USTroops), false, maxDests = Some(1))(saigonCandidate)
         if (moveDestinations.size < maxPatrol)
           movePiecesToDestinations(US, Patrol, Set(USTroops), false)(locPatrolCandidate)
@@ -3077,7 +3080,8 @@ object Bot {
             None
         }
 
-        logOpChoice(US, Sweep)
+        if (!params.event)
+          logOpChoice(US, Sweep)
         val nextDest = if (params.singleTarget.nonEmpty)
           nextSingleTargetCandidate
         else
@@ -3180,7 +3184,7 @@ object Bot {
           if (assaultSpaces.size < maxAssault && candidates.nonEmpty) {
             val sp = pickSpaceRemoveReplace(candidates)
 
-            if (assaultSpaces.isEmpty)
+            if (!params.event && assaultSpaces.isEmpty)
               logOpChoice(US, Assault)
             performAssault(US, sp.name, params)
             // performAssault will reduce the ARVN resources to pay for the Assault
@@ -3285,7 +3289,7 @@ object Bot {
           val candidates = if (arvnCandidates.nonEmpty) arvnCandidates else sfCandidates
           val sp = pickSpaceRemoveReplace(candidates)
 
-          if (adviseSpaces.isEmpty)
+          if (!params.event && adviseSpaces.isEmpty)
             logSAChoice(US, Advise)
           if (assaultWouldRemoveBase(ARVN, params.vulnerableTunnels)(sp))
             arvnAssault(sp)
@@ -3301,7 +3305,7 @@ object Bot {
         if (canAdvise && candidates.nonEmpty) {
           val sp = bestCandidate(candidates, arvnSweepPriorities)
 
-          if (adviseSpaces.isEmpty)
+          if (!params.event && adviseSpaces.isEmpty)
             logSAChoice(US, Advise)
           log(s"\nAdvise in ${sp.name} using ARVN Assault")
           log(separator())
@@ -3316,7 +3320,7 @@ object Bot {
         if (canAdvise && candidates.nonEmpty) {
           val sp = pickSpaceRemoveReplace(candidates)
 
-          if (adviseSpaces.isEmpty)
+          if (!params.event && adviseSpaces.isEmpty)
             logSAChoice(US, Advise)
           useSpecialForces(sp)
           adviseSpaces += sp.name
@@ -3329,7 +3333,7 @@ object Bot {
         if (canAdvise && candidates.nonEmpty) {
           val sp = pickSpaceRemoveReplace(candidates)
 
-          if (adviseSpaces.isEmpty)
+          if (!params.event && adviseSpaces.isEmpty)
             logSAChoice(US, Advise)
           arvnAssault(sp)
           adviseSpaces += sp.name
@@ -3387,8 +3391,9 @@ object Bot {
           else
             None
         }
-
-        logSAChoice(US, AirLift)
+        
+        if (!params.event)
+          logSAChoice(US, AirLift)
         //  Since the air lift can be use during a sweep we must preserve the moveDestinations
         val savedMovedDestinations = moveDestinations
         val savedMovedPieces       = movedPieces
@@ -3474,7 +3479,8 @@ object Bot {
         var totalRemoved = 0
 
         def logSelectAirStrike(): Unit = if (hitsRemaining == maxHits) {
-          logSAChoice(US, AirStrike)
+          if (!params.event)
+            logSAChoice(US, AirStrike)
           if (params.strikeHits.nonEmpty)
             log(s"Number of hits = $maxHits")
           else
@@ -4338,7 +4344,8 @@ object Bot {
         }
       }
 
-      logOpChoice(ARVN, Train)
+        if (!params.event)
+        logOpChoice(ARVN, Train)
       trainToPlaceRangers(game.nonLocSpaces filter canTrainRangers) &&
       trainToPlaceCubes(game.nonLocSpaces filter canTrainCubes)
       if (!placeARVNBase())
@@ -4379,7 +4386,8 @@ object Bot {
           else
             None
         }
-        logOpChoice(ARVN, Patrol)
+        if (!params.event)
+          logOpChoice(ARVN, Patrol)
         if (!momentumInPlay(Mo_BodyCount) && game.trackResources(ARVN))
           decreaseResources(ARVN, 3)
         movePiecesToDestinations(ARVN, Patrol, ARVNCubes.toSet, false, maxDests = params.maxSpaces)(nextPatrolCandidate)
@@ -4462,7 +4470,8 @@ object Bot {
               None
           }
 
-          logOpChoice(ARVN, Sweep)
+          if (!params.event)
+            logOpChoice(ARVN, Sweep)
           val nextDest = if (params.singleTarget.nonEmpty)
             nextSingleTargetCandidate
           else
@@ -4513,7 +4522,8 @@ object Bot {
           val MostFirepower = List(new HighestScore[Space]("Most ARVN Firepower", arvnFirepower))
           val sp = bestCandidate(candidates, MostFirepower)
 
-          logOpChoice(ARVN, Assault)
+          if (!params.event)
+            logOpChoice(ARVN, Assault)
           performAssault(ARVN, sp.name, params)
           Some(sp.name)
         }
@@ -4547,7 +4557,7 @@ object Bot {
           if (previousAssaults.size + assaultSpaces.size < maxAssault && candidates.nonEmpty && activated) {
             val sp = pickSpaceRemoveReplace(candidates)
 
-            if (previousAssaults.isEmpty && assaultSpaces.isEmpty)
+            if (!params.event && previousAssaults.isEmpty && assaultSpaces.isEmpty)
               logOpChoice(ARVN, Assault)
             performAssault(ARVN, sp.name, params)
             assaultSpaces += sp.name
@@ -4643,7 +4653,8 @@ object Bot {
         else
           None
 
-        logSAChoice(ARVN, Govern)
+        if (!params.event)
+          logSAChoice(ARVN, Govern)
 
         for (GovernAction(name, addAid) <- governActions) {
           val sp = game.getSpace(name)
@@ -4717,7 +4728,8 @@ object Bot {
             None
         }
 
-        logSAChoice(ARVN, Transport)
+        if (!params.event)
+          logSAChoice(ARVN, Transport)
         movePiecesToDestinations(ARVN, Transport, moveTypes, false, maxPieces = 6)(nextTransportCandidate)
 
         if (transportDestinations.isEmpty)
@@ -4777,7 +4789,7 @@ object Bot {
           val deadBases     = selectEnemyRemovePlaceActivate(basesPresent, numBases)
           val uRanger       = Pieces(rangers_U = 1)
 
-          if (raidSpaces.isEmpty)
+          if (!params.event && raidSpaces.isEmpty)
             logSAChoice(ARVN, Raid)
 
           log(s"\nARVN conducts raid in ${sp.name}")
@@ -5227,7 +5239,8 @@ object Bot {
       }
 
 
-      logOpChoice(NVA, Rally)
+      if (!params.event)
+        logOpChoice(NVA, Rally)
       rallyToPlaceBase(game.nonLocSpaces filter canRallyBase) &&
       rallyToPlaceGuerrillas(game.nonLocSpaces filter canRallyGuerrillas)
       improveTrailForFree()
@@ -5305,7 +5318,8 @@ object Bot {
         }
 
 
-        logOpChoice(NVA, March)
+        if (!params.event)
+          logOpChoice(NVA, March)
         // Never first need activation for LoCs
         if (withLoC)
           movePiecesToDestinations(NVA, March, NVAForces.toSet, false, maxDests = params.maxSpaces)(nextLoCCandidate)
@@ -5421,7 +5435,8 @@ object Bot {
 
       }
 
-      logOpChoice(NVA, Attack)
+      if (!params.event)
+        logOpChoice(NVA, Attack)
       var keepAttacking   = true
       val troopCandidates = game.spaces filter { sp =>
         sp.pieces.totalOf(NVATroops) > 1 && sp.pieces.has(CoinPieces)
@@ -5438,7 +5453,7 @@ object Bot {
         })
         val (ambushSpaces: Set[String], canContinue) = {
           if (ambushCandidates.nonEmpty)
-            ambushActivity(NVA, ambushCandidates, Attack, actNum, checkFirst = attackSpaces.nonEmpty)
+            ambushActivity(NVA, ambushCandidates, Attack, actNum, params, checkFirst = attackSpaces.nonEmpty)
           else
             (Set.empty, true)
         }
@@ -5519,7 +5534,8 @@ object Bot {
         }
       }
 
-      logOpChoice(NVA, Terror)
+      if (!params.event)
+        logOpChoice(NVA, Terror)
       val candidates = game.spaces filter isCandidate
       if (candidates.nonEmpty) {
         nextTerror(candidates, false)
@@ -5574,7 +5590,7 @@ object Bot {
             val numTroops = (game.trail + sp.pieces.totalOf(NVABases) + numGs) min game.availablePieces.totalOf(NVATroops)
             val toRemove  = selectFriendlyRemoval(sp.pieces.only(NVAGuerrillas), numGs)
             val toPlace   = Pieces(nvaTroops = numTroops)
-            if (infiltrateSpaces.isEmpty)
+            if (!params.event && infiltrateSpaces.isEmpty)
               logSAChoice(NVA, Infiltrate, notes)
 
             log(s"\nNVA Infiltrates in ${sp.name}")
@@ -5598,7 +5614,8 @@ object Bot {
             val vcPiece = selectEnemyRemovePlaceActivate(sp.pieces.only(VCBases), 1)
             val nvaType = getInsurgentCounterPart(vcPiece.explode().head)
 
-            logSAChoice(NVA, Infiltrate, notes)
+            if (!params.event)
+              logSAChoice(NVA, Infiltrate, notes)
             log(s"\nNVA Infiltrates in ${sp.name}")
               log(separator())
 
@@ -5666,7 +5683,7 @@ object Bot {
             val troops   = sp.pieces.only(CoinTroops)
             val toRemove = selectEnemyRemovePlaceActivate(troops, troops.total min 1)
 
-            if (numBombarded == 0)
+            if (!params.event && numBombarded == 0)
               logSAChoice(NVA, Bombard, notes)
 
             log(s"\nNVA Bombards ${sp.name}")
@@ -6026,7 +6043,8 @@ object Bot {
           true  // No failed activation, ran out of candidates
       }
 
-      logOpChoice(VC, Rally)
+      if (!params.event)
+        logOpChoice(VC, Rally)
       rallyToPlaceBase(game.nonLocSpaces filter canRallyBase)             &&
       rallyToPlaceGuerrillas(game.nonLocSpaces filter canRallyGuerrillas) &&
       rallyToFlipGuerrillas(game.nonLocSpaces filter canFlipGuerrillas)
@@ -6083,7 +6101,8 @@ object Bot {
             None
         }
 
-        logOpChoice(VC, March)
+        if (!params.event)
+          logOpChoice(VC, March)
         movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, maxDests = params.maxSpaces)(nextLoCCandidate)
         // First activation check is always false since previos 0-2 spaces were LoCs
         movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, maxDests = params.maxSpaces)(nextGenericCandidate)
@@ -6141,10 +6160,11 @@ object Bot {
         }
       }
 
-      logOpChoice(VC, Attack)
+      if (!params.event)
+        logOpChoice(VC, Attack)
       val ambushCandidates = spaceNames(game.spaces filter canAmbushFrom(VC))
       val (ambushSpaces: Set[String], canContinue) = if (params.specialActivity && ambushCandidates.nonEmpty)
-        ambushActivity(VC, ambushCandidates, Attack, actNum, checkFirst = false)
+        ambushActivity(VC, ambushCandidates, Attack, actNum, params, checkFirst = false)
       else
         (Set.empty, true)
 
@@ -6204,7 +6224,8 @@ object Bot {
         }
       }
 
-      logOpChoice(VC, Terror)
+      if (!params.event)
+        logOpChoice(VC, Terror)
       val candidates = game.spaces filter isCandidate
       if (candidates.nonEmpty) {
         nextTerror(candidates, false)
@@ -6234,7 +6255,7 @@ object Bot {
           val sp    = pickSpaceTax(candidates)
           val num  = if (sp.isLoC) sp.printedEconValue else sp.population
 
-          if (taxSpaces.isEmpty)
+          if (!params.event && taxSpaces.isEmpty)
             logSAChoice(VC, Tax)
 
           log(s"\nVC Taxes in ${sp.name}")
@@ -6268,7 +6289,7 @@ object Bot {
           val cubes    = sp.pieces.only(ARVNCubes)
           val toRemove = selectEnemyRemovePlaceActivate(cubes, cubes.total min 2)
 
-          if (numSubverted == 0)
+          if (!params.event && numSubverted == 0)
             logSAChoice(VC, Subvert)
 
           log(s"\nVC Subverts in ${sp.name}")
@@ -7269,7 +7290,7 @@ object Bot {
           val canAmbush        = ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
 
           if (canAmbush)
-            ambushActivity(NVA, ambushCandidates, March, actNum, false)
+            ambushActivity(NVA, ambushCandidates, March, actNum, params, false)
 
           canAmbush || NVA_Bot.bombardActivity(params)
         }
@@ -7322,7 +7343,7 @@ object Bot {
         val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
 
         if (canAmbush)
-          ambushActivity(VC, ambushCandidates, op, actNum, false)
+          ambushActivity(VC, ambushCandidates, op, actNum, params, false)
 
         canAmbush || NVA_Bot.bombardActivity(params)
       }
@@ -7441,7 +7462,7 @@ object Bot {
         val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
 
         if (canAmbush)
-          ambushActivity(VC, ambushCandidates, op, actNum, false)
+          ambushActivity(VC, ambushCandidates, op, actNum, params, false)
 
         canAmbush || (canTax && VC_Bot.taxActivity(params)) || VC_Bot.subvertActivity(params)
       }
@@ -7595,7 +7616,7 @@ object Bot {
         val canSubvert       = game.patronage >= 17
 
         if (canAmbush)
-          ambushActivity(VC, ambushCandidates, March, actNum, false)
+          ambushActivity(VC, ambushCandidates, March, actNum, params, false)
 
         canAmbush || (canSubvert && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }

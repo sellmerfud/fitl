@@ -264,6 +264,8 @@ object FireInTheLake {
   val LaosCambodia =  List(CentralLaos, SouthernLaos, NortheastCambodia,
                            TheFishhook, TheParrotsBeak, Sihanoukville)
 
+  val MekongLoCs = List(LOC_Saigon_CanTho, LOC_CanTho_ChauDoc, LOC_CanTho_LongPhu)
+
   // Order space name Cities first then Provinces the LoCs
   // Within each category sort alphabetically
   val SpaceNameOrdering = new Ordering[String] {
@@ -1734,6 +1736,7 @@ object FireInTheLake {
     onDeckCard: Int                   = 0,
     prevCardWasCoup: Boolean          = false,
     coupCardsPlayed: Int              = 0,    // Number of Coup cards played/ignored thus far
+    gameOver: Boolean                 = false,
     peaceTalks: Boolean               = false,
     botLogging: Boolean               = false,
     history: Vector[GameSegment]      = Vector.empty,
@@ -1760,7 +1763,7 @@ object FireInTheLake {
     def actionSummary: Seq[String] = {
       val b = new ListBuffer[String]
 
-      if (coupCardsPlayed == totalCoupCards) {
+      if (gameOver) {
         val winner = scores.head.faction
         val player = if (game.isBot(winner)) "Bot" else "Player"
         s"The game has ended with a $winner $player victory"
@@ -1810,7 +1813,6 @@ object FireInTheLake {
 
     def executingPivotalEvent = deck.isPivotalCard(currentCard) && sequence.numActors == 0
 
-    def gameEnded = coupCardsPlayed == totalCoupCards
     def isFinalCampaign = coupCardsPlayed == (totalCoupCards - 1)
     def isCoupRound = cardsDrawn > 0 && deck(currentCard).isCoup
     def onDeckIsCoup = onDeckCard > 0 &&  deck(onDeckCard).isCoup
@@ -1966,6 +1968,7 @@ object FireInTheLake {
     b += f"US Aid         : ${game.usAid}%2d"
     b += f"Patronage      : ${game.patronage}%2d"
     b += f"Trail          : ${game.trail}%2d"
+    b += f"Terror (avail) : ${game.terrorMarkersAvailable}%2d"
     if (game.isBot(US))
       b += s"US Policy      : ${game.usPolicy}"
 
@@ -2586,13 +2589,7 @@ object FireInTheLake {
       gameEnded
     }
 
-    // We set coupCardsPlayed to totalCoupCards explicitly
-    // So we know the game is over even if a Bot won in
-    // an early Coup round.
-    if (gameOver)
-      game = game.copy(coupCardsPlayed = game.totalCoupCards)
-    else
-      game = game.copy(coupCardsPlayed = game.coupCardsPlayed + 1)
+    game = game.copy(coupCardsPlayed = game.coupCardsPlayed + 1, gameOver = gameOver)
   }
 
   // Resources Phase of Coup Round
@@ -3269,7 +3266,7 @@ object FireInTheLake {
     // Will alwasy return None if Coup round or Coup card on deck
     // or any faction has already acted.
     val pivotFaction = getPivotalFaction
-    if (!game.gameEnded && pivotFaction.nonEmpty) {
+    if (!game.gameOver && pivotFaction.nonEmpty) {
       val faction = pivotFaction.get
 
       log(s"\n$faction elects to play their Pivotal Event")
@@ -3284,7 +3281,7 @@ object FireInTheLake {
       // This can happend if the user loads a game that has already ended
       // We call this here because the user may want to rollback to
       // an earlier turn.
-      if (game.gameEnded)
+      if (game.gameOver)
         endgameCommand() // Does not return, throws ExitGame or Rollback
 
       val savedState = game
@@ -3292,7 +3289,7 @@ object FireInTheLake {
         if (game.isCoupRound) {
           processCoupCommand()
 
-          if (game.gameEnded) {
+          if (game.gameOver) {
             // The game has ended allow the user to
             // look around, rollback, and quit
             saveGameState()
@@ -4077,14 +4074,14 @@ object FireInTheLake {
   //  -  Assumes that Active pieces are never included in the list of types!!
   //  -  Do not use this function for USTroops
   //  -  See askToPlaceBase() for placing bases
-  def askPiecesToPlace(spaceName: String, types: List[PieceType], maxToPlace: Int): Pieces = {
+  def askPiecesToPlace(spaceName: String, types: TraversableOnce[PieceType], maxToPlace: Int): Pieces = {
     // Get number of each type in available box plus on map
     val piecesToPlace = game.piecesToPlace.only(types)
     val maxPieces     = maxToPlace min piecesToPlace.total
     val availMap      = (types map (t => t -> piecesToPlace.total)).toMap
-    val availTypes    = types filter (availMap(_) > 0)
+    val availTypes    = types.toList filter (availMap(_) > 0)
     if (availTypes.isEmpty) {
-      println(s"\nThere are no ${orList(types)} available to be placed.")
+      println(s"\nThere are no ${orList(types.toList)} available to be placed.")
       Pieces()
     }
     else {

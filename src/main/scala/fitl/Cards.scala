@@ -64,6 +64,8 @@ object Cards {
   // ------------------------------------------------------------------------
   // Helper functions
 
+  val LowlandTouchingMekong = List(KienPhong, KienHoa_VinhBinh, BaXuyen, KienGiang_AnXuyen)
+  
   // Returns true if an air strike would be effective in the space.
   val canAirStrike = (sp: Space) =>
       sp.pieces.has(CoinPieces) &&
@@ -1257,13 +1259,121 @@ object Cards {
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => {
+        val emptyGroups = new MovingGroups()
+        
+        (spaces(MekongLoCs) exists (_.pieces.has(InsurgentPieces))) ||
+        (LowlandTouchingMekong exists { name =>
+          val sp = game.getSpace(name)
+          sp.pieces.has(InsurgentPieces) &&
+          (sp.pieces.has(ARVNForces) || sweepSources(name, ARVN, emptyGroups).nonEmpty)
+        })
+      },
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => {
+          var removedSome = false
+          for (name <- MekongLoCs) {
+            val sp       = game.getSpace(name)
+            val toRemove = sp.pieces.only(InsurgentPieces)
+            if (toRemove.nonEmpty && !removedSome) {
+              removedSome = true
+              log("Remove all NVA/VC from Mekong LoCs")
+            }
+            removePieces(name, toRemove)
+          }
+          if (!removedSome)
+            log("There are no NVA/VC pieces on Mekong LoCs")
+
+        if (game.isHuman(faction)) {
+          def nextSpace(assaulter: Faction, candidates: List[String]): Unit = if (candidates.nonEmpty) {
+            val choices = (candidates map (n => n -> n)) :+
+                 ("finished" -> "Do not Sweep/Assault any more spaces")
+            askMenu(choices, "\nSelect next space to Sweep/Assault:").head match {
+              case "finished" =>
+              case name =>
+                val params = Params(event = true, free = true, singleTarget = Some(name))
+                Human.initTurnVariables(params)
+                Human.executeSweep(assaulter, params)
+                Human.initTurnVariables(params)
+                Human.performAssault(assaulter, name, params)
+                val addArvnAssault =
+                  assaulter == US &&
+                  assaultEffective(ARVN, false)(game.getSpace(name)) &&
+                  askYorN(s"\nAdd a free ARVN assault in $name? (y/n) ")
+                if (addArvnAssault) {
+                  Human.initTurnVariables(params)
+                  Human.performAssault(ARVN, name, params)
+                }
+                nextSpace(assaulter, candidates filterNot (_ == name))
+            }
+          }
+          log("\nSweep/Assault each Lowland Province touch Mekong")
+          log(separator())
+          val choices = List(US, ARVN).map(f => f -> f.toString)
+          val assaulter = askMenu(choices, "Sweep/Assault using which faction:").head
+          nextSpace(assaulter, LowlandTouchingMekong)
+        }
+        else {
+          // Only ARVN Bot will execute this command
+          log("\nSweep/Assault each Lowland Province touch Mekong")
+          log(separator())
+          for (name <- LowlandTouchingMekong if game.getSpace(name).pieces.has(InsurgentPieces)) {
+            val params = Params(event = true, free = true, singleTarget = Some(name))
+            Bot.initTurnVariables()  // Treat each space as a fresh turn
+            ARVN_Bot.sweepOp(params, 1)
+            Bot.initTurnVariables()  // Treat each space as a fresh turn
+            Bot.performAssault(ARVN, name, params)
+          }
+        }
+      },
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => game.availablePieces.has(VCGuerrillas_U),
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        val maxGs = MekongLoCs.size * 2
+        val numAvailGs = game.availablePieces.totalOf(VCGuerrillas_U) min maxGs
+
+        if (numAvailGs == maxGs) {
+          for (name <- MekongLoCs)
+            placePieces(name, Pieces(vcGuerrillas_U = 2))
+        }
+        else if (game.isHuman(faction)) {
+          def nextLoc(candidates: List[String]): Unit = if (candidates.nonEmpty) {
+            val name = askSimpleMenu(candidates, "\nPlace guerrillas on which Mekong LoC:").head
+            val pieces = askPiecesToPlace(name, Set(VCGuerrillas_U), 2)
+            placePieces(name, pieces)
+            nextLoc(candidates filterNot (_ == name))
+          }
+          println("There are less than 6 available VC Guerrillas")
+          println("You may move guerrillas from other spaces to make up the difference")
+          loggingControlChanges {
+            nextLoc(MekongLoCs)
+          }
+        }
+        else {
+          def nextLoC(numRemaining: Int, candidates: List[Space]): Unit = if (numRemaining > 0) {
+            val sp = VC_Bot.pickSpacePlaceGuerrillas(candidates)
+            val num = numRemaining min 2
+            placePieces(sp.name, Pieces(vcGuerrillas_U = num))
+            nextLoC(numRemaining - num, candidates filterNot (_.name == sp.name))
+          }
+          nextLoC(numAvailGs, spaces(MekongLoCs))
+        }
+
+        // Place sabotage markers where VC > COIN
+        if (game.terrorMarkersAvailable > 0) {
+          log()
+          for (name <- MekongLoCs) {
+            if (game.terrorMarkersAvailable > 0) {
+              val sp = game.getSpace(name)
+              if (sp.pieces.totalOf(VCPieces) > sp.pieces.totalOf(CoinPieces))
+                addTerror(name, 1)
+            }
+          }
+        }
+        else
+          log("\nThere are no available sabotage markers")
+      }
     )),
 
     // ------------------------------------------------------------------------

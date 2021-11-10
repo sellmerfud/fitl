@@ -2354,9 +2354,9 @@ object Bot {
     // ----------------------------------------
     def tryDestination(lastWasSuccess: Boolean, needActivationRoll: Boolean, notReachable: Set[String]): Boolean = {
       val exhausted = if (action == AirLift)
-        allOrigins.size + moveDestinations.size < maxDest
+        allOrigins.size + moveDestinations.size >= maxDest
       else
-        moveDestinations.size < maxDest
+        moveDestinations.size >= maxDest
       if (!exhausted) {
         // For Air Lift don't allow moving into any origin space
         val prohibited = if (action == AirLift)
@@ -4439,13 +4439,15 @@ object Bot {
           None  // Cannot afford to do any sweeping!
         else {
           val nextSweepCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
-            val candidates = game.nonLocSpaces filterNot (sp => sp.isNorthVietnam || prohibited(sp.name))
+            val candidates = game.nonLocSpaces filter { sp => 
+              params.spaceAllowed(sp.name) && !sp.isNorthVietnam && !prohibited(sp.name)
+            }
 
             // Since a destination may get tossed out if there are not troops that can reach it
             // we don't use checkARVNActivation() because we don't want to pay for a space that
             // does not get used.  Instead we will pay for all of the selected destinations at the end
             // of the operation.
-            lazy val activationOK = checkActivation(ARVN, needActivation, actNum)
+            lazy val activationOK = params.free || checkActivation(ARVN, needActivation, actNum)
 
             if (candidates.nonEmpty && activationOK)
               Some(pickSpaceSweepTransportDest(candidates).name)

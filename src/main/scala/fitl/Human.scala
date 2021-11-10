@@ -64,6 +64,11 @@ object Human {
       log(note)
   }
 
+  def initTurnVariables(params: Params): Unit = {
+    Special.init(params)
+    pt76_shaded_used = false
+  }
+
   // Aid in keeping track of when a special activity can be taken
   object Special {
     private var allowSpecial = false
@@ -2060,8 +2065,7 @@ object Human {
   }
 
   def executeOp(faction: Faction, params: Params = Params()): Unit = {
-    Special.init(params)
-    pt76_shaded_used = false
+    initTurnVariables(params)
 
     faction match {
       case US  | ARVN => executeCoinOp(faction, params)

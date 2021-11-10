@@ -232,6 +232,7 @@ object SavedGame {
       "onDeckCard"          -> gameState.onDeckCard,
       "prevCardWasCoup"     -> gameState.prevCardWasCoup,
       "coupCardsPlayed"     -> gameState.coupCardsPlayed,
+      "gameOver"            -> gameState.gameOver,
       "peaceTalks"          -> gameState.peaceTalks,
       "botLogging"          -> gameState.botLogging,
       "history"             -> (gameState.history map gameSegmentToMap)
@@ -267,6 +268,7 @@ object SavedGame {
       asInt(data("onDeckCard")),
       asBoolean(data("prevCardWasCoup")),
       asInt(data("coupCardsPlayed")),
+      asBoolean(data("gameOver")),
       asBoolean(data("peaceTalks")),
       asBoolean(data("botLogging")),
       (asList(data("history")) map (s => gameSegmentFromMap(asMap(s)))).toVector

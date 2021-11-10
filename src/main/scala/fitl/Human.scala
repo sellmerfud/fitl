@@ -103,7 +103,8 @@ object Human {
   //  If `canRevealTunnel` is true, and no other Insurgent pieces
   //  remain, then the tunnel marker is removed.
   //  Return the number of pieces removed.
-  def killExposedInsurgents(name: String, maxRemoval: Int, canRevealTunnel: Boolean): Pieces = {
+  def killExposedInsurgents(name: String, maxRemoval: Int, canRevealTunnel: Boolean, vulnerableTunnels: Boolean = false): Pieces = {
+    val baseTargets = if (vulnerableTunnels) InsurgentBases else InsurgentNonTunnels
     loggingControlChanges {
       var removed    = Pieces()
       def pieces     = game.getSpace(name).pieces
@@ -127,16 +128,16 @@ object Human {
       }
 
       if (!pieces.has(NVATroops::Guerrillas)) {
-        (remaining min pieces.totalOf(InsurgentNonTunnels)) match {
+        (remaining min pieces.totalOf(baseTargets)) match {
           case 0 =>
           case num =>
-            val prompt = s"\nRemove untunneled bases"
-            val toRemove = askPieces(pieces, num, InsurgentNonTunnels, Some(prompt))
+            val prompt = s"\nRemove bases"
+            val toRemove = askPieces(pieces, num, baseTargets, Some(prompt))
             removeToAvailable(name, toRemove)
             removed = removed + toRemove
         }
 
-        if (canRevealTunnel && remaining > 0 && pieces.has(InsurgentTunnels)) {
+        if (!vulnerableTunnels && canRevealTunnel && remaining > 0 && pieces.has(InsurgentTunnels)) {
           val die = d6
           val success = die > 3
           log("\nNext piece to remove would be a tunneled base")
@@ -977,7 +978,7 @@ object Human {
     val maxAirLiftSpaces = if (params.maxSpaces.nonEmpty)
       params.maxSpaces.get
     else if (game.inMonsoon) 2 else 4
-    var airLiftSpaces    = List.empty[String]
+    var airLiftSpaces    = params.singleTarget.toList  // Some events specify air lift into ...
     val liftedOthers     = new MovingGroups()  // ARVN troops, Rangers, Irregulars (max 4)
 
     def totalLiftedOthers = liftedOthers.allPieces.total
@@ -1001,7 +1002,10 @@ object Human {
     })
 
     def liftOutCandidates = if (airLiftSpaces.size > 1)
-      airLiftSpaces.filter(name => moveablePieces(game.getSpace(name)).nonEmpty)
+      airLiftSpaces.filter{ name => 
+        Some(name) != params.singleTarget &&
+        moveablePieces(game.getSpace(name)).nonEmpty
+      }
     else
       Nil
 
@@ -1009,7 +1013,10 @@ object Human {
     // Lift forces out and place them in a destination space
     def liftForcesOutOf(srcName: String): Unit = {
       val ForceTypes = List(USTroops, Irregulars_U, Irregulars_A, ARVNTroops, Rangers_U, Rangers_A)
-      val destCandidates = airLiftSpaces filter (_ != srcName)
+      val destCandidates = if (params.singleTarget.nonEmpty)
+        params.singleTarget.toList
+      else
+        airLiftSpaces filter (_ != srcName)
       val choices = (destCandidates map (name => name -> name)) :+ ("none" -> "Do not move forces now")
 
       def moveForces(destName: String): Unit = {
@@ -1027,8 +1034,7 @@ object Human {
         }
         val forceChoices = ForceTypes flatMap { t =>
           val num = maxForce(t)
-          val name = if (num == 1) t.singular else t.plural
-          if (num > 0) Some(Some(t) -> s"Air Lift $name") else None
+          if (num > 0) Some(Some(t) -> s"Air Lift ${t.plural}") else None
         }
         val choices = forceChoices :+ (None -> s"Finished moving forces out of $srcName")
 
@@ -1082,9 +1088,12 @@ object Human {
       }
     }
 
+    val notes = List(
+      noteIf(game.inMonsoon, "May only choose 2 spaces in Monsoon")
+    ).flatten
     // Start of Air Lift Special Activity
     // ------------------------------------
-    logSAChoice(US, AirLift, List("May only choose 2 spaces in Monsoon"))
+    logSAChoice(US, AirLift, notes)
 
     nextAirLiftAction()
   }
@@ -1202,7 +1211,7 @@ object Human {
           val pieces       = game.getSpace(name).pieces
           val maxNumber    = numExposedInsurgents(pieces) min hitsRemaining
           val num          = askInt(s"\nRemove how many pieces from $name", 1, maxNumber)
-          val killedPieces = killExposedInsurgents(name, num, canRevealTunnel = false)
+          val killedPieces = killExposedInsurgents(name, num, canRevealTunnel = false, params.vulnerableTunnels)
           val sp           = game.getSpace(name)
           
           log(s"\nUS Air Strikes $name")
@@ -2670,12 +2679,14 @@ object Human {
         sp.sweepActivations(faction) > 0
       }
       val candidates = ((sweepSpaces -- activatedSpaces) filter canActivate).toList.sorted
+      val canAll  = candidates.size > 1 && activatedSpaces.isEmpty
+      val canRest = candidates.size > 1 && activatedSpaces.nonEmpty
 
       if (candidates.nonEmpty) {
         val topChoices = List(
-          choice(activatedSpaces.isEmpty,  "all",      "Activate guerrillas in all sweep spaces"),
-          choice(activatedSpaces.nonEmpty, "rest",     "Activate guerrillas in the rest of the sweep spaces"),
-          choice(canSpecial,               "special",  "Perform a Special Activity")
+          choice(canAll,     "all",      "Activate guerrillas in all sweep spaces"),
+          choice(canRest,    "rest",     "Activate guerrillas in the rest of the sweep spaces"),
+          choice(canSpecial, "special",  "Perform a Special Activity")
         ).flatten
         val spaceChoices = candidates map (n => n -> s"Activate guerrillas in $n")
         val choices = topChoices ::: spaceChoices
@@ -2712,7 +2723,11 @@ object Human {
 
     logOpChoice(faction, Sweep, notes)
 
-    selectSweepSpace()
+
+    if (params.singleTarget.nonEmpty)  
+      sweepSpaces = Set(params.singleTarget.get)
+    else
+      selectSweepSpace()
     moveTroops()
     if (sweepSpaces.nonEmpty) {
       activateGuerrillas()
@@ -2729,10 +2744,10 @@ object Human {
     val remove1BaseFirst   = faction == US && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = faction == US && capabilityInPlay(SearchAndDestroy_Unshaded)
     val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
-
+    val baseTargets = if (params.vulnerableTunnels) InsurgentBases else InsurgentNonTunnels
     val sp          = game.getSpace(name)
     def pieces      = game.getSpace(name).pieces  // Always get fresh instance
-    val baseFirst   = remove1BaseFirst && pieces.has(InsurgentNonTunnels) && !pieces.has(UndergroundGuerrillas)
+    val baseFirst   = remove1BaseFirst && pieces.has(baseTargets) && !pieces.has(UndergroundGuerrillas)
     val underground = remove1Underground && pieces.has(UndergroundGuerrillas)
     val totalLosses = sp.assaultFirepower(faction) + (if (params.assaultRemovesTwoExtra) 2 else 0)
     var killedPieces = Pieces()
@@ -2755,7 +2770,7 @@ object Human {
       // Abrams unshaded
       if (remaining > 0 && baseFirst) {
         log(s"\nRemove a base first [$Abrams_Unshaded]")
-        val removed = askPieces(pieces, 1, InsurgentNonTunnels)
+        val removed = askPieces(pieces, 1, baseTargets)
         removeToAvailable(name, removed)
         killedPieces = killedPieces + removed
       }
@@ -2779,7 +2794,8 @@ object Human {
         Pieces()
 
       // Remove exposed insurgent pieces
-      killedPieces = killedPieces + killExposedInsurgents(name, remaining, canRevealTunnel = true)
+      killedPieces = killedPieces + killExposedInsurgents(name, remaining,
+                                         canRevealTunnel = true, params.vulnerableTunnels)
       // Add any removed underground guerrilla that did NOT count toward remaining hits above
       killedPieces = killedPieces + killedUnderground
 
@@ -2790,9 +2806,9 @@ object Human {
       }
 
       // Each removed base adds +6 aid
-      if (faction == ARVN && killedPieces.totalOf(InsurgentNonTunnels) > 0) {
+      if (faction == ARVN && killedPieces.totalOf(baseTargets) > 0) {
         log(s"\nEach insurgent base removed adds +6 Aid")
-        increaseUsAid(6 * killedPieces.totalOf(InsurgentNonTunnels))
+        increaseUsAid(6 * killedPieces.totalOf(baseTargets))
 
       }
 

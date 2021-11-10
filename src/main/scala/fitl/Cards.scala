@@ -367,7 +367,7 @@ object Cards {
       (faction: Faction) => {
         val pieceTypes = InsurgentPieces.toSet -- InsurgentTunnels.toSet
         val num = d6
-        log(s"\nRolling d6 to determine number of pieces: $num")
+        log(s"\nRolling d6 to determine number of pieces to remove: $num")
         removePiecesFromMap(faction, num, pieceTypes, false, LaosCambodia)
       },
       // shadedEffective()
@@ -470,7 +470,7 @@ object Cards {
       // unshadedEffective()
       (faction: Faction) => {
         val validSpaces = spaces(NorthVietnam::LaosCambodia)
-        val canStrike = validSpaces exists (sp => vulnerableInsurgents(sp.pieces).nonEmpty)
+        val canStrike = validSpaces exists (sp => vulnerableInsurgents(sp.pieces, false).nonEmpty)
         canStrike || game.trail > TrailMin
       },
       // executeUnshaded()
@@ -1081,13 +1081,34 @@ object Cards {
               NVA  -> (Performed   -> Shaded),
               VC   -> (Critical    -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => game.outOfPlay.has(USTroops),
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => {
+        val maxOop   = game.outOfPlay.totalOf(USTroops)
+        val maxAvail = game.availablePieces.totalOf(USTroops)
+        val (numOop, numAvail) = if (game.isHuman(US)) {
+          val numOop   = askInt("Place how many OUT OF PLAY US Troops in Da Nang", 0, 3 min maxOop)
+          val numAvail = askInt("Place how many AVAILABLE US Troops in Da Nang", 0, 6 - numOop min maxAvail)
+          (numOop, numAvail)
+        }
+        else
+          (maxOop min 3, 0) // US Bot will only place troops from Out of Play
+        
+        placePiecesFromOutOfPlay(DaNang, Pieces(usTroops = numOop))
+        placePieces(DaNang, Pieces(usTroops = numAvail))
+      },
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        val candidates = getAdjacentNonLOCs(DaNang) + DaNang
+        loggingPointsChanges {
+          for (name <- candidates; if game.getSpace(name).support > Neutral)
+            setSupport(name, Neutral)
+        }
+        log()
+        playMomentum(Mo_DaNang)
+      }
     )),
 
     // ------------------------------------------------------------------------
@@ -1098,13 +1119,55 @@ object Cards {
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => false,  // Bot does not execute
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => {
+        val tunnelSpaces = game.nonLocSpaces filter (_.pieces.has(InsurgentTunnels))
+
+        if (tunnelSpaces.nonEmpty) {
+          val name = askCandidate("\nExecute event in which space: ", spaceNames(tunnelSpaces))
+          val params = Params(event = true, singleTarget = Some(name), vulnerableTunnels = true)
+          Human.doAirLift(params)
+          Human.executeSweep(US, params)
+          Human.performAssault(US, name, params)
+
+          val arvnEffective = assaultEffective(ARVN, true)(game.getSpace(name))
+          if (arvnEffective && askYorN(s"\nFollow up with ARVN assault in $name? (y/n) ")) {
+            log(s"\nUS adds a follow up ARVN asault in $name")
+            Human.performAssault(ARVN, name, params)
+          }
+        }
+        else
+          log("There are no spaces with a Tunneled base.")
+      },
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => {
+        game.nonLocSpaces exists { sp =>
+          lazy val adjacent = spaces(getAdjacent(sp.name))
+          sp.pieces.has(InsurgentTunnels) &&
+          (sp::adjacent).map(_.pieces.totalOf(USTroops)).sum > 0
+        }
+      },
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        val tunnelSpaces = game.nonLocSpaces filter (_.pieces.has(InsurgentTunnels))
+
+        val name = if (game.isHuman(faction))
+          askCandidate("\nExecute event in which space: ", spaceNames(tunnelSpaces))
+        else {
+          val priorities = List(
+            new Bot.HighestScore[Space]("Most US troops in/adjacent", sp => {
+              val candidates = sp :: spaces(getAdjacent(sp.name))
+              candidates.map(_.pieces.totalOf(USTroops)).sum
+            })
+          )
+          Bot.bestCandidate(tunnelSpaces, priorities).name
+        }
+        
+        val num = d6
+        log(s"\nRolling d6 to determine number of US Troops to remove: $num")
+        removePiecesFromMap(faction, num, Set(USTroops), false, getAdjacent(name) + name)
+      }
     )),
 
     // ------------------------------------------------------------------------

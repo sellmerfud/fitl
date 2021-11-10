@@ -933,18 +933,50 @@ object FireInTheLake {
       collection.foldLeft(Pieces()) { (pieces, t) => pieces.add(1, t) }
   }
 
-  def vulnerableBases(pieces: Pieces) = {
+  def vulnerableBases(pieces: Pieces, vulnerableTunnels: Boolean) = {
     if (pieces.has(UndergroundGuerrillas))
       Pieces()
     else
       pieces.only(InsurgentBases)
   }
 
-  def vulnerableInsurgents(pieces: Pieces) = {
+  def vulnerableInsurgents(pieces: Pieces, vulnerableTunnels: Boolean) = {
     val forces = pieces.only(NVATroops::ActiveGuerrillas)
-    forces + vulnerableBases(pieces)
+    forces + vulnerableBases(pieces, vulnerableTunnels)
   }
 
+  //  Assault firepower of the space plus any modifiers for
+  //  capabilities, momentum, etc.
+  def usFirepower(sp: Space) = {
+    val firepower = sp.assaultFirepower(US)
+    // Account for unshaded Search and Destroy when there would otherwise be zero firepower
+    val canSearchDestroy = capabilityInPlay(SearchAndDestroy_Unshaded) &&
+                           sp.pieces.has(USTroops) &&
+                           sp.pieces.has(UndergroundGuerrillas)
+    if (firepower == 0 && canSearchDestroy)
+      1
+    else
+      firepower
+  }
+
+  def arvnFirepower(sp: Space) = sp.assaultFirepower(ARVN)
+
+  def coinFirepower(sp: Space) = usFirepower(sp) + arvnFirepower(sp)
+
+  def assaultFirepower(faction: Faction)(sp: Space): Int = {
+    faction match {
+      case US => usFirepower(sp)
+      case _  => arvnFirepower(sp)
+    }
+  }
+
+  def assaultEffective(faction: Faction, vulnerableTunnels: Boolean)(sp: Space): Boolean = {
+    val firepower = faction match {
+      case US => usFirepower(sp)
+      case _  => arvnFirepower(sp)
+    }
+    (assaultFirepower(faction)(sp) min vulnerableInsurgents(sp.pieces, vulnerableTunnels).total) > 0
+  }
 
   // Used during a turn to keep track of pieces that have already moved
   // in each space.
@@ -1502,7 +1534,9 @@ object FireInTheLake {
     onlyIn: Option[Set[String]]     = None,  // Limit command to the given spaces
     event: Boolean                  = false,
     strikeHits: Option[Int]         = None,
-    strikeNoCoin: Boolean           = false
+    singleTarget: Option[String]    = None,  // Airlift/Sweep into this space only (used by events)
+    strikeNoCoin: Boolean           = false,
+    vulnerableTunnels: Boolean      = false  // Used by events
   ) {
     val limOpOnly = maxSpaces == Some(1)
 

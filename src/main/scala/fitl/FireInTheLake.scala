@@ -387,6 +387,20 @@ object FireInTheLake {
   def isOutsideSouth(name: String)   = OutsideSouth contains name
   def isInSouthVietnam(name: String) = !isOutsideSouth(name)
 
+  // Returns the list of spaces with or adjacent to
+  // the given space that satisfy the given test.
+  def withOrAdjacent(name: String)(test: (Space) => Boolean): List[Space] = {
+    spaces(getAdjacent(name) + name) filter test
+  }
+
+  def withOrAdjacentExists(name: String)(test: (Space) => Boolean): Boolean = {
+    spaces(getAdjacent(name) + name) exists test
+  }
+
+  def withOrAdjacentFold[T](name: String, init: T)(func: (T, Space) => T): T = {
+    spaces(getAdjacent(name) + name).foldLeft(init)(func)
+  }
+
   //  A cube can move onto adjacent LOCs/Cities and keep moving via adjacent LOCs/Cities until
   //  it reaches a space with an insurgent piece.
   //  Return a sequence of all spaces that can be reached from the given space by patrolling cubes.
@@ -2048,10 +2062,14 @@ object FireInTheLake {
   }
 
   def sequenceList(card: EventCard, sequence: SequenceOfPlay): Seq[String] = {
+    def actorDisp(faction: Faction) = if (sequence.eligibleNextTurn(faction))
+      s"${faction}*"
+    else
+      faction.toString
     val b = new ListBuffer[String]
     b += s"Current card  : ${card.fullString}"
     if (!card.isCoup) {
-      val actors     = sequence.actors map (a => s"${a.faction} => ${a.action.name}")
+      val actors     = sequence.actors map (a => s"${actorDisp(a.faction)} => ${a.action.name}")
       val eligible   = card.factionOrder filter sequence.eligibleThisTurn   map (_.name)
       val ineligible = card.factionOrder filter sequence.ineligibleThisTurn map (_.name)
       val passed     = card.factionOrder filter sequence.passed     map (_.name)
@@ -2372,7 +2390,6 @@ object FireInTheLake {
                   |  show summary   - current score, resources, etc.
                   |  show pieces    - available pieces, casualties, out of play pieces
                   |  show events    - capabilities, momentum, pivotal events
-                  |  show sequence  - current sequence of play
                   |  show all       - entire game state
                   |  show <space>   - state of a single space""".stripMargin
 
@@ -4750,15 +4767,13 @@ object FireInTheLake {
 
 
   def showCommand(param: Option[String]): Unit = {
-    val options =  "scenario" :: "summary" :: "pieces" :: "events" ::
-                    "sequence" :: "all" :: SpaceNames
+    val options =  "scenario" :: "summary" :: "pieces" :: "events" :: "all" :: SpaceNames
 
     askOneOf("Show: ", options, param, allowNone = true, allowAbort = false) foreach {
       case "scenario"  => printSummary(scenarioSummary)
       case "summary"   => printSummary(statusSummary)
       case "pieces"    => printPiecesSummary()
       case "events"    => printSummary(eventSummary)
-      case "sequence"  => printSummary(sequenceSummary)  // card, 1st eligible, etc.
       case "all"       => printGameState()
       case name        => printSummary(spaceSummary(name))
     }
@@ -5532,11 +5547,13 @@ object FireInTheLake {
 
     def nextAdjustment(): Unit = {
       val sp        = game.getSpace(name)
-      val forbidden = if (sp.isLoC) CoinBases:::InsurgentBases else Nil
+      val forbidden: Set[PieceType] = if (sp.isLoC) (CoinBases:::InsurgentBases).toSet else Set.empty
       val pieces    = sp.pieces.except(forbidden)
       val available = game.availablePieces.except(forbidden)
       val pieceChoices: List[(Option[PieceType], String)] = AllPieceTypes flatMap { t =>
-        if (pieces.has(t) || available.has(normalizedType(t)))
+        if (!forbidden(t) &&
+           pieces.has(t) || available.has(normalizedType(t)) && 
+           (!isBase(t) || pieces.only(BasePieces).except(t).total < 2))
           Some(Some(t) -> t.plural)
         else
           None
@@ -5558,7 +5575,7 @@ object FireInTheLake {
           val maxNum  = {
             val n = available.totalOf(normalizedType(pieceType)) + pieces.totalOf(pieceType)
             if (isBase(pieceType)) {
-              val maxBase = 2 + pieces.totalOf(pieceType) - pieces.totalOf(BasePieces)
+              val maxBase = 2 - pieces.only(BasePieces).except(pieceType).total
                n min maxBase
             }
             else n

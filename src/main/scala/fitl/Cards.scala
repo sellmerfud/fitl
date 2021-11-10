@@ -97,6 +97,12 @@ object Cards {
     sp.pieces.has(USTroops) &&
     sp.pieces.has(VCBase::VCGuerrillas)  // Not Tunneled bases
 
+  val isStarliteUnshadedSpace = (sp: Space) =>
+    sp.isProvince &&
+    sp.coastal    &&
+    sp.pieces.has(VCPieces) &&
+    withOrAdjacentExists(sp.name)(_.pieces.has(USTroops))
+
 
   // Remove the given number pieces from the map.
   // US pieces are removed to casualties unless available is specified
@@ -1101,10 +1107,9 @@ object Cards {
       (faction: Faction) => true,
       // executeShaded()
       (faction: Faction) => {
-        val candidates = getAdjacentNonLOCs(DaNang) + DaNang
         loggingPointsChanges {
-          for (name <- candidates; if game.getSpace(name).support > Neutral)
-            setSupport(name, Neutral)
+          for (sp <- withOrAdjacent(DaNang)(sp => !sp.isLoC && sp.support > Neutral))
+            setSupport(sp.name, Neutral)
         }
         log()
         playMomentum(Mo_DaNang)
@@ -1143,9 +1148,8 @@ object Cards {
       // shadedEffective()
       (faction: Faction) => {
         game.nonLocSpaces exists { sp =>
-          lazy val adjacent = spaces(getAdjacent(sp.name))
           sp.pieces.has(InsurgentTunnels) &&
-          (sp::adjacent).map(_.pieces.totalOf(USTroops)).sum > 0
+          withOrAdjacentExists(sp.name)(_.pieces.has(USTroops))
         }
       },
       // executeShaded()
@@ -1157,8 +1161,7 @@ object Cards {
         else {
           val priorities = List(
             new Bot.HighestScore[Space]("Most US troops in/adjacent", sp => {
-              val candidates = sp :: spaces(getAdjacent(sp.name))
-              candidates.map(_.pieces.totalOf(USTroops)).sum
+              withOrAdjacentFold(sp.name, 0)((sum, sp) => sp.pieces.totalOf(USTroops))
             })
           )
           Bot.bestCandidate(tunnelSpaces, priorities).name
@@ -1178,13 +1181,72 @@ object Cards {
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Performed   -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => game.spaces exists isStarliteUnshadedSpace,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => {
+        val candidates = game.spaces filter isStarliteUnshadedSpace
+        val name = if (game.isHuman(faction)) {
+          if (candidates.nonEmpty)
+            Some(askCandidate("\nExecute event in which space: ", spaceNames(candidates)))
+          else
+            None
+        }
+        else {
+          //  I am narrowing the selection to spaces that contain
+          //  a VC base (if any) because that makes more sense.
+          val withVCBase = List(new Bot.BooleanPriority[Space]("With VC Base", _.pieces.has(VCBase)))
+          val narrowed = Bot.narrowCandidates(candidates, withVCBase)
+          Some(Bot.pickSpaceRemoveReplace(faction)(narrowed).name)
+        }
+
+        name match {
+          case Some(name) =>
+            val sp = game.getSpace(name)
+            removePieces(name, sp.pieces.only(VCPieces))
+          case None =>
+            log("There are no coastal spaces that qualify.")
+        }
+      },
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => {
+        game.spaces exists { sp => sp.isProvince && sp.pieces.has(VCGuerrillas_A) }
+      },
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        def nextSpace(count: Int, total: Int, candidates: List[Space]): List[String] = {
+          if (count > total || candidates.isEmpty)
+            Nil
+          else {
+            val name = if (game.isHuman(faction))
+              askCandidate(s"Select ${ordinal(count)} space: ", spaceNames(candidates))
+            else
+              VC_Bot.pickSpacePlaceGuerrillas(candidates).name
+            name::nextSpace(count + 1, total, candidates filterNot (_.name == name))
+          }
+        }
+
+        val candidates = game.spaces filter { sp => sp.isProvince && sp.pieces.has(VCGuerrillas_A) }
+        val maxNum = candidates.size min 3
+        if (candidates.nonEmpty) {
+          val num = if (game.isHuman(faction))
+            askInt("\nExecute event in how many Provinces", 0, maxNum)
+          else
+            maxNum
+          if (num == candidates.size) {
+            for (sp <- candidates)
+              hidePieces(sp.name, sp.pieces.only(VCGuerrillas_A))
+          }
+          else {
+            for (name <- nextSpace(1, num, candidates).reverse) {
+              val sp = game.getSpace(name)
+              hidePieces(name, sp.pieces.only(VCGuerrillas_A))
+            }
+          }
+        }
+        else
+          log("There are no Provinces with underground VC Guerrillas.")
+        remainEligibleNextTurn(faction)
+      }
     )),
 
     // ------------------------------------------------------------------------

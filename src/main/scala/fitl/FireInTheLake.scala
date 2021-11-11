@@ -2284,13 +2284,17 @@ object FireInTheLake {
       ""
   }
 
-  def saveGameState(): Unit = {
+  def saveGameState(desc: String = ""): Unit = {
     assert(gameName.nonEmpty, "saveGameState(): called with gameName not set!")
 
     val save_number = game.history.size
     val save_path   = gamesDir/gameName.get/getSaveName(save_number)
     val log_path    = gamesDir/gameName.get/getLogName(save_number)
-    val segment = GameSegment(save_number, deck(game.currentCard).toString, game.actionSummary)
+    val summary = if (desc.isEmpty)
+      game.actionSummary
+    else
+      game.actionSummary :+ desc
+    val segment = GameSegment(save_number, deck(game.currentCard).toString, summary)
 
     // Make sure that the game directory exists
     save_path.dirname.mkpath()
@@ -4886,7 +4890,7 @@ object FireInTheLake {
   def rollback(input: Option[String]): Unit = {
 
     try {
-      val pages = game.history.reverse.drop(1).sliding(25, 25).toList
+      val pages = game.history.reverse.sliding(25, 25).toList
       val firstPage = 0
       val lastPage  = pages.size -1
       val PAGE_UP   = -1
@@ -5012,6 +5016,7 @@ object FireInTheLake {
           val desc = adjustmentDesc("NVA resources", game.nvaResources, value)
           game = game.copy(nvaResources = value)
           log(desc)
+          saveGameState(desc)
         }
     }
     else if (game.isHuman(VC)) {
@@ -5019,6 +5024,7 @@ object FireInTheLake {
         val desc = adjustmentDesc("VC resources", game.vcResources, value)
         game = game.copy(vcResources = value)
         log(desc)
+        saveGameState(desc)
       }
     }
     else {
@@ -5026,7 +5032,7 @@ object FireInTheLake {
         val desc = adjustmentDesc("ARVN resources", game.arvnResources, value)
         game = game.copy(arvnResources = value)
         log(desc)
-      }
+        saveGameState(desc)}
     }
   }
 
@@ -5035,6 +5041,7 @@ object FireInTheLake {
       val desc = adjustmentDesc("VC Agitate total (resources cylinder)", game.vcResources, value)
       game = game.copy(vcResources = value)
       log(desc)
+      saveGameState(desc)
     }
   }
 
@@ -5043,6 +5050,7 @@ object FireInTheLake {
       val desc = adjustmentDesc("US Aid", game.usAid, value)
       game = game.copy(usAid = value)
       log(desc)
+      saveGameState(desc)
     }
   }
 
@@ -5052,10 +5060,9 @@ object FireInTheLake {
       val desc = adjustmentDesc("Patronage", game.patronage, value)
       game = game.copy(patronage = value)
       log(desc)
+      saveGameState(desc)
       logPointsChanges(origGame, game)
     }
-
-
   }
 
   def adjustEcon(): Unit = {
@@ -5063,6 +5070,7 @@ object FireInTheLake {
       val desc = adjustmentDesc("Econ marker", game.econ, value)
       game = game.copy(econ = value)
       log(desc)
+      saveGameState(desc)
     }
   }
 
@@ -5071,6 +5079,7 @@ object FireInTheLake {
       val desc = adjustmentDesc("Trail Marker", game.trail, value)
       game = game.copy(trail = value)
       log(desc)
+      saveGameState(desc)
     }
   }
 
@@ -5085,6 +5094,7 @@ object FireInTheLake {
       game = game.copy(usPolicy = newPolicy)
       val desc = adjustmentDesc("US Policy", oldPolicy, newPolicy)
       log(desc)
+      saveGameState(desc)
     }
   }
 
@@ -5135,6 +5145,7 @@ object FireInTheLake {
       if (savedGame.casualties != game.casualties) {
         // Number of available US pieces affects US score
         logPointsChanges(savedGame, game)
+        saveGameState("Adjusted Casualties")
       }
     }
   }
@@ -5186,6 +5197,7 @@ object FireInTheLake {
       if (savedGame.outOfPlay != game.outOfPlay) {
         // Number of available US pieces affects US score
         logPointsChanges(savedGame, game)
+        saveGameState("Adjusted Out of Play pieces")
       }
     }
   }
@@ -5229,6 +5241,9 @@ object FireInTheLake {
 
     val savedGame = game
     nextAdjustment()
+    if (savedGame.rvnLeaders != game.rvnLeaders)
+      saveGameState("Adjusted RVN Leaders")
+
   }
 
   def adjustCapabilities(): Unit = {
@@ -5291,6 +5306,8 @@ object FireInTheLake {
 
     val savedGame = game
     nextAdjustment()
+    if (savedGame.capabilities != game.capabilities)
+      saveGameState("Adjusted Capabilities in play")
   }
 
   def adjustMomentum(): Unit = {
@@ -5340,6 +5357,8 @@ object FireInTheLake {
 
     val savedGame = game
     nextAdjustment()
+    if (savedGame.capabilities != game.capabilities)
+      saveGameState("Adjusted Momentum cards in play")
   }
 
   def adjustPivotalCards(): Unit = {
@@ -5377,6 +5396,8 @@ object FireInTheLake {
 
     val savedGame = game
     nextAdjustment()
+    if (savedGame.capabilities != game.capabilities)
+      saveGameState("Adjusted Pivotal cards availablity")
   }
 
   def adjustEligibility(): Unit = {
@@ -5439,7 +5460,9 @@ object FireInTheLake {
 
     if (seq != game.sequence) {
       game = game.copy(sequence = seq)
-      log("Adjusted faction eligibility")
+      val desc = "Adjusted faction eligibility"
+      log(desc)
+      saveGameState(desc)
     }
   }
 
@@ -5469,14 +5492,17 @@ object FireInTheLake {
 
     val savedGame = game
     nextAdjustment()
+    if (savedGame.trungDeck != game.trungDeck)
+      saveGameState("Adjusted Trung Deck")
   }
 
 
   def adjustBotDebug(): Unit = {
     val newValue = !game.botLogging
-    val desc = adjustmentDesc("Bot log", game.botLogging, newValue)
+    val desc = adjustmentDesc("Bot Debug Logging", game.botLogging, newValue)
     game = game.copy(botLogging = newValue)
     log(desc)
+    saveGameState("Bot Debug Logging")
   }
 
 
@@ -5515,33 +5541,43 @@ object FireInTheLake {
 
 
   def adjustSupport(name: String): Unit = {
-    val origGame = game
     val sp = game.getSpace(name)
+    val origGame = game
+    val origSupport = sp.support
     val options = List(ActiveSupport, PassiveSupport, Neutral, PassiveOpposition, ActiveOpposition)
     val choices = options map (opt => opt -> opt.name)
 
     println()
     println(s"Choose support level for ${name}:")
     val newSupport = askMenu(choices, allowAbort = false).head
-    game = game.updateSpace(sp.copy(support = newSupport))
-    log(spaceAdjustmentDesc(name, "support", sp.support, newSupport))
-    logPointsChanges(origGame, game)
+    if (newSupport != origSupport) {
+      game = game.updateSpace(sp.copy(support = newSupport))
+      val desc = spaceAdjustmentDesc(name, "support", sp.support, newSupport)
+      log(desc)
+      saveGameState(desc)
+      logPointsChanges(origGame, game)
+    }
   }
 
   def adjustTerror(name: String): Unit = {
     val sp     = game.getSpace(name)
+    val orig   = sp.terror
     val marker = if (sp.isLoC) "Sabotage" else "Terror"
     val maxVal = game.terrorMarkersAvailable + sp.terror
     println()
     adjustInt(s"Number of $marker markers", sp.terror, 0 to maxVal) foreach { value =>
-      game = game.updateSpace(sp.copy(terror = value))
-      log(spaceAdjustmentDesc(name, marker, sp.terror, value))
+      if (value != orig) {
+        val desc = spaceAdjustmentDesc(name, marker, sp.terror, value)
+        game = game.updateSpace(sp.copy(terror = value))
+        log(desc)
+        saveGameState(desc)
+      }
     }
   }
 
 
   def adjustPieces(name: String): Unit = {
-
+    val origPieces = game.getSpace(name).pieces
     def nextAdjustment(): Unit = {
       val sp        = game.getSpace(name)
       val forbidden: Set[PieceType] = if (sp.isLoC) (CoinBases:::InsurgentBases).toSet else Set.empty
@@ -5593,6 +5629,8 @@ object FireInTheLake {
     loggingControlChanges {
       nextAdjustment()
     }
-  }
 
+    if (game.getSpace(name).pieces != origPieces)
+      saveGameState(s"Adjusted pieces in $name")
+  }
 }

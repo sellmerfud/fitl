@@ -4320,6 +4320,15 @@ object FireInTheLake {
     }
   }
 
+  def thereAre(num: Int, singular: String, plural: Option[String] = None): String = {
+    val pluralName = pluralize(num, singular, plural)
+    num match {
+      case 0 => s"are no $pluralName"
+      case 1 => s"is 1 $singular"
+      case n => s"are $n $pluralName"
+    }
+  }
+
   def inspect[T](name: String, value: T): T = {
     val str = if (value == null) "NULL" else value.toString
     println(s"DEBUG: $name == ${str}")

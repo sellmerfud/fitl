@@ -117,6 +117,9 @@ object Cards {
     sp.pieces.has(VCPieces) &&
     (game.terrorMarkersAvailable > 0 || sp.support != ActiveOpposition)
 
+  val isTribesmenUnshadedSpace = (sp: Space) =>
+    sp.pieces.has(Irregulars) &&
+    sp.pieces.has(NVABase::VCBase::InsurgentForces)
 
   // Remove the given number pieces from the map.
   // US pieces are removed to casualties unless available is specified
@@ -131,7 +134,10 @@ object Cards {
     usToAvailable: Boolean = false): Set[String] = {
     val validNames = validSpaces.toSet
     val hasPieces = (sp: Space) => validNames(sp.name) && sp.pieces.has(pieceTypes)
-    val desc = andList(pieceTypes map (_.genericPlural))
+    val desc = if (pieceTypes.size > 3)
+      "pieces"
+    else
+      andList(pieceTypes map (_.genericPlural))
     var spacesUsed = Set.empty[String]
 
     def nextHumanRemoval(numRemaining: Int): Unit = if (numRemaining > 0) {
@@ -1563,13 +1569,13 @@ object Cards {
               NVA  -> (Performed -> Shaded),
               VC   -> (Critical  -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => playCapability(SearchAndDestroy_Unshaded),
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => true,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => playCapability(SearchAndDestroy_Shaded)
     )),
 
     // ------------------------------------------------------------------------
@@ -1580,13 +1586,94 @@ object Cards {
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => game.spaces exists isTribesmenUnshadedSpace,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => {
+        val validSpaces = spaceNames(game.spaces filter isTribesmenUnshadedSpace)
+        if (validSpaces.isEmpty)
+          log("There are no spaces with Irregulars and Insurgent pieces")
+        else
+          loggingControlChanges {
+            removePiecesFromMap(faction, 4, NVABase::VCBase::InsurgentForces, false, validSpaces)
+          }
+      },
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => {
+        (game.availablePieces.has(VCGuerrillas_U) && game.totalOnMap(_.pieces.totalOf(Irregulars)) > 0) ||
+        game.nonLocSpaces.exists(sp => sp.population > 0 && sp.isHighland && sp.support == Neutral) ||
+        game.patronage > 0
+      },
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        val totalIrreg = game.totalOnMap(_.pieces.totalOf(Irregulars))
+        val numAvailGs = game.availablePieces.totalOf(VCGuerrillas_U)
+
+        def replaceAll(): Unit = {
+          for (sp <- game.spaces if sp.pieces.has(Irregulars)) {
+            val irreg = sp.pieces.only(Irregulars)
+            removeToAvailable(sp.name, irreg)
+            placePieces(sp.name, Pieces(vcGuerrillas_U = irreg.total))
+          }
+        }
+
+        def humanNextIrreg(numRemaining: Int): Unit = if (numRemaining > 0) {
+          val candidates = spaceNames(game.spaces filter (_.pieces.has(Irregulars)))
+          if (candidates.nonEmpty) {
+            val name  = askCandidate("Replace Irregulars in which space: ", candidates)
+            val sp    = game.getSpace(name)
+            val irreg = sp.pieces.only(Irregulars)
+            val num   = askInt(s"Replace how many Irregulars in $name", 0, irreg.total)
+            val dead  = askPieces(irreg, num)
+            removeToAvailable(name, dead)
+            placePieces(name, Pieces(vcGuerrillas_U = num))
+            humanNextIrreg(numRemaining - num)
+          }
+        }
+
+        def botNextIrreg(): Unit = {
+          val candidates = game.spaces filter (_.pieces.has(Irregulars))
+          if (candidates.nonEmpty && game.availablePieces.has(VCGuerrillas_U)) {
+            val sp = VC_Bot.pickSpaceRemoveReplace(candidates)
+            val irreg = Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(Irregulars), 1)
+            removeToAvailable(sp.name, irreg)
+            placePieces(sp.name, Pieces(vcGuerrillas_U = 1))
+            botNextIrreg()
+          }
+        }
+
+        loggingControlChanges {
+          if (numAvailGs >= totalIrreg)
+              replaceAll()
+          else if (game.isHuman(faction)) {
+            val gdisp = thereAre(numAvailGs, "available VC Guerrilla")
+            println(s"There ${gdisp} and ${amountOf(totalIrreg, "Irregulars")} on the map")
+            val numRemove = askInt("How many VC Guerrillas do you wish to voluntarily remove", 0, totalIrreg - numAvailGs)
+            if (numRemove > 0)
+              voluntaryRemoval(numRemove, VCGuerrillas_U)
+            val num = numAvailGs + numRemove
+            if (num == totalIrreg)
+              replaceAll()
+            else
+              humanNextIrreg(num)
+          }
+          else { // Bot
+            botNextIrreg()
+          }
+
+          val highland = game.nonLocSpaces filter (sp => sp.population > 0 && sp.isHighland && sp.support == Neutral)
+          if (highland.isEmpty)
+            log(s"\nThere are no Neutral Highland provinces")
+          else {
+            val name = if (game.isHuman(faction))
+              askCandidate("\nSet which Neutral highland province to Active Opposition: ", spaceNames(highland))
+            else
+              VC_Bot.pickSpaceTowardActiveOpposition(highland).name
+            setSupport(name, ActiveOpposition)
+          }
+          decreasePatronage(3)
+        }
+
+      }
     )),
 
     // ------------------------------------------------------------------------

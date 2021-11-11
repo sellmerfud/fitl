@@ -2113,8 +2113,8 @@ object FireInTheLake {
     b.toList
   }
 
-  def spaceNames(spaces: Traversable[Space]): List[String] = (spaces map (_.name)).toList.sorted(SpaceNameOrdering)
-  def spaces(names: Traversable[String]): List[Space] = (names map game.getSpace).toList.sortBy(_.name)(SpaceNameOrdering)
+  def spaceNames(spaces: TraversableOnce[Space]): List[String] = (spaces map (_.name)).toList.sorted(SpaceNameOrdering)
+  def spaces(names: TraversableOnce[String]): List[Space] = (names map game.getSpace).toList.sortBy(_.name)(SpaceNameOrdering)
 
   // We assume that the current working directory
   // set as the installed directory and thus the game directory

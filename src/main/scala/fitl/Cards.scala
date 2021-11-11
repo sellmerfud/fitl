@@ -105,33 +105,51 @@ object Cards {
     sp.pieces.has(VCPieces) &&
     withOrAdjacentExists(sp.name)(_.pieces.has(USTroops))
 
+  val isPhoenixUnshadedSpace = (sp: Space) =>
+    !sp.isLoC         &&
+    sp.coinControlled &&
+    sp.pieces.except(VCTunnel).has(VCPieces)
+
+  val isPhoenixShadedSpace = (sp: Space) =>
+    !sp.isLoC               &&
+    sp.name != Saigon       &&
+    sp.coinControlled       &&
+    sp.pieces.has(VCPieces) &&
+    (game.terrorMarkersAvailable > 0 || sp.support != ActiveOpposition)
+
 
   // Remove the given number pieces from the map.
   // US pieces are removed to casualties unless available is specified
   // all other pieces are removed to available.
+  // Returns the set of spaces where pieces were removed.
   def removePiecesFromMap(
     faction: Faction,
     numToRemove: Int,
     pieceTypes: TraversableOnce[PieceType],
     friendly: Boolean,
     validSpaces: TraversableOnce[String],
-    usToAvailable: Boolean = false): Unit = {
+    usToAvailable: Boolean = false): Set[String] = {
     val validNames = validSpaces.toSet
     val hasPieces = (sp: Space) => validNames(sp.name) && sp.pieces.has(pieceTypes)
-    val desc = andList(pieceTypes)
+    val desc = andList(pieceTypes map (_.genericPlural))
+    var spacesUsed = Set.empty[String]
+
     def nextHumanRemoval(numRemaining: Int): Unit = if (numRemaining > 0) {
       val candidates = spaceNames(game.spaces filter hasPieces)
       if (candidates.nonEmpty) {
         println(s"\nNumber of $desc removed: ${numToRemove - numRemaining} of ${numToRemove}")
-        val name     = askCandidate("Remove pieces from which space: ", candidates)
+        val name     = askCandidate(s"Remove $desc from which space: ", candidates)
         val sp       = game.getSpace(name)
         val pieces   = sp.pieces.only(pieceTypes)
         val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
         val toRemove = askPieces(pieces, num)
-        if (usToAvailable)
-          removeToAvailable(sp.name, toRemove)
-        else
-          removePieces(name, toRemove)
+        if (num > 0) {
+          if (usToAvailable)
+            removeToAvailable(sp.name, toRemove)
+          else
+            removePieces(name, toRemove)
+          spacesUsed += name
+        }
         nextHumanRemoval(numRemaining - num)
       }
     }
@@ -153,14 +171,35 @@ object Cards {
           removeToAvailable(sp.name, toRemove)
         else
           removePieces(sp.name, toRemove)
+        spacesUsed += sp.name
         nextBotRemoval(numRemaining - 1)
       }
     }
 
-    if (game.isHuman(faction))
+    def removeAll(): Unit = {
+      for {
+        name <- validSpaces
+        sp   = game.getSpace(name)
+        dead = sp.pieces.only(pieceTypes)
+        if dead.nonEmpty
+      } {
+        if (usToAvailable)
+          removeToAvailable(name, dead)
+        else
+          removePieces(name, dead)
+        spacesUsed += name
+      }
+    }
+
+    val totalPieces = spaces(validSpaces).foldLeft(0)((sum, sp) => sum + sp.pieces.totalOf(pieceTypes))
+
+    if (totalPieces <= numToRemove)
+      removeAll()
+    else if (game.isHuman(faction))
       nextHumanRemoval(numToRemove)
     else
       nextBotRemoval(numToRemove)
+    spacesUsed
   }
 
   def removePiecesToOutOfPlay(
@@ -168,21 +207,25 @@ object Cards {
     numToRemove: Int,
     pieceTypes: TraversableOnce[PieceType],
     friendly: Boolean,
-    validSpaces: TraversableOnce[String]): Unit = {
+    validSpaces: TraversableOnce[String]): Set[String] = {
     val validNames = validSpaces.toSet
     val hasPieces = (sp: Space) => validNames(sp.name) && sp.pieces.has(pieceTypes)
-    val desc = andList(pieceTypes)
+    val desc = andList(pieceTypes map (_.genericPlural))
+    var spacesUsed = Set.empty[String]
 
     def nextHumanRemoval(numRemaining: Int): Unit = if (numRemaining > 0) {
       val candidates = spaceNames(game.spaces filter hasPieces)
       if (candidates.nonEmpty) {
         println(s"\nNumber of $desc removed to Out of Play: ${numToRemove - numRemaining} of ${numToRemove}")
-        val name     = askCandidate("Remove pieces from which space: ", candidates)
+        val name     = askCandidate(s"Remove $desc from which space: ", candidates)
         val sp       = game.getSpace(name)
         val pieces   = sp.pieces.only(pieceTypes)
         val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
         val toRemove = askPieces(pieces, num)
-        removeToOutOfPlay(name, toRemove)
+        if (num > 0) {
+          removeToOutOfPlay(name, toRemove)
+          spacesUsed += name
+        }
         nextHumanRemoval(numRemaining - num)
       }
     }
@@ -200,23 +243,43 @@ object Cards {
         else
           Bot.selectEnemyRemovePlaceActivate(pieces, 1)
         removeToOutOfPlay(sp.name, toRemove)
+        spacesUsed += sp.name
         nextBotRemoval(numRemaining - 1)
       }
     }
 
-    if (game.isHuman(faction))
+    def removeAll(): Unit = {
+      for {
+        name <- validSpaces
+        sp   = game.getSpace(name)
+        dead = sp.pieces.only(pieceTypes)
+        if dead.nonEmpty
+      } {
+        removeToOutOfPlay(name, dead)
+        spacesUsed += name
+      }
+    }
+
+    val totalPieces = spaces(validSpaces).foldLeft(0)((sum, sp) => sum + sp.pieces.totalOf(pieceTypes))
+
+    if (totalPieces <= numToRemove)
+      removeAll()
+    else if (game.isHuman(faction))
       nextHumanRemoval(numToRemove)
     else
       nextBotRemoval(numToRemove)
+    spacesUsed
   }
 
   // Place pieces from available
+  // Returns the set of spaces where pieces were placed
   def placePiecesOnMap(faction: Faction, numToPlace: Int, pieceTypes: TraversableOnce[PieceType],
-                          validSpaces: TraversableOnce[String]): Unit = {
+                          validSpaces: TraversableOnce[String]): Set[String] = {
     val validNames = validSpaces.toSet
     val isValid = (sp: Space) => validNames(sp.name)
     val canTakeBase  = (sp: Space) => isValid(sp) && sp.totalBases < 2
     val desc = andList(pieceTypes map (_.genericPlural))
+    var spacesUsed = Set.empty[String]
 
     def nextHumanPlacement(numRemaining: Int): Unit = if (numRemaining > 0) {
       val bases      = game.piecesToPlace.only(pieceTypes).only(BasePieces)
@@ -236,7 +299,10 @@ object Cards {
           askToPlaceBase(name, bases.explode().head)
         else
           askPiecesToPlace(name, forces.getTypes, numRemaining)
-        placePieces(name, pieces)
+        if (pieces.nonEmpty) {
+          placePieces(name, pieces)
+          spacesUsed += name
+        }
         nextHumanPlacement(numRemaining - pieces.total)
       }
     }
@@ -262,6 +328,7 @@ object Cards {
       optSpace match {
         case Some(sp) =>
           placePieces(sp.name, piece)
+          spacesUsed += sp.name
           nextBotPlacement(numRemaining - 1, availPieces - piece)
         case None =>
           // It is possible that there are base available but no
@@ -275,6 +342,7 @@ object Cards {
       nextHumanPlacement(numToPlace min game.piecesToPlace.only(pieceTypes).total)
     else
       nextBotPlacement(numToPlace, game.availablePieces.only(pieceTypes))
+    spacesUsed
   }
 
   // Move the given number pieces one or more spaces on the map to
@@ -1400,44 +1468,15 @@ object Cards {
       (faction: Faction) => {
         val numOnMap = game.totalOnMap(_.pieces.totalOf(Irregulars))
         def irregSpaces = game.spaces filter (_.pieces.has(Irregulars))
-        var spacesUsed = Set.empty[String]
-        def removeIrreg(name: String, irreg: Pieces): Unit = if (irreg.total > 0) {
-          removeToCasualties(name, irreg)
-          spacesUsed += name
-        }
 
         // Save all control/scoring messages until the end.
         loggingControlChanges {
-          if (numOnMap == 0)
+          val spacesUsed = if (numOnMap == 0) {
             log("There are no Irregulars on the map")
-          else if (numOnMap <= 3) {
-            for (sp <- irregSpaces)
-                removeIrreg(sp.name, sp.pieces.only(Irregulars))
+            Set.empty
           }
-          else if (game.isHuman(faction)) {
-            def nextSpace(numRemaining: Int): Unit = if (numRemaining > 0) {
-              println(s"\nRemoved ${3 - numRemaining} of 3 Irregulars so far")
-              val name   = askCandidate("Remove Irregulars from which space: ", spaceNames(irregSpaces))
-              val irreg  = game.getSpace(name).pieces.only(Irregulars)
-              val maxNum = irreg.total min numRemaining
-              val num    = askInt(s"Remove how many Irregulars from $name", 0, maxNum)
-              val dead   = askPieces(irreg, num)
-              if (dead.nonEmpty)
-                log()
-              removeIrreg(name, dead)
-              nextSpace(numRemaining - num)
-            }
-            nextSpace(3)
-          }
-          else {  // Bot
-            def nextSpace(numRemaining: Int): Unit = if (numRemaining > 0) {
-              val sp    = Bot.pickSpaceRemoveReplace(faction)(irregSpaces)
-              val irreg = Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(Irregulars), 1)
-              removeIrreg(sp.name, irreg)
-              nextSpace(numRemaining - 1)
-            }
-            nextSpace(3)
-          }
+          else 
+            removePiecesFromMap(faction, 3, Irregulars, false, spaceNames(game.spaces))
 
           for (name <- spacesUsed) {
             val sp = game.getSpace(name)
@@ -1456,13 +1495,64 @@ object Cards {
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => game.nonLocSpaces exists isPhoenixUnshadedSpace,
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => {
+        val VCTypes = VCPieces.toSet - VCTunnel
+        val validSpaces = game.nonLocSpaces filter isPhoenixUnshadedSpace
+
+        loggingControlChanges {
+          if (validSpaces.isEmpty)
+            log("There are no spaces that qualify for the event")
+          else if (game.isHuman(faction))
+            removePiecesFromMap(faction, 3, VCTypes, false, spaceNames(validSpaces))
+          else {
+            // ARNV bot will target VC bases first
+            val baseSpaces = validSpaces filter (_.pieces.has(VCBase))
+            val numBases   = (baseSpaces map (_.pieces.totalOf(VCBases))).sum min 3
+            val numOthers  = 3 - numBases
+            removePiecesFromMap(faction, numBases, Set(VCBase), false, spaceNames(baseSpaces))
+            removePiecesFromMap(faction, numOthers, VCTypes, false, spaceNames(validSpaces))
+          }
+        }
+      },
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => game.nonLocSpaces exists isPhoenixShadedSpace,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        val validSpaces = game.nonLocSpaces filter isPhoenixShadedSpace
+
+        loggingPointsChanges {
+          if (validSpaces.isEmpty)
+            log("There are no spaces that qualify for the event")
+          else if (game.isHuman(faction)) {
+            def nextSpace(count: Int, candidates: List[String]): Unit = if (count <= 2 && candidates.nonEmpty) {
+              val name = askCandidate(s"Select ${ordinal(count)} space:", candidates)
+              log(s"$faction selects $name")
+              if (game.terrorMarkersAvailable > 0)
+                addTerror(name, 1)
+              else
+                log("There are no available terror markers")
+              setSupport(name, ActiveOpposition)
+              nextSpace(count + 1, candidates filterNot (_ == name))
+            }
+            nextSpace(1, spaceNames(validSpaces))
+          }
+          else {
+            def nextSpace(numRemaining: Int, candidates: List[Space]): Unit = if (numRemaining > 0 && candidates.nonEmpty) {
+              val sp = VC_Bot.pickSpaceTowardActiveOpposition(candidates)
+              log(s"$faction selects ${sp.name}")
+              if (game.terrorMarkersAvailable > 0)
+                addTerror(sp.name, 1)
+              else
+                log("There are no available terror markers")
+              setSupport(sp.name, ActiveOpposition)
+              nextSpace(numRemaining - 1, candidates filterNot (_.name == sp.name))
+            }
+            nextSpace(2, validSpaces)
+          }
+        }
+      }
     )),
 
     // ------------------------------------------------------------------------

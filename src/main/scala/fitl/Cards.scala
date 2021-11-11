@@ -216,7 +216,7 @@ object Cards {
     val validNames = validSpaces.toSet
     val isValid = (sp: Space) => validNames(sp.name)
     val canTakeBase  = (sp: Space) => isValid(sp) && sp.totalBases < 2
-    val desc = andList(pieceTypes)
+    val desc = andList(pieceTypes map (_.genericPlural))
 
     def nextHumanPlacement(numRemaining: Int): Unit = if (numRemaining > 0) {
       val bases      = game.piecesToPlace.only(pieceTypes).only(BasePieces)
@@ -228,7 +228,7 @@ object Cards {
 
       if (candidates.nonEmpty) {
         println(s"\nNumber of $desc placed: ${numToPlace - numRemaining} of ${numToPlace}")
-        val name      = askCandidate("Place pieces in which space: ", candidates)
+        val name      = askCandidate(s"Place $desc in which space: ", candidates)
         val sp        = game.getSpace(name)
         val placeBase = bases.nonEmpty && canTakeBase(sp) &&
                         askYorN(s"Do you wish to place a base in $name? (y/n) ")
@@ -1384,13 +1384,68 @@ object Cards {
               NVA  -> (Performed   -> Shaded),
               VC   -> (Critical    -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => false, // COIN Bots never play this event.
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => {
+        //  Human only
+        if (game.piecesToPlace.has(Irregulars_U))
+          placePiecesOnMap(US, 3, Set(Irregulars_U), LaosCambodia)
+        else
+          log("There are no Irregulars that can be placed.")
+        Human.doAirStrike(Params(event = true, free = true))
+      },
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => game.totalOnMap(_.pieces.totalOf(Irregulars)) > 0,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        val numOnMap = game.totalOnMap(_.pieces.totalOf(Irregulars))
+        def irregSpaces = game.spaces filter (_.pieces.has(Irregulars))
+        var spacesUsed = Set.empty[String]
+        def removeIrreg(name: String, irreg: Pieces): Unit = if (irreg.total > 0) {
+          removeToCasualties(name, irreg)
+          spacesUsed += name
+        }
+
+        // Save all control/scoring messages until the end.
+        loggingControlChanges {
+          if (numOnMap == 0)
+            log("There are no Irregulars on the map")
+          else if (numOnMap <= 3) {
+            for (sp <- irregSpaces)
+                removeIrreg(sp.name, sp.pieces.only(Irregulars))
+          }
+          else if (game.isHuman(faction)) {
+            def nextSpace(numRemaining: Int): Unit = if (numRemaining > 0) {
+              println(s"\nRemoved ${3 - numRemaining} of 3 Irregulars so far")
+              val name   = askCandidate("Remove Irregulars from which space: ", spaceNames(irregSpaces))
+              val irreg  = game.getSpace(name).pieces.only(Irregulars)
+              val maxNum = irreg.total min numRemaining
+              val num    = askInt(s"Remove how many Irregulars from $name", 0, maxNum)
+              val dead   = askPieces(irreg, num)
+              if (dead.nonEmpty)
+                log()
+              removeIrreg(name, dead)
+              nextSpace(numRemaining - num)
+            }
+            nextSpace(3)
+          }
+          else {  // Bot
+            def nextSpace(numRemaining: Int): Unit = if (numRemaining > 0) {
+              val sp    = Bot.pickSpaceRemoveReplace(faction)(irregSpaces)
+              val irreg = Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(Irregulars), 1)
+              removeIrreg(sp.name, irreg)
+              nextSpace(numRemaining - 1)
+            }
+            nextSpace(3)
+          }
+
+          for (name <- spacesUsed) {
+            val sp = game.getSpace(name)
+            if (!sp.isLoC && sp.support > ActiveOpposition)
+              decreaseSupport(name, 1)
+          }
+        }
+      }
     )),
 
     // ------------------------------------------------------------------------

@@ -204,14 +204,16 @@ object Cards {
       }
     }
 
-    val totalPieces = spaces(validSpaces).foldLeft(0)((sum, sp) => sum + sp.pieces.totalOf(pieceTypes))
-
-    if (totalPieces <= numToRemove)
-      removeAll()
-    else if (game.isHuman(faction))
-      nextHumanRemoval(numToRemove)
-    else
-      nextBotRemoval(numToRemove)
+    loggingControlChanges {
+      val totalPieces = spaces(validSpaces).foldLeft(0)((sum, sp) => sum + sp.pieces.totalOf(pieceTypes))
+  
+      if (totalPieces <= numToRemove)
+        removeAll()
+      else if (game.isHuman(faction))
+        nextHumanRemoval(numToRemove)
+      else
+        nextBotRemoval(numToRemove)
+    }
     spacesUsed
   }
 
@@ -275,12 +277,14 @@ object Cards {
 
     val totalPieces = spaces(validSpaces).foldLeft(0)((sum, sp) => sum + sp.pieces.totalOf(pieceTypes))
 
-    if (totalPieces <= numToRemove)
-      removeAll()
-    else if (game.isHuman(faction))
-      nextHumanRemoval(numToRemove)
-    else
-      nextBotRemoval(numToRemove)
+    loggingControlChanges {
+      if (totalPieces <= numToRemove)
+        removeAll()
+      else if (game.isHuman(faction))
+        nextHumanRemoval(numToRemove)
+      else
+        nextBotRemoval(numToRemove)
+    }
     spacesUsed
   }
 
@@ -351,10 +355,12 @@ object Cards {
       }
     }
 
-    if (game.isHuman(faction))
-      nextHumanPlacement(numToPlace min game.piecesToPlace.only(pieceTypes).total)
-    else
-      nextBotPlacement(numToPlace, game.availablePieces.only(pieceTypes))
+    loggingControlChanges {
+      if (game.isHuman(faction))
+        nextHumanPlacement(numToPlace min game.piecesToPlace.only(pieceTypes).total)
+      else
+        nextBotPlacement(numToPlace, game.availablePieces.only(pieceTypes))
+    }
     spacesUsed
   }
 
@@ -395,10 +401,12 @@ object Cards {
       }
     }
 
-    if (game.isHuman(faction))
-      nextHumanMove(numToMove)
-    else
-      nextBotMove(numToMove)
+    loggingControlChanges {
+      if (game.isHuman(faction))
+        nextHumanMove(numToMove)
+      else
+        nextBotMove(numToMove)
+    }
   }
 
 
@@ -421,12 +429,16 @@ object Cards {
       (faction: Faction) => {
         val numCasualties = game.casualties.totalOf(USPieces) min 6
         if (game.isHuman(US)) {
-          Human.doAirStrike(Params(event = true))
-          Human.moveUSOutOfPlayToCities(6)
+          loggingControlChanges {
+            Human.doAirStrike(Params(event = true))
+            Human.moveUSOutOfPlayToCities(6)
+          }
         }
         else {
-          US_Bot.airStrikeActivity(Params(event = true))
-          US_Bot.moveOutOfPlayToCities(6)
+          loggingControlChanges {
+            US_Bot.airStrikeActivity(Params(event = true))
+            US_Bot.moveOutOfPlayToCities(6)
+          }
         }
       },
       // shadedEffective()
@@ -464,9 +476,11 @@ object Cards {
       // executeShaded()
       (faction: Faction) => {
         val cambodia = Set(NortheastCambodia, TheFishhook, TheParrotsBeak, Sihanoukville)
-        placePiecesOnMap(NVA, 2, NVAPieces, cambodia)
-        removePiecesToOutOfPlay(US, 2, Set(USTroops), false, spaceNames(game.spaces))
-        decreaseUsAid(6)
+        loggingControlChanges {
+          placePiecesOnMap(NVA, 2, NVAPieces, cambodia)
+          removePiecesToOutOfPlay(US, 2, Set(USTroops), false, spaceNames(game.spaces))
+          decreaseUsAid(6)
+        }
       }
     )),
 
@@ -572,10 +586,12 @@ object Cards {
           onlyIn       = Some(validNames.toSet)
         )
 
-        if (game.isHuman(US))
-          Human.doAirStrike(params)
-        else
-          US_Bot.airStrikeActivity(params)
+        loggingControlChanges {
+          if (game.isHuman(US))
+            Human.doAirStrike(params)
+          else
+            US_Bot.airStrikeActivity(params)
+        }
         degradeTrail(2)
       },
       // shadedEffective()
@@ -1133,16 +1149,14 @@ object Cards {
                   val sp      = game.getSpace(name)
                   val allowed = if (faction == VC) VCGuerrillas :+ VCBase else VCBase::VCGuerrillas
                   val piece   = askPieces(sp.pieces, 1, allowed, Some(s"\nSelecting piece to remove from $name"))
-                  loggingControlChanges {
-                    removePieces(name, piece)
-                    setSupport(name, ActiveOpposition)
-                  }
+                  removePieces(name, piece)
+                  setSupport(name, ActiveOpposition)
                   nextProvince(spaceNum + 1)
               }
             }
           }
 
-          nextProvince(1)          
+          loggingControlChanges(nextProvince(1))
         }
         else {
           // VC Bot
@@ -1156,7 +1170,7 @@ object Cards {
               nextProvince(numRemaining - 1)
             }
           }
-          nextProvince(2)
+          loggingControlChanges(nextProvince(2))
         }
       }
     )),
@@ -1182,8 +1196,10 @@ object Cards {
         else
           (maxOop min 3, 0) // US Bot will only place troops from Out of Play
         
-        placePiecesFromOutOfPlay(DaNang, Pieces(usTroops = numOop))
-        placePieces(DaNang, Pieces(usTroops = numAvail))
+        loggingControlChanges {
+          placePiecesFromOutOfPlay(DaNang, Pieces(usTroops = numOop))
+          placePieces(DaNang, Pieces(usTroops = numAvail))
+        }
       },
       // shadedEffective()
       (faction: Faction) => true,
@@ -1214,14 +1230,16 @@ object Cards {
         if (tunnelSpaces.nonEmpty) {
           val name = askCandidate("\nExecute event in which space: ", spaceNames(tunnelSpaces))
           val params = Params(event = true, singleTarget = Some(name), vulnerableTunnels = true)
-          Human.doAirLift(params)
-          Human.executeSweep(US, params)
-          Human.performAssault(US, name, params)
-
-          val arvnEffective = assaultEffective(ARVN, true)(game.getSpace(name))
-          if (arvnEffective && askYorN(s"\nFollow up with ARVN assault in $name? (y/n) ")) {
-            log(s"\nUS adds a follow up ARVN asault in $name")
-            Human.performAssault(ARVN, name, params)
+          loggingControlChanges {
+            Human.doAirLift(params)
+            Human.executeSweep(US, params)
+            Human.performAssault(US, name, params)
+  
+            val arvnEffective = assaultEffective(ARVN, true)(game.getSpace(name))
+            if (arvnEffective && askYorN(s"\nFollow up with ARVN assault in $name? (y/n) ")) {
+              log(s"\nUS adds a follow up ARVN asault in $name")
+              Human.performAssault(ARVN, name, params)
+            }
           }
         }
         else
@@ -1351,6 +1369,7 @@ object Cards {
       },
       // executeUnshaded()
       (faction: Faction) => {
+        loggingControlChanges {
           var removedSome = false
           for (name <- MekongLoCs) {
             val sp       = game.getSpace(name)
@@ -1364,45 +1383,46 @@ object Cards {
           if (!removedSome)
             log("There are no NVA/VC pieces on Mekong LoCs")
 
-        if (game.isHuman(faction)) {
-          def nextSpace(assaulter: Faction, candidates: List[String]): Unit = if (candidates.nonEmpty) {
-            val choices = (candidates map (n => n -> n)) :+
-                 ("finished" -> "Do not Sweep/Assault any more spaces")
-            askMenu(choices, "\nSelect next space to Sweep/Assault:").head match {
-              case "finished" =>
-              case name =>
-                val params = Params(event = true, free = true, singleTarget = Some(name))
-                Human.initTurnVariables(params)
-                Human.executeSweep(assaulter, params)
-                Human.initTurnVariables(params)
-                Human.performAssault(assaulter, name, params)
-                val addArvnAssault =
-                  assaulter == US &&
-                  assaultEffective(ARVN, false)(game.getSpace(name)) &&
-                  askYorN(s"\nAdd a free ARVN assault in $name? (y/n) ")
-                if (addArvnAssault) {
+          if (game.isHuman(faction)) {
+            def nextSpace(assaulter: Faction, candidates: List[String]): Unit = if (candidates.nonEmpty) {
+              val choices = (candidates map (n => n -> n)) :+
+                    ("finished" -> "Do not Sweep/Assault any more spaces")
+              askMenu(choices, "\nSelect next space to Sweep/Assault:").head match {
+                case "finished" =>
+                case name =>
+                  val params = Params(event = true, free = true, singleTarget = Some(name))
                   Human.initTurnVariables(params)
-                  Human.performAssault(ARVN, name, params)
-                }
-                nextSpace(assaulter, candidates filterNot (_ == name))
+                  Human.executeSweep(assaulter, params)
+                  Human.initTurnVariables(params)
+                  Human.performAssault(assaulter, name, params)
+                  val addArvnAssault =
+                    assaulter == US &&
+                    assaultEffective(ARVN, false)(game.getSpace(name)) &&
+                    askYorN(s"\nAdd a free ARVN assault in $name? (y/n) ")
+                  if (addArvnAssault) {
+                    Human.initTurnVariables(params)
+                    Human.performAssault(ARVN, name, params)
+                  }
+                  nextSpace(assaulter, candidates filterNot (_ == name))
+              }
             }
+            log("\nSweep/Assault each Lowland Province touch Mekong")
+            log(separator())
+            val choices = List(US, ARVN).map(f => f -> f.toString)
+            val assaulter = askMenu(choices, "Sweep/Assault using which faction:").head
+            nextSpace(assaulter, LowlandTouchingMekong)
           }
-          log("\nSweep/Assault each Lowland Province touch Mekong")
-          log(separator())
-          val choices = List(US, ARVN).map(f => f -> f.toString)
-          val assaulter = askMenu(choices, "Sweep/Assault using which faction:").head
-          nextSpace(assaulter, LowlandTouchingMekong)
-        }
-        else {
-          // Only ARVN Bot will execute this command
-          log("\nSweep/Assault each Lowland Province touch Mekong")
-          log(separator())
-          for (name <- LowlandTouchingMekong if game.getSpace(name).pieces.has(InsurgentPieces)) {
-            val params = Params(event = true, free = true, singleTarget = Some(name))
-            Bot.initTurnVariables()  // Treat each space as a fresh turn
-            ARVN_Bot.sweepOp(params, 1)
-            Bot.initTurnVariables()  // Treat each space as a fresh turn
-            Bot.performAssault(ARVN, name, params)
+          else {
+            // Only ARVN Bot will execute this command
+            log("\nSweep/Assault each Lowland Province touch Mekong")
+            log(separator())
+            for (name <- LowlandTouchingMekong if game.getSpace(name).pieces.has(InsurgentPieces)) {
+              val params = Params(event = true, free = true, singleTarget = Some(name))
+              Bot.initTurnVariables()  // Treat each space as a fresh turn
+              ARVN_Bot.sweepOp(params, 1)
+              Bot.initTurnVariables()  // Treat each space as a fresh turn
+              Bot.performAssault(ARVN, name, params)
+            }
           }
         }
       },
@@ -1414,8 +1434,10 @@ object Cards {
         val numAvailGs = game.availablePieces.totalOf(VCGuerrillas_U) min maxGs
 
         if (numAvailGs == maxGs) {
-          for (name <- MekongLoCs)
-            placePieces(name, Pieces(vcGuerrillas_U = 2))
+          loggingControlChanges {
+            for (name <- MekongLoCs)
+              placePieces(name, Pieces(vcGuerrillas_U = 2))
+          }
         }
         else if (game.isHuman(faction)) {
           def nextLoc(candidates: List[String]): Unit = if (candidates.nonEmpty) {
@@ -1437,7 +1459,9 @@ object Cards {
             placePieces(sp.name, Pieces(vcGuerrillas_U = num))
             nextLoC(numRemaining - num, candidates filterNot (_.name == sp.name))
           }
-          nextLoC(numAvailGs, spaces(MekongLoCs))
+          loggingControlChanges {
+            nextLoC(numAvailGs, spaces(MekongLoCs))
+          }
         }
 
         // Place sabotage markers where VC > COIN
@@ -1468,11 +1492,13 @@ object Cards {
       // executeUnshaded()
       (faction: Faction) => {
         //  Human only
-        if (game.piecesToPlace.has(Irregulars_U))
-          placePiecesOnMap(US, 3, Set(Irregulars_U), LaosCambodia)
-        else
-          log("There are no Irregulars that can be placed.")
-        Human.doAirStrike(Params(event = true, free = true))
+        loggingControlChanges {
+          if (game.piecesToPlace.has(Irregulars_U))
+            placePiecesOnMap(US, 3, Set(Irregulars_U), LaosCambodia)
+          else
+            log("There are no Irregulars that can be placed.")
+          Human.doAirStrike(Params(event = true, free = true))
+        }
       },
       // shadedEffective()
       (faction: Faction) => game.totalOnMap(_.pieces.totalOf(Irregulars)) > 0,
@@ -1710,7 +1736,9 @@ object Cards {
               designated      = Some(names),
               maxHits         = Some(6),
               maxHitsPerSpace = Some(2)))
-          Human.doAirStrike(params)
+          loggingControlChanges {
+            Human.doAirStrike(params)
+          }
         }
         else {  // Bot
           def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
@@ -1731,7 +1759,9 @@ object Cards {
               designated      = Some(names),
               maxHits         = Some(6),
               maxHitsPerSpace = Some(2)))
-          US_Bot.airStrikeActivity(params)
+          loggingControlChanges  {
+            US_Bot.airStrikeActivity(params)
+          }
         }
       },
       // shadedEffective()

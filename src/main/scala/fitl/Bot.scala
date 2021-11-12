@@ -2088,7 +2088,7 @@ object Bot {
       case Sweep                   => getSweepOrigins(destName)
       case Patrol                  => getPatrolOrigins(destName)
       case Transport               => getTransportOrigins(destName)
-      case AirLift                 => Set.empty
+      case AirLift                 => Set.empty // See selectAirLiftOrigin
       case March if faction == NVA => NVA_Bot.getNVAAdjacent(destName)
       case March                   => getAdjacent(destName)
     }

@@ -121,6 +121,13 @@ object Cards {
     sp.pieces.has(Irregulars) &&
     sp.pieces.has(NVABase::VCBase::InsurgentForces)
 
+  val isUSSNewJerseyShadedSpace = (sp: Space) =>
+    sp.isProvince &&
+    sp.coastal    &&
+    sp.pieces.has(USTroops) &&
+    sp.population > 0 &&
+    sp.support != ActiveOpposition
+
   // Remove the given number pieces from the map.
   // US pieces are removed to casualties unless available is specified
   // all other pieces are removed to available.
@@ -561,8 +568,7 @@ object Cards {
         val params = Params(
           event        = true,
           maxSpaces    = Some(1),
-          strikeHits   = Some(6),
-          strikeNoCoin = true,
+          strikeParams = AirStrikeParams(maxHits = Some(6), noCoin = true),
           onlyIn       = Some(validNames.toSet)
         )
 
@@ -1509,7 +1515,7 @@ object Cards {
 
         loggingControlChanges {
           if (validSpaces.isEmpty)
-            log("There are no spaces that qualify for the event")
+            log("There are no spaces that meet the event criteria")
           else if (game.isHuman(faction))
             removePiecesFromMap(faction, 3, VCTypes, false, spaceNames(validSpaces))
           else {
@@ -1530,7 +1536,7 @@ object Cards {
 
         loggingPointsChanges {
           if (validSpaces.isEmpty)
-            log("There are no spaces that qualify for the event")
+            log("There are no spaces that meet the event criteria")
           else if (game.isHuman(faction)) {
             def nextSpace(count: Int, candidates: List[String]): Unit = if (count <= 2 && candidates.nonEmpty) {
               val name = askCandidate(s"Select ${ordinal(count)} space:", candidates)
@@ -1684,13 +1690,81 @@ object Cards {
               NVA  -> (NotExecuted -> Shaded),
               VC   -> (Critical    -> Shaded)),
       // unshadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => game.spaces exists { sp => sp.coastal && sp.pieces.hasExposedInsurgents },
       // executeUnshaded()
-      (faction: Faction) => unshadedNotYet(),
+      (faction: Faction) => {
+        val candidates = game.spaces filter { sp => sp.coastal && sp.pieces.hasExposedInsurgents }
+
+        if (candidates.isEmpty)
+          log("There are no coastal spaces with exposed Insurgent pieces")
+        else if (game.isHuman(faction)) {
+          val num = askInt("Strike in how many coastal spaces", 1, candidates.size min 3)
+          val choices = candidates map (sp => sp.name -> sp.name)
+          val names = askMenu(choices, "Select coastal spaces to air strike: ", num).toSet
+          val params = Params(
+            event        = true,
+            free         = true,
+            strikeParams = AirStrikeParams(
+              canDegradeTrail = false,
+              noCoin          = true,
+              designated      = Some(names),
+              maxHits         = Some(6),
+              maxHitsPerSpace = Some(2)))
+          Human.doAirStrike(params)
+        }
+        else {  // Bot
+          def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
+            if (numRemaining > 0 && candidates.nonEmpty) {
+              val sp = Bot.pickSpaceRemoveReplace(faction)(candidates)
+              sp.name::nextSpace(numRemaining - 1, candidates filterNot (_.name == sp.name))
+            }
+            else
+              Nil
+          }
+          val names = nextSpace(3, candidates).toSet
+          val params = Params(
+            event        = true,
+            free         = true,
+            strikeParams = AirStrikeParams(
+              canDegradeTrail = false,
+              noCoin          = true,
+              designated      = Some(names),
+              maxHits         = Some(6),
+              maxHitsPerSpace = Some(2)))
+          US_Bot.airStrikeActivity(params)
+        }
+      },
       // shadedEffective()
-      (faction: Faction) => false,
+      (faction: Faction) => game.nonLocSpaces exists isUSSNewJerseyShadedSpace,
       // executeShaded()
-      (faction: Faction) => shadedNotYet()
+      (faction: Faction) => {
+        val candidates = game.nonLocSpaces filter isUSSNewJerseyShadedSpace
+
+        if (candidates.isEmpty)
+          log("There are no spaces that meet the event criteria")
+        else {
+          val names = if (game.isHuman(faction)) {
+            val choices = candidates map (sp => sp.name -> sp.name)
+            askMenu(choices, "Select coastal Provinces:", 2 min choices.size)
+          }
+          else {
+            def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
+              if  (numRemaining >  0 && candidates.nonEmpty) {
+                val sp = VC_Bot.pickSpaceTowardActiveOpposition(candidates)
+                sp.name::nextSpace(numRemaining - 1, candidates filterNot (_.name == sp.name))
+              }
+              else
+                Nil
+            }
+            nextSpace(2, candidates)
+          }
+
+          loggingPointsChanges {
+            for (name <- names) 
+              decreaseSupport(name, 2)
+          }
+        }
+      }
     )),
 
     // ------------------------------------------------------------------------

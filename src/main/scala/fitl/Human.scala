@@ -107,7 +107,7 @@ object Human {
   //  Then if no troops/guerrillas remain bases can be removed
   //  If `canRevealTunnel` is true, and no other Insurgent pieces
   //  remain, then the tunnel marker is removed.
-  //  Return the number of pieces removed.
+  //  Return the pieces removed.
   def killExposedInsurgents(name: String, maxRemoval: Int, canRevealTunnel: Boolean, vulnerableTunnels: Boolean = false): Pieces = {
     val baseTargets = if (vulnerableTunnels) InsurgentBases else InsurgentNonTunnels
     loggingControlChanges {
@@ -1132,7 +1132,7 @@ object Human {
     val migs_shaded = capabilityInPlay(MiGs_Shaded) && !capabilityInPlay(TopGun_Unshaded)
     val aaa_shaded = capabilityInPlay(AAA_Shaded)
     val arclight_unshaded = capabilityInPlay(ArcLight_Unshaded)
-    val maxHits     = params.strikeHits getOrElse d6
+    val maxHits     = params.strikeParams.maxHits getOrElse d6
     val maxSpaces = if      (params.maxSpaces.nonEmpty) params.maxSpaces.get
                     else if (momentumInPlay(Mo_TyphoonKate)) 1
                     else if (game.inMonsoon) 2
@@ -1144,17 +1144,29 @@ object Human {
                       (!momentumInPlay(Mo_WildWeasels) ||
                       isEventMoreRecentThan(LaserGuidedBombs_Shaded.name, Mo_WildWeasels))
     val maxPieces = if (wildWeasels) 1 else if (laserShaded) 2 else maxHits
-    var strikeSpaces = Set.empty[String]
-    var removedSpaces = Set.empty[String] // strike spaces where pieces have been removed
+    var strikeSpaces = params.strikeParams.designated getOrElse Set.empty[String]
+    // Keeps track of number of kill per space
+    var spaceKills: Map[String, Int] = Map.empty.withDefaultValue(0)
     var totalRemoved = 0
     var arclight_unshaded_used = false
     def isCandidate(sp: Space) = {
+      val canTarget = (sp.pieces.has(CoinPieces) ||
+                      params.strikeParams.noCoin ||
+                      (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
       params.spaceAllowed(sp.name)   &&   // Event may limit to certain spaces
       !strikeSpaces(sp.name)         &&
       sp.pieces.hasExposedInsurgents &&
-      (sp.pieces.has(CoinPieces) || params.strikeNoCoin || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
+      canTarget
     }
 
+    def isOverQuota(name: String) = params.strikeParams.maxHitsPerSpace match {
+      case Some(n) => spaceKills(name) >= n
+      case None    => false
+    }
+    def isStrikeCandidate(name: String) = {
+      val sp = game.getSpace(name)
+      sp.pieces.hasExposedInsurgents && !isOverQuota(name)
+    }
     def nextAirStrikeAction(hitsRemaining: Int, hasDegraded: Boolean): Unit = {
       if (momentumInPlay(Mo_WildWeasels) && (hasDegraded || totalRemoved > 0)) {
         println(s"\nNo more Air Strike actions allowed [Momentum: $Mo_WildWeasels")
@@ -1163,10 +1175,17 @@ object Human {
       else {
         val StrikeOpt  = "strike:(.*)".r
         val selectCandidates = spaceNames(game.spaces filter isCandidate)
-        val strikeCandidates = (strikeSpaces -- removedSpaces).toList filter (name => game.getSpace(name).pieces.hasExposedInsurgents)
-        val canSelect  = hitsRemaining > 0 && strikeSpaces.size < maxSpaces && selectCandidates.nonEmpty
+        val strikeCandidates = strikeSpaces.toList filter isStrikeCandidate
+        val canSelect  = params.strikeParams.designated.isEmpty &&
+                         hitsRemaining > 0 &&
+                         strikeSpaces.size < maxSpaces &&
+                         selectCandidates.nonEmpty
         val minTrail   = if (aaa_shaded) 2 else 1
-        val canDegrade = game.trail > minTrail && hitsRemaining > 1 && !hasDegraded && !oriskany
+        val canDegrade = params.strikeParams.canDegradeTrail &&
+                         !oriskany &&
+                         !hasDegraded &&
+                         game.trail > minTrail && 
+                         hitsRemaining > 1
         val topChoices = List(
           choice(canSelect,  "select",  "Select a space to Strike"),
           choice(canDegrade, "degrade", "Degrade the trail")
@@ -1216,40 +1235,25 @@ object Human {
         // Returns number of pieces removed
         def performStrike(name: String): Int = {
           val pieces       = game.getSpace(name).pieces
-          val maxNumber    = numExposedInsurgents(pieces) min hitsRemaining
+          val hasCoin      = pieces.has(CoinPieces)
+          val paramMax     = params.strikeParams.maxHitsPerSpace match {
+            case Some(n) =>  n - spaceKills(name)
+            case None    =>  NO_LIMIT
+          }
+          val maxNumber    = numExposedInsurgents(pieces) min hitsRemaining min paramMax
           val num          = askInt(s"\nRemove how many pieces from $name", 1, maxNumber)
-          val killedPieces = killExposedInsurgents(name, num, canRevealTunnel = false, params.vulnerableTunnels)
-          val sp           = game.getSpace(name)
           
           log(s"\nUS Air Strikes $name")
           log(separator())
-          removeToAvailable(name, killedPieces)
-          if (!sp.pieces.has(CoinPieces) && arclight_unshaded)
+          killExposedInsurgents(name, num, canRevealTunnel = false, params.vulnerableTunnels)
+          if (!params.strikeParams.noCoin && !hasCoin && arclight_unshaded)
             arclight_unshaded_used = true
 
-          if (num > 0) {
-            val numShift = if (sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition)
-              0
-            else if (num > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
-              log(s"Shift 2 levels toward Active Opposition [$ArcLight_Shaded]")
-              2
-            }
-            else if (num == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded)) {
-              log(s"No shift toward Active Opposition [$LaserGuidedBombs_Unshaded]")
-              0
-            }
-            else {
-              log(s"Shift 1 level toward Active Opposition")
-              1
-            }
-            decreaseSupport(name, numShift)
-          }
-          removedSpaces += name
+          spaceKills += name -> (spaceKills(name) + num)
           num
         }
 
         // Show nextAirStrikeAction menu
-
         val strikeChoices = if (hitsRemaining > 0 && totalRemoved < maxPieces)
           strikeCandidates map (name => s"strike:$name" -> s"Remove insurgents in $name")
         else
@@ -1257,11 +1261,13 @@ object Human {
 
         val choices = (topChoices:::strikeChoices) :+ ("finished" -> "Finished with Air Strike activity")
 
-        println(s"\n${amountOf(strikeSpaces.size, "space")} of $maxSpaces selected for Air Strike")
-        println(separator())
-        wrap("", strikeSpaces.toList, showNone = false) foreach println
+        if (params.strikeParams.designated.isEmpty) {
+          println(s"\n${amountOf(strikeSpaces.size, "space")} of $maxSpaces selected for Air Strike")
+          println(separator())
+          wrap("", strikeSpaces.toList, showNone = false) foreach println
+        }
 
-        if (!oriskany) {
+        if (params.strikeParams.canDegradeTrail && !oriskany) {
           if (hasDegraded)
             println("\nYou have already degraded the trail")
           else
@@ -1297,6 +1303,35 @@ object Human {
       }
     }
 
+    def shiftSupportInStrikeSpaces(): Unit = {
+      var shiftedOnce = false
+      for {
+        name <- strikeSpaces
+        sp = game.getSpace(name)
+        if !(sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition || spaceKills(name) == 0)
+      } {
+        if (!shiftedOnce) {
+          log("\nShift support in strike spaces toward Active Opposition")
+          log(separator())
+          shiftedOnce = true
+        }
+        val numKills = spaceKills(name)
+        val numShifts = if (numKills > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
+            log(s"$name: Shift 2 levels toward Active Opposition [$ArcLight_Shaded]")
+            2
+        }
+        else if (numKills == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded)) {
+          log(s"$name: No shift toward Active Opposition [$LaserGuidedBombs_Unshaded]")
+          0
+        }
+        else {
+          log(s"$name: Shift 1 level toward Active Opposition")
+          1
+        }
+        decreaseSupport(name, numShifts)
+      }
+    }
+
     val notes = List(
       noteIf(game.inMonsoon, "Max 2 spaces in Monsoon"),
       noteIf(momentumInPlay(Mo_TyphoonKate), s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
@@ -1318,12 +1353,15 @@ object Human {
     // ------------------------------------
     if (!params.event)
       logSAChoice(US, AirStrike, notes)
-    if (params.strikeHits.nonEmpty)
+    if (params.strikeParams.maxHits.nonEmpty)
       log(s"Number of hits = $maxHits")
     else
       log(s"Die roll to determine the number of hits = $maxHits")
 
-    nextAirStrikeAction(maxHits, false)
+    loggingControlChanges {
+      nextAirStrikeAction(maxHits, false)
+      shiftSupportInStrikeSpaces()
+    }
   }
 
   // ARVN special activity

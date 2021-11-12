@@ -1540,6 +1540,19 @@ object FireInTheLake {
   case object Tax        extends SpecialActivity("Tax")
   case object Subvert    extends SpecialActivity("Subvert")
 
+  // Air Strike params used by Events that carry out
+  // air strikes with special rules.
+  case class AirStrikeParams(
+    maxHits: Option[Int]            = None,  // Overrides d6 roll for hits
+    maxHitsPerSpace: Option[Int]    = None,
+    canDegradeTrail: Boolean        = true,
+    noCoin: Boolean                 = false,     // No Coin pieces needed in space
+    designated: Option[Set[String]] = None  // Strike in these spaces
+  ) {
+    def spaceAllowed(name: String) = {
+      (designated map (allowed =>  allowed.contains(name)) getOrElse true)
+    }
+  }
   // Parameters used when executing operations and special activities
   // This is used by both the Humand and Bot objects.
   case class Params(
@@ -1549,9 +1562,8 @@ object FireInTheLake {
     assaultRemovesTwoExtra: Boolean = false, // M48 Patton (unshaded)
     onlyIn: Option[Set[String]]     = None,  // Limit command to the given spaces
     event: Boolean                  = false,
-    strikeHits: Option[Int]         = None,
     singleTarget: Option[String]    = None,  // Airlift/Sweep into this space only (used by events)
-    strikeNoCoin: Boolean           = false,
+    strikeParams: AirStrikeParams   = AirStrikeParams(),
     vulnerableTunnels: Boolean      = false  // Used by events
   ) {
     val limOpOnly = maxSpaces == Some(1)
@@ -2312,9 +2324,9 @@ object FireInTheLake {
   }
 
 
-  def getSaveFileNumber(filename: String): Option[Int] = {
+  def getSaveFileNumber(filename: Pathname): Option[Int] = {
     val SAVE_FILE = """save-(\d+)""".r
-    filename match {
+    filename.basename.toString match {
       case SAVE_FILE(n) => Some(n.toInt)
       case _            => None
     }
@@ -2328,8 +2340,7 @@ object FireInTheLake {
     val dir = gamesDir/name
     if (dir.isDirectory) {
       val entries = dir.children(withDirectory = false) flatMap { child =>
-        val filename = child.toString
-        getSaveFileNumber(filename)
+        getSaveFileNumber(child)
       }
       entries.sortBy(num => -num).headOption
     }
@@ -3544,13 +3555,8 @@ object FireInTheLake {
     loggingPointsChanges {
       val sp = game.getSpace(name)
       if (!sp.isLoC && sp.population > 0) {
-        val newSupport = try SupportType(sp.support.value + num)
-        catch {
-          case _: IllegalArgumentException =>
-            throw new IllegalStateException(s"Cannot increase support from ${sp.support} by $num levels")
-        }
-
-        val updated = sp.copy(support = newSupport)
+        val newValue = sp.support.value + num min ActiveSupport.value
+        val updated = sp.copy(support = SupportType(newValue))
         game = game.updateSpace(updated)
         logSupportChange(sp, updated)
       }
@@ -3560,14 +3566,10 @@ object FireInTheLake {
   def decreaseSupport(name: String, num: Int): Unit = if (num > 0) {
     loggingPointsChanges {
       val sp = game.getSpace(name)
-      if (sp.population > 0) {
-        val newSupport = try SupportType(sp.support.value - num)
-        catch {
-          case _: IllegalArgumentException =>
-            throw new IllegalStateException(s"Cannot decrease support from ${sp.support} by $num levels")
-        }
+      if (!sp.isLoC && sp.population > 0) {
+        val newValue = (sp.support.value - num) max ActiveOpposition.value
+        val updated = sp.copy(support = SupportType(newValue))
 
-        val updated = sp.copy(support = newSupport)
         game = game.updateSpace(updated)
         logSupportChange(sp, updated)
       }
@@ -4639,7 +4641,10 @@ object FireInTheLake {
         indexMap(index) :: nextChoice(num + 1, remain)
       }
     }
-    nextChoice(1, ListMap(items:_*))
+    if (items.size <= numChoices)
+      items map (_._1)
+    else
+      nextChoice(1, ListMap(items:_*))
   }
 
   // Present a numbered menu of choices
@@ -4899,7 +4904,7 @@ object FireInTheLake {
   def rollback(input: Option[String]): Unit = {
 
     try {
-      val pages = game.history.reverse.sliding(25, 25).toList
+      val pages = game.history.reverse.drop(1).sliding(25, 25).toList
       val firstPage = 0
       val lastPage  = pages.size -1
       val PAGE_UP   = -1
@@ -4954,8 +4959,11 @@ object FireInTheLake {
   // those that follow that number.
   def removeSaveFiles(name: String, num: Int): Unit = {
     import Pathname.glob
-    val turnFiles = glob(gamesDir/name/"save-*")
-    turnFiles filter (getSaveFileNumber(_) exists (_ >= num)) foreach (_.delete())
+    for {
+      path    <- glob(gamesDir/name/"save-*")
+      saveNum <- getSaveFileNumber(path)
+              if saveNum >= num
+    } path.delete()
   }
 
 

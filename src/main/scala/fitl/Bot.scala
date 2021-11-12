@@ -3459,7 +3459,7 @@ object Bot {
         val aaa_shaded = capabilityInPlay(AAA_Shaded)
         val arclight_unshaded = capabilityInPlay(ArcLight_Unshaded)
         val minTrail   = if (aaa_shaded) 2 else 1
-        val maxHits       = params.strikeHits getOrElse d6
+        val maxHits       = params.strikeParams.maxHits getOrElse d6
         var hitsRemaining = maxHits
         val wildWeasels = momentumInPlay(Mo_WildWeasels) &&
                         (!capabilityInPlay(LaserGuidedBombs_Shaded) ||
@@ -3475,20 +3475,25 @@ object Bot {
                         else 6
         val maxPieces = if (wildWeasels) 1 else if (laserShaded) 2 else maxHits
         var strikeSpaces = Set.empty[String]
+        var spaceKills: Map[String, Int] = Map.empty.withDefaultValue(0)
         var arclight_unshaded_used = false
         var totalRemoved = 0
 
         def logSelectAirStrike(): Unit = if (hitsRemaining == maxHits) {
           if (!params.event)
             logSAChoice(US, AirStrike)
-          if (params.strikeHits.nonEmpty)
+          if (params.strikeParams.maxHits.nonEmpty)
             log(s"Number of hits = $maxHits")
           else
             log(s"Die roll to determine the number of hits = $maxHits")
         }
         // Degrade the trail if possible
         def degradeTheTrail(): Unit = {
-          if (hitsRemaining > 1 && !oriskany && (!aaa_shaded || game.trail > minTrail)) {
+          val canDegrade = params.strikeParams.canDegradeTrail &&
+                           !oriskany &&
+                           hitsRemaining > 1 &&
+                           game.trail > minTrail
+          if (canDegrade) {
             val die    = d6
             val success = !capabilityInPlay(TopGun_Shaded) || die > 3
             val numBoxes = {
@@ -3538,17 +3543,24 @@ object Bot {
         }
 
         def strikeASpace(): Unit = {
-          val isCandidate = (sp: Space) =>
+          val isCandidate = (sp: Space) => {
+            val canTarget = (sp.pieces.has(CoinPieces) ||
+                            params.strikeParams.noCoin ||
+                            (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
             params.spaceAllowed(sp.name)   &&
+            params.strikeParams.spaceAllowed(sp.name) &&
             !strikeSpaces(sp.name)         &&
             sp.pieces.hasExposedInsurgents &&
-            (sp.pieces.has(CoinPieces) || params.strikeNoCoin || (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
+            canTarget
+          }
 
           val candidates = game.spaces filter isCandidate
 
           if (hitsRemaining > 0 && strikeSpaces.size < maxSpaces && totalRemoved < maxPieces && candidates.nonEmpty) {
             val sp  = pickSpaceAirStrike(candidates)
-            val num = if (laserUnshaded && sp.support != ActiveOpposition)  1
+            val num = if (params.strikeParams.maxHitsPerSpace.nonEmpty)
+                        params.strikeParams.maxHitsPerSpace.get min hitsRemaining
+                 else if (laserUnshaded && sp.support != ActiveOpposition)  1
                  else if (arcLightShaded && sp.support > PassiveOpposition) 1
                  else hitsRemaining
             val (killedPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, hitsRemaining)
@@ -3560,39 +3572,55 @@ object Bot {
             if (!sp.pieces.has(CoinPieces) && arclight_unshaded)
               arclight_unshaded_used = true
 
-            if (killedPieces.total > 0) {
-              val numShift = if (sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition)
-                0
-              else if (killedPieces.total > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
-                log(s"Shift 2 levels toward Active Opposition [$ArcLight_Shaded]")
-                2
-              }
-              else if (killedPieces.total == 1 && laserUnshaded) {
-                log(s"No shift toward Active Opposition [$LaserGuidedBombs_Unshaded]")
-                0
-              }
-              else {
-                log(s"Shift 1 level toward Active Opposition")
-                1
-              }
-              decreaseSupport(sp.name, numShift)
-            }
-
             hitsRemaining -= killedPieces.total
             totalRemoved += killedPieces.total
             strikeSpaces += sp.name
+            spaceKills += sp.name -> killedPieces.total
             strikeASpace()
+          }
+        }
+
+        def shiftSupportInStrikeSpaces(): Unit = {
+          var shiftedOnce = false
+          for {
+            name <- strikeSpaces
+            sp = game.getSpace(name)
+            if !(sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition)
+          } {
+            if (!shiftedOnce) {
+              log("\nShift support in strike spaces toward Active Opposition")
+              log(separator())
+              shiftedOnce = true
+            }
+            val numKills = spaceKills(name)
+            val numShifts = if (numKills > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
+                log(s"$name: Shift 2 levels toward Active Opposition [$ArcLight_Shaded]")
+                2
+            }
+            else if (numKills == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded)) {
+              log(s"$name: No shift toward Active Opposition [$LaserGuidedBombs_Unshaded]")
+              0
+            }
+            else {
+              log(s"$name: Shift 1 level toward Active Opposition")
+              1
+            }
+            decreaseSupport(name, numShifts)
           }
         }
 
         // Start of Air Lift Special Activity
         // ------------------------------------
         degradeTheTrail()
-        if (!momentumInPlay(Mo_WildWeasels) || hitsRemaining == maxHits)
-          strikeASpace()
-
-        if (hitsRemaining < maxHits)
-          logEndSA(US, AirStrike)
+        loggingControlChanges {
+          if (!momentumInPlay(Mo_WildWeasels) || hitsRemaining == maxHits)
+            strikeASpace()
+  
+          if (hitsRemaining < maxHits) {
+            shiftSupportInStrikeSpaces()
+            logEndSA(US, AirStrike)
+          }
+        }
         hitsRemaining < maxHits  // True if we did an airstrike action
       }
     }

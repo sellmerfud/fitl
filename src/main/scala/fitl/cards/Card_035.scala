@@ -41,6 +41,16 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Bridge busters: Degrade the Trail by 3 boxes.
+//
+// Shaded Text
+// Stubborn targets: Improve Trail by 1 box. Then add three times
+// Trail value to NVA Resources.
+//
+// Tips
+// As an example of Degrading the Trail by 3 boxes, Trail at "4" would go to "1".
+
 object Card_035 extends EventCard(35, "Thanh Hoa",
   DualEvent,
   List(NVA, US, ARVN, VC),
@@ -50,9 +60,14 @@ object Card_035 extends EventCard(35, "Thanh Hoa",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.trail > TrailMin
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = degradeTrail(3)
+
+  def shadedEffective(faction: Faction): Boolean = game.trail < TrailMax
+
+  def executeShaded(faction: Faction): Unit = {
+    improveTrail(1)
+    increaseResources(NVA, game.trail * 3)
+  }
 }

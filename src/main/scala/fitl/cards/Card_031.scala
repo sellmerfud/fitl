@@ -41,6 +41,22 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// NVA CAPABILITY
+//
+// Unshaded Text
+//
+// Assets to protection from close air attack:
+// Rally that Improves Trail may select 1 space only.
+//
+// Shaded Text
+// Point air defense of logistic hubs:
+// Air Strike does not Degrade Trail below 2.
+//
+// Tips
+// For the unshaded Capability, the NVA may still Rally in more
+// than 1 space, but, if they do so, then that Rally Operation
+// may not also Improve the Trail.
+
 object Card_031 extends EventCard(31, "AAA",
   DualEvent,
   List(NVA, US, ARVN, VC),
@@ -50,9 +66,11 @@ object Card_031 extends EventCard(31, "AAA",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = playCapability(AAA_Unshaded)
+
+  def shadedEffective(faction: Faction): Boolean = true
+
+  def executeShaded(faction: Faction): Unit = playCapability(AAA_Shaded)
 }

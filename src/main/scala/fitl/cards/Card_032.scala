@@ -41,6 +41,17 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// NVA CAPABILITY
+//
+// Unshaded Text
+// US M-107 175mm counterbattery: NVA Bombard max 1 space.
+//
+// Shaded Text
+// Soviet M-46 130mm artillery: NVA Bombard max 3 spaces.
+//
+// Tips
+// Other restrictions on Bombard apply normally (4.4.2).
+
 object Card_032 extends EventCard(32, "Long Range Guns",
   DualEvent,
   List(NVA, US, ARVN, VC),
@@ -50,9 +61,11 @@ object Card_032 extends EventCard(32, "Long Range Guns",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = playCapability(LongRangeGuns_Unshaded)
+
+  def shadedEffective(faction: Faction): Boolean = true
+
+  def executeShaded(faction: Faction): Unit = playCapability(LongRangeGuns_Shaded)
 }

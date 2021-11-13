@@ -41,6 +41,18 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// A Shau Valley campaign: Move 4 US Troops from any spaces to a Highland.
+// Remove 1 NVA or VC Base there, even if Tunneled.
+//
+// Shaded Text
+// Prepared defenses: Place a Tunnel on an NVA or VC Highland Base.
+// 3 US Troops there to Casualties.
+//
+// Tips
+// "A Highland" means 1 Highland space. "Highland Base" means a Base in a Highland space.
+// This is one of just a few Events that can force removal of Tunneled Bases (5.1.1).
+
 object Card_036 extends EventCard(36, "Hamburger Hill",
   DualEvent,
   List(NVA, US, VC, ARVN),

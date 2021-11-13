@@ -41,6 +41,22 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// NVA CAPABILITY
+//
+// Unshaded Text
+// Fiddly Soviet gear: When Air Strike Degrades Trail,
+// US removes 1 NVA piece outside the South.
+//
+// Shaded Text
+// SAMs guard infrastructure: NVA Rally Improves Trail 2 boxes
+// not 1 (unshaded Wild Weasels remove).
+//
+// Tips
+// "Piece" may include an unTunneled Base (1.4, 5.1.1).
+// "Outside the South" includes North Vietnam (1.3.5).
+// Unshaded "Wild Weasels" (Event card #5) can remove shaded
+// "SA-2s" only at the moment that "Wild Weasels" is executed.
+
 object Card_034 extends EventCard(34, "SA-2s",
   DualEvent,
   List(NVA, US, ARVN, VC),
@@ -50,9 +66,11 @@ object Card_034 extends EventCard(34, "SA-2s",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = playCapability(SA2s_Unshaded)
+
+  def shadedEffective(faction: Faction): Boolean = true
+
+  def executeShaded(faction: Faction): Unit = playCapability(SA2s_Shaded)
 }

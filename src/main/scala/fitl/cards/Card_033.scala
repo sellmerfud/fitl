@@ -41,6 +41,19 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// NVA CAPABILITY
+//
+// Unshaded Text
+// Expensive interceptors: NVA Resources –6 each Reset.
+//
+// Shaded Text
+// High US loss ratio: Unless unshaded Top Gun, whenever Air Strike
+// Degrades Trail, US removes 1 Available Troop to Casualties.
+//
+// Tips
+// The unshaded "Top Gun" Capability can either block shaded "MiGs" 
+// from being executed or remove it once it has been executed.
+
 object Card_033 extends EventCard(33, "MiGs",
   DualEvent,
   List(NVA, US, ARVN, VC),
@@ -50,8 +63,9 @@ object Card_033 extends EventCard(33, "MiGs",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.isHuman(NVA)
+
+  def executeUnshaded(faction: Faction): Unit = playCapability(MiGs_Unshaded)
 
   // Top Gun Blocks the shaded ability
   def shadedEffective(faction: Faction): Boolean = !capabilityInPlay(TopGun_Unshaded)

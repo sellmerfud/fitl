@@ -6349,7 +6349,7 @@ object Bot {
 
 
   def isFirstOnNextCard(faction: Faction) = {
-    val nextCard = deck(game.onDeckCard)
+    val nextCard = eventDeck(game.onDeckCard)
     !nextCard.isCoup && faction == nextCard.factionOrder.head
   }
 
@@ -6357,21 +6357,21 @@ object Bot {
     // Event is Critical and Effective?
     ActionEntry(Event, "Current Event is Critical and Effective?",
     (faction) => {
-      val card = deck(game.currentCard)
+      val card = eventDeck(game.currentCard)
       card.botPriority(faction) == Critical && card.eventEffective(faction)
     }),
 
     // Event is critical for Next eligible faction?
     ActionEntry(OpOnly, "Next Eligible could choose Critical Event?",
     (faction) => {
-      val card = deck(game.currentCard)
+      val card = eventDeck(game.currentCard)
       game.followingFaction map (next => card.botPriority(next) == Critical) getOrElse false
     }),
 
     // Is first to act on next csrd and the event is Critical?
     ActionEntry(Pass, "First choice on upcoming Critical Event?",
       (faction) => {
-      val nextCard = deck(game.onDeckCard)
+      val nextCard = eventDeck(game.onDeckCard)
 
       isFirstOnNextCard(faction) && nextCard.botPriority(faction) == Critical
     }),
@@ -6385,8 +6385,8 @@ object Bot {
     // cannot execute current Critical event?
     ActionEntry(Pass, "Will be 1st Eligible on upcoming Critical Event and cannot execute current Critical Event?",
       (faction) => {
-      val card     = deck(game.currentCard)
-      val nextCard = deck(game.onDeckCard)
+      val card     = eventDeck(game.currentCard)
+      val nextCard = eventDeck(game.onDeckCard)
 
       isFirstOnNextCard(faction) &&
       nextCard.botPriority(faction) == Critical &&
@@ -6398,7 +6398,7 @@ object Bot {
     // Event is Critical or Performed and it is Effective
     ActionEntry(Event, "1st Eligibile chose Op+SA and Event is Performed/Critical and Effective?",
       (faction) => {
-      val card     = deck(game.currentCard)
+      val card     = eventDeck(game.currentCard)
       val priority = card.botPriority(faction)
 
       game.sequence.canDo(Event) &&
@@ -6454,8 +6454,9 @@ object Bot {
   }
 
   def executeEvent(faction: Faction, card: EventCard): Unit = {
-      if (card.dual) {
-        card.eventType(faction) match {
+    card.eventType match {
+      case DualEvent =>
+        card.eventPart(faction) match {
           case Unshaded =>
             log(s"\n$faction executes the unshaded Event: ${card.name}")
             log(separator())
@@ -6465,12 +6466,12 @@ object Bot {
             log(separator())
             card.executeShaded(faction)
         }
-      }
-      else {
+
+      case SingleEvent =>
         log(s"\n$faction executes the Event: ${card.name}")
         log(separator())
         card.executeUnshaded(faction)
-      }
+    }
   }
 
   //  A bot is the next eligible faction
@@ -6481,7 +6482,7 @@ object Bot {
   //  table.
   def act(): Unit = {
     val faction = game.actingFaction.get
-    val card = deck(game.currentCard)
+    val card = eventDeck(game.currentCard)
 
     initTurnVariables()
 

@@ -2091,25 +2091,26 @@ object Human {
 
   def executeEvent(faction: Faction): Unit = {
 
-    val card = deck(game.currentCard)
+    val card = eventDeck(game.currentCard)
 
-    if (card.dual) {
-      val choices = List("Unshaded", "Shaded")
-      askSimpleMenu(choices, "\nExecute which part of the event:").head match {
-        case "Unshaded" =>
-          log(s"\n$faction executes the unshaded Event: ${card.name}")
-          log(separator())
-          card.executeUnshaded(faction)
-          case _ =>
-          log(s"\n$faction executes the shaded Event: ${card.name}")
-          log(separator())
-          card.executeShaded(faction)
-      }
-    }
-    else { // Non dual events are always use the unshaded function
-      log(s"\n$faction executes the Event: ${card.name}")
-      log(separator())
-      card.executeUnshaded(faction)
+    card.eventType match {
+      case DualEvent =>
+        val choices = List("Unshaded", "Shaded")
+        askSimpleMenu(choices, "\nExecute which part of the event:").head match {
+          case "Unshaded" =>
+            log(s"\n$faction executes the unshaded Event: ${card.name}")
+            log(separator())
+            card.executeUnshaded(faction)
+            case _ =>
+            log(s"\n$faction executes the shaded Event: ${card.name}")
+            log(separator())
+            card.executeShaded(faction)
+        }
+
+      case SingleEvent =>
+        log(s"\n$faction executes the Event: ${card.name}")
+        log(separator())
+        card.executeUnshaded(faction)
     }
   }
 

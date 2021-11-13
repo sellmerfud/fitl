@@ -108,26 +108,28 @@ object FireInTheLake {
   case object Critical    extends BotEventPriority
   case object Performed   extends BotEventPriority
 
+  sealed trait EventPart
+  case object Unshaded extends EventPart
+  case object Shaded   extends EventPart
 
   sealed trait EventType
-  case object Unshaded extends EventType
-  case object Shaded   extends EventType
-
-  type EventEffective = Faction => Boolean  // Used to see if event would be effective for Bot
-  type EventExecution = Faction => Unit     // Execute the event for Human and Bot
+  case object SingleEvent extends EventType
+  case object DualEvent   extends EventType
 
   // For cards that have only one event:
   //  dual == false and the event condtions and execution use the `unshaded` fields
-  class EventCard(
+  abstract class EventCard(
     val number: Int,
     val name: String,
-    val dual: Boolean,
+    val eventType: EventType,  // single/dual
     val factionOrder: List[Faction],
-    val botPriorities: ListMap[Faction, (BotEventPriority, EventType)],  // Empty
-    val unshadedEffective: EventEffective,
-    val executeUnshaded: EventExecution,
-    val shadedEffective: EventEffective,
-    val executeShaded: EventExecution) {
+    val botPriorities: ListMap[Faction, (BotEventPriority, EventPart)]) {
+
+    def unshadedEffective(faction: Faction): Boolean
+    def executeUnshaded(faction: Faction): Unit
+
+    def shadedEffective(faction: Faction): Boolean
+    def executeShaded(faction: Faction): Unit
 
 
     val isCoup = factionOrder.isEmpty
@@ -136,16 +138,16 @@ object FireInTheLake {
     override def toString() = numAndName
 
     def botPriority(faction: Faction) = botPriorities(faction)._1
-    // EventType: Unshaded/Shaded
-    def eventType(faction: Faction)     = botPriorities(faction)._2
+    // EventPart: Unshaded/Shaded
+    def eventPart(faction: Faction)     = botPriorities(faction)._2
 
     def orderString  = factionOrder map (_.name) mkString ", "
     def fullString = if (isCoup) numAndName else s"$numAndName ($orderString)"
 
-    def eventEffective(faction: Faction) = (dual, eventType(faction)) match {
-      case (false, _)       => unshadedEffective(faction)
-      case (true, Unshaded) => unshadedEffective(faction)
-      case (true, Shaded)   => shadedEffective(faction)
+    def eventEffective(faction: Faction): Boolean = (eventType, eventPart(faction)) match {
+      case (SingleEvent, _)      => unshadedEffective(faction)
+      case (DualEvent, Unshaded) => unshadedEffective(faction)
+      case (DualEvent, Shaded)   => shadedEffective(faction)
     }
 
     def isCritical(faction: Faction)  = botPriority(faction) == Critical
@@ -192,8 +194,38 @@ object FireInTheLake {
   val PivotalVC   = 123
   val PivotalARVN = 124
 
-  object deck {
-    val deckMap   = Cards.deckMap
+  object eventDeck {
+    import fitl.cards._
+    private def entry(card: EventCard) = (card.number -> card)
+
+    val deckMap: Map[Int, EventCard] = Map(
+    entry(Card_001), entry(Card_002), entry(Card_003), entry(Card_004), entry(Card_005),
+    entry(Card_006), entry(Card_007), entry(Card_008), entry(Card_009), entry(Card_010),
+    entry(Card_011), entry(Card_012), entry(Card_013), entry(Card_014), entry(Card_015),
+    entry(Card_016), entry(Card_017), entry(Card_018), entry(Card_019), entry(Card_020),
+    entry(Card_021), entry(Card_022), entry(Card_023), entry(Card_024), entry(Card_025),
+    entry(Card_026), entry(Card_027), entry(Card_028), entry(Card_029), entry(Card_030),
+    entry(Card_031), entry(Card_032), entry(Card_033), entry(Card_034), entry(Card_035),
+    entry(Card_036), entry(Card_037), entry(Card_038), entry(Card_039), entry(Card_040),
+    entry(Card_041), entry(Card_042), entry(Card_043), entry(Card_044), entry(Card_045),
+    entry(Card_046), entry(Card_047), entry(Card_048), entry(Card_049), entry(Card_050),
+    entry(Card_051), entry(Card_052), entry(Card_053), entry(Card_054), entry(Card_055),
+    entry(Card_056), entry(Card_057), entry(Card_058), entry(Card_059), entry(Card_060),
+    entry(Card_061), entry(Card_062), entry(Card_063), entry(Card_064), entry(Card_065),
+    entry(Card_066), entry(Card_067), entry(Card_068), entry(Card_069), entry(Card_070),
+    entry(Card_071), entry(Card_072), entry(Card_073), entry(Card_074), entry(Card_075),
+    entry(Card_076), entry(Card_077), entry(Card_078), entry(Card_079), entry(Card_080),
+    entry(Card_081), entry(Card_082), entry(Card_083), entry(Card_084), entry(Card_085),
+    entry(Card_086), entry(Card_087), entry(Card_088), entry(Card_089), entry(Card_090),
+    entry(Card_091), entry(Card_092), entry(Card_093), entry(Card_094), entry(Card_095),
+    entry(Card_096), entry(Card_097), entry(Card_098), entry(Card_099), entry(Card_100),
+    entry(Card_101), entry(Card_102), entry(Card_103), entry(Card_104), entry(Card_105),
+    entry(Card_106), entry(Card_107), entry(Card_108), entry(Card_109), entry(Card_110),
+    entry(Card_111), entry(Card_112), entry(Card_113), entry(Card_114), entry(Card_115),
+    entry(Card_116), entry(Card_117), entry(Card_118), entry(Card_119), entry(Card_120),
+    entry(Card_121), entry(Card_122), entry(Card_123), entry(Card_124), entry(Card_125),
+    entry(Card_126), entry(Card_127), entry(Card_128), entry(Card_129), entry(Card_130))
+
     val CoupCards = Range.inclusive(125, 130).toSet
     val PivotalCards = Set(PivotalUS, PivotalNVA, PivotalVC, PivotalARVN)
 
@@ -1810,7 +1842,7 @@ object FireInTheLake {
     def actingFaction: Option[Faction] = if (sequence.exhausted)
       None
     else
-      deck(currentCard).factionOrder find sequence.eligibleThisTurn
+      eventDeck(currentCard).factionOrder find sequence.eligibleThisTurn
 
     def isActingFaction(faction: Faction) = actingFaction exists (_ == faction)
 
@@ -1818,16 +1850,16 @@ object FireInTheLake {
     // on the current card.
     def followingFaction: Option[Faction] = actingFaction match {
       case Some(active) if (sequence.numActors == 0) =>
-        deck(currentCard).factionOrder filter (_ != active) find sequence.eligibleThisTurn
+        eventDeck(currentCard).factionOrder filter (_ != active) find sequence.eligibleThisTurn
       case _ => None
     }
 
 
-    def executingPivotalEvent = deck.isPivotalCard(currentCard) && sequence.numActors == 0
+    def executingPivotalEvent = eventDeck.isPivotalCard(currentCard) && sequence.numActors == 0
 
     def isFinalCampaign = coupCardsPlayed == (totalCoupCards - 1)
-    def isCoupRound = cardsDrawn > 0 && deck(currentCard).isCoup
-    def onDeckIsCoup = onDeckCard > 0 &&  deck(onDeckCard).isCoup
+    def isCoupRound = cardsDrawn > 0 && eventDeck(currentCard).isCoup
+    def onDeckIsCoup = onDeckCard > 0 &&  eventDeck(onDeckCard).isCoup
     def inMonsoon = !isCoupRound && onDeckIsCoup
     def resources(faction: Faction) = faction match {
       case US   => throw new IllegalArgumentException("resources called for US faction!")
@@ -1908,7 +1940,7 @@ object FireInTheLake {
   // Returns: percentage
   //          number of cards remaining in current campaign
   def chanceOfDrawingACoupCard: (Double, Int) = {
-    def countCoup(cardNum: Int) = if (deck(cardNum).isCoup) 1 else 0
+    def countCoup(cardNum: Int) = if (eventDeck(cardNum).isCoup) 1 else 0
     val coupCardShowing = game.isCoupRound || game.onDeckIsCoup
 
     if (game.cardsDrawn < 3) {
@@ -1987,9 +2019,9 @@ object FireInTheLake {
     b += separator()
     b += s"RVN Leader     : ${game.currentRvnLeader}"
     if (game.cardsDrawn > 0) {
-      b += s"Current card   : ${deck(game.currentCard).fullString}"
+      b += s"Current card   : ${eventDeck(game.currentCard).fullString}"
       if (game.onDeckCard > 0) {
-        b += s"On deck card   : ${deck(game.onDeckCard).fullString}"
+        b += s"On deck card   : ${eventDeck(game.onDeckCard).fullString}"
       }
     }
 
@@ -2101,7 +2133,7 @@ object FireInTheLake {
     if (game.cardsDrawn > 0) {
       b += "Sequence of Play"
       b += separator()
-      b ++= sequenceList(deck(game.currentCard), game.sequence)
+      b ++= sequenceList(eventDeck(game.currentCard), game.sequence)
     }
     b.toList
   }
@@ -2282,7 +2314,7 @@ object FireInTheLake {
   def saveGameDescription(): Unit = {
     assert(gameName.nonEmpty, "saveGameDescription(): called with gameName not set!")
     val summary = game.actionSummary.headOption getOrElse ""
-    val desc = s"${game.scenarioName}  [${deck(game.currentCard)}] $summary"
+    val desc = s"${game.scenarioName}  [${eventDeck(game.currentCard)}] $summary"
     val path = gamesDir/gameName.get/"description"
 
     path.writeFile(desc)
@@ -2306,7 +2338,7 @@ object FireInTheLake {
       game.actionSummary
     else
       game.actionSummary :+ desc
-    val segment = GameSegment(save_number, deck(game.currentCard).toString, summary)
+    val segment = GameSegment(save_number, eventDeck(game.currentCard).toString, summary)
 
     // Make sure that the game directory exists
     save_path.dirname.mkpath()
@@ -2480,7 +2512,7 @@ object FireInTheLake {
 
   def safeToInt(str: String): Option[Int] = try Some(str.toInt) catch { case e: NumberFormatException => None }
   // Cannot draw pivotal event cards!
-  def isValidCardDraw(cardNum: Int): Boolean = deck.isValidNumber(cardNum) && !deck.isPivotalCard(cardNum)
+  def isValidCardDraw(cardNum: Int): Boolean = eventDeck.isValidNumber(cardNum) && !eventDeck.isPivotalCard(cardNum)
 
   // Prompt the user for one or two cards if necessary.
   // Then update the game state with the new card numbers.
@@ -2493,7 +2525,7 @@ object FireInTheLake {
                        cardsDrawn   = 2)
     }
     else {
-      updateFactionEligibility(makeAllEligible = deck(game.currentCard).isCoup)
+      updateFactionEligibility(makeAllEligible = eventDeck(game.currentCard).isCoup)
       val nextCard = askCardNumber("\nEnter the number of the next Event card: ")
       game = game.copy(currentCard     = game.onDeckCard,
                        onDeckCard      = nextCard,
@@ -2502,8 +2534,8 @@ object FireInTheLake {
     }
 
     log()
-    log(s"Current card: ${deck(game.currentCard)}")
-    log(s"On deck card: ${deck(game.onDeckCard)}")
+    log(s"Current card: ${eventDeck(game.currentCard)}")
+    log(s"On deck card: ${eventDeck(game.onDeckCard)}")
   }
 
 
@@ -2525,7 +2557,7 @@ object FireInTheLake {
 
   // Resolve Coup Round
   def resolveCoupCard(): Unit = {
-    val coupCard         = deck(game.currentCard)
+    val coupCard         = eventDeck(game.currentCard)
     val isFailedCoup     = game.currentCard == 129 || game.currentCard == 130
     val skipCoupRound    = game.prevCardWasCoup
     val newLeader        = rvnLeaderForCard(game.currentCard)
@@ -3147,7 +3179,7 @@ object FireInTheLake {
   @tailrec def processCoupCommand(): Unit = {
     val opts      = orList(List(CoupCmd.name, "?"))
     val coupNum   = game.coupCardsPlayed + 1
-    val card      = deck(game.currentCard)
+    val card      = eventDeck(game.currentCard)
     val prompt = {
       val promptLines = new ListBuffer[String]
       promptLines += ""
@@ -3182,7 +3214,7 @@ object FireInTheLake {
       promptLines += ""
       promptLines += s">>> $faction turn <<<"
       promptLines += separator()
-      promptLines ++= sequenceList(deck(game.currentCard), game.sequence)
+      promptLines ++= sequenceList(eventDeck(game.currentCard), game.sequence)
       promptLines += s"($opts): "
       promptLines.mkString("\n", "\n", "")
     }
@@ -3218,7 +3250,7 @@ object FireInTheLake {
       val factionOrder = List(VC, ARVN, NVA, US)
       for {
         faction  <- factionOrder
-        pivotCard =  deck(faction.pivotCard)
+        pivotCard =  eventDeck(faction.pivotCard)
         if game.sequence.eligibleThisTurn(faction) && pivotCard.eventEffective(faction)
       } yield faction
     }
@@ -3237,7 +3269,7 @@ object FireInTheLake {
   def getPivotalFaction: Option[Faction] = {
     def currentEventIsCritical(faction: Faction) =
       game.isActingFaction(faction) &&
-      deck(game.currentCard).isCritical(faction)
+      eventDeck(game.currentCard).isCritical(faction)
 
     def askHumanPivot(factions: List[Faction], pivotBot: Option[Faction]): Option[Faction] = {
       factions match {
@@ -3286,7 +3318,7 @@ object FireInTheLake {
 
       log(s"\n$faction elects to play their Pivotal Event")
       log(separator())
-      log(s"Replace the current event card with ${deck(faction.pivotCard)}")
+      log(s"Replace the current event card with ${eventDeck(faction.pivotCard)}")
 
       // Replace the current card with the faction's Pivotal event
       game = game.copy(currentCard = faction.pivotCard)
@@ -3373,17 +3405,17 @@ object FireInTheLake {
   //  The game state is updated and the topmost card
   //  is returned.
   def drawTrungCard(faction: Faction): TrungCard = {
-    var deck = game.trungDeck
+    var trungDeck = game.trungDeck
 
     // First the topmost card is place on the bottom
     // Then continue drawing until we get a card for the
     // given faction.
     do {
-      deck = deck.tail :+ deck.head
-    } while (deck.head.faction != faction)
+      trungDeck = trungDeck.tail :+ trungDeck.head
+    } while (trungDeck.head.faction != faction)
 
-    game = game.copy(trungDeck = deck)
-    deck.head
+    game = game.copy(trungDeck = trungDeck)
+    trungDeck.head
   }
 
   def factionPasses(faction: Faction): Unit = {
@@ -4716,8 +4748,8 @@ object FireInTheLake {
   def checkCardNum(cardNum: String): Boolean = {
     cardNum match {
       case INTEGER(num) if isValidCardDraw(num.toInt) => true
-      case INTEGER(num) if deck.isPivotalCard(num.toInt) =>
-        println(s"'${deck(num.toInt)}' is a pivotal event card")
+      case INTEGER(num) if eventDeck.isPivotalCard(num.toInt) =>
+        println(s"'${eventDeck(num.toInt)}' is a pivotal event card")
         false
       case input =>
         println(s"'$input' is not a valid card number")
@@ -5434,7 +5466,7 @@ object FireInTheLake {
 
       println("\nAdjusting Faction Eligibility")
       println(separator())
-      sequenceList(deck(game.currentCard), seq) foreach println
+      sequenceList(eventDeck(game.currentCard), seq) foreach println
 
       askMenu(choices, "\nSelect faction:", allowAbort = false).head match {
         case None =>

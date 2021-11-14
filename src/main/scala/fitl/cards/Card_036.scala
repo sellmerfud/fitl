@@ -74,7 +74,7 @@ object Card_036 extends EventCard(36, "Hamburger Hill",
       !sp.isNorthVietnam &&
       sp.isHighland &&
       sp.pieces.has(InsurgentBases) &&
-      Bot.canMoveTo(US, sp.name, EventMove, Set(USTroops))
+      Bot.canMoveTo(US, sp.name, EventMove(None), Set(USTroops))
     }
 
   def unshadedEffective(faction: Faction): Boolean = unshadedBotCandidates.nonEmpty
@@ -98,7 +98,7 @@ object Card_036 extends EventCard(36, "Hamburger Hill",
         val name = askCandidate("Move US Troops to which space: ", candidates)
 
         loggingControlChanges {
-          moveMapPiecesToSpace(US, 4, name, Set(USTroops), spaceNames(game.spaces))
+          moveMapPiecesToSpace(US, 4, true, name, Set(USTroops))
           val sp = game.getSpace(name)        
           if (sp.pieces.has(InsurgentBases)) {
             val base = askPieces(sp.pieces, 1, InsurgentBases, Some("Remove one NVA or VC Base"))
@@ -114,7 +114,7 @@ object Card_036 extends EventCard(36, "Hamburger Hill",
       val base = Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(InsurgentBases), 1)
 
       loggingControlChanges {
-        Bot.doEventMoveTo(sp.name, US, 4, Set(USTroops))
+        moveMapPiecesToSpace(US, 4, true, name, Set(USTroops))
         removeToAvailable(sp.name, base)
       }
     }

@@ -320,11 +320,19 @@ object EventHelpers {
   def moveMapPiecesToSpace(
     faction: Faction,
     numToMove: Int,
+    mandatory: Boolean,
     destName: String,
     pieceTypes: TraversableOnce[PieceType],
-    validSpaces: TraversableOnce[String]): Unit = {
-    val validNames = validSpaces.toSet - destName
-    val hasPieces = (sp: Space) => validNames(sp.name) && sp.pieces.has(pieceTypes)
+    onlyFrom: Option[Set[String]] = None): Unit = {
+    val hasPieces = (sp: Space) => {
+      onlyFrom match {
+        case Some(validNames) =>
+          sp.name != destName && validNames(sp.name) && sp.pieces.has(pieceTypes)
+        case None =>
+          sp.name != destName && sp.pieces.has(pieceTypes)
+      }
+    }
+      
     val desc = andList(pieceTypes)
 
     def nextHumanMove(numRemaining: Int): Unit = if (numRemaining > 0) {
@@ -342,22 +350,17 @@ object EventHelpers {
       }
     }
 
-    def nextBotMove(numRemaining: Int): Unit = if (numRemaining > 0) {
-      val candidates = game.spaces filter hasPieces
-      if (candidates.nonEmpty) {
-        val sp = Bot.pickSpacePlaceForces(faction)(candidates)
-        val pieces   = sp.pieces.only(pieceTypes)
-        val toMove = Bot.selectFriendlyToPlaceOrMove(pieces, 1)
-        movePieces(toMove, sp.name, destName)
-        nextBotMove(numRemaining - 1)
-      }
-    }
-
     loggingControlChanges {
-      if (game.isHuman(faction))
-        nextHumanMove(numToMove)
+      if (game.isHuman(faction)) {
+        val maxNum = (game.spaces filter hasPieces map (_.pieces.totalOf(pieceTypes))).sum
+        val num = if (mandatory)
+          numToMove
+        else
+          askInt(s"\nHow many $desc do you wish to move", 0, maxNum min numToMove)
+        nextHumanMove(num)
+      }
       else
-        nextBotMove(numToMove)
+        Bot.doEventMoveTo(destName, faction, numToMove, mandatory, pieceTypes.toSet, onlyFrom)
     }
   }
 

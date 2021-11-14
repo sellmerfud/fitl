@@ -115,7 +115,7 @@ object Card_021 extends EventCard(21, "Americal", DualEvent,
           removePiecesFromMap(US, numMapTroops, Set(USTroops), true, originNames, usToAvailable = true)
         case Some(dest) =>
           placePiecesFromOutOfPlay(dest, oopTroops)
-          moveMapPiecesToSpace(US, numMapTroops, dest, Set(USTroops), originNames)
+          moveMapPiecesToSpace(US, numMapTroops, true, dest, Set(USTroops), Some(originNames.toSet))
       }
     }
   }

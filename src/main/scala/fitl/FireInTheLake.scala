@@ -1519,7 +1519,9 @@ object FireInTheLake {
   // Movement Priorities as part of an event execution
   // that does not specify taking a "free" operation or
   // special activity.
-  case object EventMove extends MoveAction
+  // `onlyFrom` can be used to limit the origins for
+  // the moved pieces.
+  case class EventMove(onlyFrom: Option[Set[String]]) extends MoveAction
 
   case object  Train   extends CoinOp("Train")
   case object  Patrol  extends CoinOp("Patrol") with MoveAction

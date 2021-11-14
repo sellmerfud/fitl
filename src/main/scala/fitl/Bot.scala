@@ -2085,13 +2085,14 @@ object Bot {
     previousOrigins: Set[String]): Option[String] = {
 
     val candidateNames: Set[String] = action match {
-      case EventMove               => spaceNames(game.spaces filterNot (_.name == destName)).toSet // Any space
-      case Sweep                   => getSweepOrigins(destName)
-      case Patrol                  => getPatrolOrigins(destName)
-      case Transport               => getTransportOrigins(destName)
-      case AirLift                 => Set.empty // See selectAirLiftOrigin
-      case March if faction == NVA => NVA_Bot.getNVAAdjacent(destName)
-      case March                   => getAdjacent(destName)
+      case EventMove(Some(origins)) => origins - destName
+      case EventMove(None)          => spaceNames(game.spaces filterNot (_.name == destName)).toSet // Any space
+      case Sweep                    => getSweepOrigins(destName)
+      case Patrol                   => getPatrolOrigins(destName)
+      case Transport                => getTransportOrigins(destName)
+      case AirLift                  => Set.empty // See selectAirLiftOrigin
+      case March if faction == NVA  => NVA_Bot.getNVAAdjacent(destName)
+      case March                    => getAdjacent(destName)
     }
 
     val isOrigin = (sp: Space) =>
@@ -2133,26 +2134,46 @@ object Bot {
 
   // Called by events to move a given number of pieces to a specific destination
   // using the Bot Move Priorities.
-  // It will attempt to move as many pieces oup to `num` to the destination.
+  // If mandatory is false, then it will move up to the given number but will not move
+  // pieces away from spaces as determined by the Move Priorities.
+  // If madatory is true, then once it has moved pieces using the Move Priorities if we have
+  // not move the mandatory number of pieces, then we will select pieces from the space(s)
+  // with the most pieces.
+  // 
   // Returns the pieces that moved.
-  def doEventMoveTo(destName: String, faction: Faction, num: Int, moveTypes: Set[PieceType]): Pieces = {
-    var movedPieces = Pieces()
-
-    def nextMove(numRemaining: Int, previousOrigins: Set[String]): Unit = if (numRemaining > 0 ) {
-      selectMoveOrigin(faction, destName, EventMove, moveTypes, previousOrigins) match {
-        case None =>
-        case Some(originName) =>
-          val movers = movePiecesFromOneOrigin(originName, destName, faction, EventMove, moveTypes, numRemaining)
-          movePieces(movers, originName, destName)
-          movedPieces = movedPieces + movers
-          nextMove(numRemaining - movers.total, previousOrigins + originName)
-      }
+  def doEventMoveTo(
+    destName: String,
+    faction: Faction,
+    num: Int,
+    mandatory: Boolean,
+    moveTypes: Set[PieceType],
+    onlyFrom: Option[Set[String]] = None): Pieces = {  
+    initTurnVariables()
+    movePiecesToDestinations(faction, EventMove(onlyFrom), moveTypes, false, maxPieces = num, maxDests = Some(1)) {
+      (_, _, _) => Some(destName)
     }
 
-    nextMove(num, Set.empty)
-    movedPieces
-  }
+    if (mandatory && movedPieces.allPieces.total < num) {
+      def nextMandatoryMove(numRemaning: Int): Unit = if (numRemaning > 0) {
+        val priorities = List(new HighestScore[Space]("Most moveable pieces", _.pieces.totalOf(moveTypes)))
+        val origins = onlyFrom match {
+          case Some(names) => spaces(names - destName)
+          case None        => game.spaces filter { sp => sp.name != destName && sp.pieces.has(moveTypes) }
+        }
+          
+        if (origins.nonEmpty) {
+          val sp = bestCandidate(origins, priorities)
+          val piece = selectFriendlyToPlaceOrMove(sp.pieces.only(moveTypes), 1)
+          movePieces(piece, sp.name, destName)
+          movedPieces.add(destName, piece)
+          nextMandatoryMove(numRemaning - 1)
+        }
+      }
 
+      nextMandatoryMove(num - movedPieces.allPieces.total)
+    }
+    movedPieces.allPieces
+  }
 
   def selectAirLiftOrigin(currentOrigins: Set[String], addNewOrigin: Boolean): Option[String] = {
     // Can only move up to 4 ARVNTroop, Irregulars, Rangers

@@ -2023,10 +2023,12 @@ object FireInTheLake {
       b += f"NVA resources  : ${game.nvaResources}%2d"
     val agitate = if (game.isBot(VC)) " (Agitate Total)" else ""
     b += f"VC resources   : ${game.vcResources}%2d${agitate}"
+    b += separator()
     if (game.useEcon)
       b += f"Econ           : ${game.econ}%2d"
     b += f"US Aid         : ${game.usAid}%2d"
     b += f"Patronage      : ${game.patronage}%2d"
+    b += separator()
     b += f"Trail          : ${game.trail}%2d"
     b += f"Terror (avail) : ${game.terrorMarkersAvailable}%2d"
     if (game.isBot(US))
@@ -2536,8 +2538,8 @@ object FireInTheLake {
   // Then update the game state with the new card numbers.
   def drawNextCard(): Unit = {
     if (game.cardsDrawn == 0) {
-      val card1 = askCardNumber("\nEnter the number of the first Event card: ")
-      val card2 = askCardNumber("Enter the number of the second Event card: ")
+      val card1 = askCardNumber("\nEnter the number of the 1st Event card: ")
+      val card2 = askCardNumber("Enter the number of the 2nd Event card: ")
       game = game.copy(currentCard  = card1,
                        onDeckCard   = card2,
                        cardsDrawn   = 2)

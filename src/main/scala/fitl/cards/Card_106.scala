@@ -53,6 +53,7 @@ object Card_106 extends EventCard(106, "Binh Duong",
   def unshadedEffective(faction: Faction): Boolean = false
   def executeUnshaded(faction: Faction): Unit = singleNotYet()
 
+  // Single event - These functions are not used
   def shadedEffective(faction: Faction): Boolean = false
   def executeShaded(faction: Faction): Unit = ()
 }

@@ -41,6 +41,18 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Single Event Text
+// Fortification mentality: Redeploy all COIN forces outside Vietnam to
+// COIN-Controlled Cities. ARVN Resources –12. No Infiltrate or Trail
+// Improvement by Rally until Coup.
+// MOMENTUM
+//
+// Tips
+// "Outside Vietnam" means Laos and Cambodia Provinces. The executing Faction
+// gets to choose which redeploying pieces go to which COIN-Controlled Cities (5.1).
+// Redeploy and Resource drop occur instantly and once; the effects on Infiltrate and
+// Rally last until the next Coup Round (5.4).
+
 object Card_038 extends EventCard(38, "McNamara Line",
   SingleEvent,
   List(NVA, US, VC, ARVN),
@@ -50,9 +62,57 @@ object Card_038 extends EventCard(38, "McNamara Line",
           VC   -> (NotExecuted -> Unshaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = singleNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
 
+  def executeUnshaded(faction: Faction): Unit = {
+    val withForces = game.spaces filter { sp =>
+      isInLaosCambodia(sp.name) &&
+      sp.pieces.has(CoinForces)
+    }
+
+    // Function so we get fresh spaces each time.
+    // The bot code needs this to determine where to
+    // place each piece.
+    def coinControlledCities = game.citySpaces filter (_.coinControlled)
+
+    if (withForces.isEmpty)
+      log("\nThere are no COIN forces in Laos/Cambodia to redeploy")
+    else if (coinControlledCities.isEmpty)
+      log("\nCannot redeploy COIN forces because there are no COIN controlled cities")
+    else if (game.isHuman(faction)) {
+      for (origin <- withForces) {
+        var forces = origin.pieces.only(CoinForces)
+        while (forces.nonEmpty) {
+          println(s"\nRedeploying COIN forces out of ${origin.name}")
+          println(separator())
+          println(andList(forces.descriptions))
+          val city   = askCandidate("Redeploy to which city: ", spaceNames(coinControlledCities))
+          val num    = askInt(s"Move how many of these pieces to $city", 0, forces.total)
+          val movers = askPieces(forces, num)
+          log()
+          movePieces(movers, origin.name, city)
+          forces = forces - movers
+        }
+      }
+    }
+    else {  // Bot
+      for (origin <- withForces) {
+        var forces = origin.pieces.only(CoinForces)
+        while (forces.nonEmpty) {
+          val city  = Bot.pickSpacePlaceForces(faction, forces.has(USTroops))(coinControlledCities)
+          val mover = Bot.selectFriendlyToPlaceOrMove(forces, 1)
+          movePieces(mover, origin.name, city.name)
+          forces = forces - mover
+        }
+      }
+    }
+
+    log()
+    decreaseResources(ARVN, 12)
+    playMomentum(Mo_McNamaraLine)
+  }
+
+  // Single event - These functions are not used
   def shadedEffective(faction: Faction): Boolean = false
   def executeShaded(faction: Faction): Unit = ()
 }

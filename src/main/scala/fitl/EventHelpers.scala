@@ -123,15 +123,13 @@ object EventHelpers {
         val sp = if (friendly)
           Bot.pickSpaceRemoveFriendlyPieces(candidates, pieceTypes)
         else {
-          val narrowed = if (includesEnemyBase(faction, pieceTypes)) {
-            val priorities = List(new Bot.BooleanPriority[Space](
-              "With enemy base",
-              sp => includesEnemyBase(faction, sp.pieces.only(pieceTypes).getTypes)
-            ))
-            Bot.narrowCandidates(candidates, priorities)
-          }
-          else
-            candidates
+          // Always prioritize space with an ememy base if possible
+          val priorities = List(new Bot.BooleanPriority[Space](
+            "With enemy base",
+            sp => includesEnemyBase(faction, sp.pieces.only(pieceTypes).getTypes)
+          ))
+          val narrowed = Bot.narrowCandidates(candidates, priorities)
+          
           Bot.pickSpaceRemoveReplace(faction)(narrowed)
         }
         val pieces   = sp.pieces.only(pieceTypes)

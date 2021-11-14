@@ -41,6 +41,17 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Release negotiations keep US at war:
+// Free Air Strike.  2 US Troops from Casualties to Available.
+//
+// Shaded Text
+// Air campaign creates hostages: 3 US Troops from Available to Casualties.
+//
+// Tips
+// Whichever Faction executes the unshaded Event decides the specifics of the
+// Air Strike Special Activity (spaces targeted, whether the Trail is Degraded, etc.).
+
 object Card_040 extends EventCard(40, "PoWs",
   DualEvent,
   List(NVA, US, VC, ARVN),
@@ -50,9 +61,31 @@ object Card_040 extends EventCard(40, "PoWs",
           VC   -> (Performed   -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    airStrikeEffective || game.casualties.has(USTroops)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    loggingControlChanges {
+      if (game.isHuman(faction))
+        Human.doAirStrike(Params(event = true, free = true))
+      else
+        US_Bot.airStrikeActivity(Params(event = true, free = true))
+
+      val num = game.casualties.totalOf(USTroops) min 2
+      if (num == 0)
+        log("\nThere are no US Troop casualties")
+      else
+        moveCasualtiesToAvailable(Pieces(usTroops = num))
+    }
+  }
+
+  def shadedEffective(faction: Faction): Boolean = game.availablePieces.has(USTroops)
+
+  def executeShaded(faction: Faction): Unit = {
+    val num = game.availablePieces.totalOf(USTroops) min 3
+    if (num == 0)
+      log("There are no available US Troops")
+    else
+      moveAvailableToCasualties(Pieces(usTroops = num))
+  }
 }

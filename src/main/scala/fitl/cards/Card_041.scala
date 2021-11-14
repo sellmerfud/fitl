@@ -41,6 +41,15 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Single Event Text
+// Tet holiday gesture: Set any 2 spaces to Passive Support.
+// Patronage +2. No Air Strike until Coup.
+// MOMENTUM
+//
+// Tips
+// The Support and Patronage take effect at once; the ban on 
+// Air Strikes lasts until the next Coup Round.
+
 object Card_041 extends EventCard(41, "Bombing Pause",
   SingleEvent,
   List(NVA, ARVN, US, VC),

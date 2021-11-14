@@ -68,13 +68,13 @@ object Card_001 extends EventCard(1, "Gulf of Tonkin",
     val numCasualties = game.casualties.totalOf(USPieces) min 6
     if (game.isHuman(US)) {
       loggingControlChanges {
-        Human.doAirStrike(Params(event = true))
+        Human.doAirStrike(Params(event = true, free = true))
         Human.moveUSOutOfPlayToCities(6)
       }
     }
     else {
       loggingControlChanges {
-        US_Bot.airStrikeActivity(Params(event = true))
+        US_Bot.airStrikeActivity(Params(event = true, free = true))
         US_Bot.moveOutOfPlayToCities(6)
       }
     }

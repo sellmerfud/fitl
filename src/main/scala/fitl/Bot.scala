@@ -1985,7 +1985,7 @@ object Bot {
   }
 
   //  When moving pieces, this is used to determine which of the factions pieces should be moved
-  //  form the origin to the destination.
+  //  from the origin to the destination.
   def selectPiecesToMove(originName: String,
                          destName: String,
                          faction: Faction,
@@ -2085,6 +2085,7 @@ object Bot {
     previousOrigins: Set[String]): Option[String] = {
 
     val candidateNames: Set[String] = action match {
+      case EventMove               => spaceNames(game.spaces filterNot (_.name == destName)).toSet // Any space
       case Sweep                   => getSweepOrigins(destName)
       case Patrol                  => getPatrolOrigins(destName)
       case Transport               => getTransportOrigins(destName)
@@ -2112,6 +2113,46 @@ object Bot {
       None
     }
   }
+
+  // Use by some events to determine if it is possible to move any of the requested
+  // piece types to the given destination.
+  def canMoveTo(faction: Faction, destName: String, action: MoveAction, moveTypes: Set[PieceType]): Boolean = {
+
+    def nextOrigin(previousOrigins: Set[String]): Boolean = {
+      Bot.selectMoveOrigin(faction, destName, action, moveTypes, previousOrigins) match {
+        case None => false  // We didn't find any origins with moveable pieces
+        case Some(originName) =>
+          if (movePiecesFromOneOrigin(originName, destName, faction, action, moveTypes, 1).nonEmpty)
+            true
+          else
+            nextOrigin(previousOrigins + originName)
+      }
+    }
+    nextOrigin(Set.empty)
+  }
+
+  // Called by events to move a given number of pieces to a specific destination
+  // using the Bot Move Priorities.
+  // It will attempt to move as many pieces oup to `num` to the destination.
+  // Returns the pieces that moved.
+  def doEventMoveTo(destName: String, faction: Faction, num: Int, moveTypes: Set[PieceType]): Pieces = {
+    var movedPieces = Pieces()
+
+    def nextMove(numRemaining: Int, previousOrigins: Set[String]): Unit = if (numRemaining > 0 ) {
+      selectMoveOrigin(faction, destName, EventMove, moveTypes, previousOrigins) match {
+        case None =>
+        case Some(originName) =>
+          val movers = movePiecesFromOneOrigin(originName, destName, faction, EventMove, moveTypes, numRemaining)
+          movePieces(movers, originName, destName)
+          movedPieces = movedPieces + movers
+          nextMove(numRemaining - movers.total, previousOrigins + originName)
+      }
+    }
+
+    nextMove(num, Set.empty)
+    movedPieces
+  }
+
 
   def selectAirLiftOrigin(currentOrigins: Set[String], addNewOrigin: Boolean): Option[String] = {
     // Can only move up to 4 ARVNTroop, Irregulars, Rangers

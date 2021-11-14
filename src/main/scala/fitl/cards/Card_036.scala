@@ -61,10 +61,96 @@ object Card_036 extends EventCard(36, "Hamburger Hill",
           NVA  -> (NotExecuted -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
+  val hasHighlandUntunneledBase = (sp: Space) =>
+     sp.isHighland &&
+     sp.pieces.has(InsurgentNonTunnels)
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  val hasHighlandUntunneledVCBase = (sp: Space) =>
+     sp.isHighland &&
+     sp.pieces.has(VCBase)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def unshadedBotCandidates: List[Space] =
+    game.nonLocSpaces filter { sp =>
+      !sp.isNorthVietnam &&
+      sp.isHighland &&
+      sp.pieces.has(InsurgentBases) &&
+      Bot.canMoveTo(US, sp.name, EventMove, Set(USTroops))
+    }
+
+  def unshadedEffective(faction: Faction): Boolean = unshadedBotCandidates.nonEmpty
+
+  def executeUnshaded(faction: Faction): Unit = {
+    val withTroops = game.spaces filter (_.pieces.has(USTroops))
+    
+    if (game.isHuman(faction)) {
+      // Make sure there is at least US Troop on the map.
+      // And in the unlikely case that all of the troops on the map
+      // are in a single Highland province, don't allow that province to
+      // be selected as the destination.
+      if (withTroops.nonEmpty)
+      {
+        val prohibited = if (withTroops.size == 1 && withTroops.head.isHighland)
+          withTroops.headOption map (_.name)
+        else
+          None
+
+        val candidates  = spaceNames(game.spaces filter (sp => sp.isHighland && prohibited != Some(sp.name)))
+        val name = askCandidate("Move US Troops to which space: ", candidates)
+
+        loggingControlChanges {
+          moveMapPiecesToSpace(US, 4, name, Set(USTroops), spaceNames(game.spaces))
+          val sp = game.getSpace(name)        
+          if (sp.pieces.has(InsurgentBases)) {
+            val base = askPieces(sp.pieces, 1, InsurgentBases, Some("Remove one NVA or VC Base"))
+            removeToAvailable(name, base)
+          }
+        }
+      }
+      else
+        log("There are no US Troops on the map")
+    }
+    else {
+      val sp = VC_Bot.pickSpaceRemoveReplace(unshadedBotCandidates)
+      val base = Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(InsurgentBases), 1)
+
+      loggingControlChanges {
+        Bot.doEventMoveTo(sp.name, US, 4, Set(USTroops))
+        removeToAvailable(sp.name, base)
+      }
+    }
+  }
+
+  def shadedEffective(faction: Faction): Boolean = game.nonLocSpaces exists hasHighlandUntunneledVCBase
+
+  def executeShaded(faction: Faction): Unit = {
+    
+    val (name, base) = if (game.isHuman(faction)) {
+      val candidates = spaceNames(game.nonLocSpaces filter hasHighlandUntunneledBase)
+      if (candidates.nonEmpty) {
+        val name = askCandidate("Place a Tunnel on a NVA or VC base in which space: ", candidates)
+        val bases = game.getSpace(name).pieces.only(InsurgentNonTunnels)
+        val base = askPieces(bases, 1, prompt = Some("Select base to receive tunnel marker"))
+        println()
+        (name, base)
+      }
+      else {
+        log("There are no untunneled Highland bases")
+        ("", Pieces())
+      }
+    }
+    else {
+      val candidates = game.nonLocSpaces filter hasHighlandUntunneledVCBase
+      val sp = VC_Bot.pickSpacePlaceBases(candidates)
+      (sp.name, Pieces(vcBases = 1))
+    }
+
+    if (name != "") {
+      val sp = game.getSpace(name)
+      val numTroops = sp.pieces.totalOf(USTroops) min 3
+
+      addTunnelMarker(name, base) 
+      if (numTroops > 0)
+        removeToCasualties(name, Pieces(usTroops = numTroops))
+    }
+  }
 }

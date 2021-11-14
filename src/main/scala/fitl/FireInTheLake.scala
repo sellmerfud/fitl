@@ -1515,6 +1515,12 @@ object FireInTheLake {
   // priorities.
   sealed trait MoveAction
 
+  // This is the move action used when using the Bot's
+  // Movement Priorities as part of an event execution
+  // that does not specify taking a "free" operation or
+  // special activity.
+  case object EventMove extends MoveAction
+
   case object  Train   extends CoinOp("Train")
   case object  Patrol  extends CoinOp("Patrol") with MoveAction
   case object  Sweep   extends CoinOp("Sweep")  with MoveAction

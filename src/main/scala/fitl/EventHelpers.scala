@@ -105,6 +105,7 @@ object EventHelpers {
         val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
         val toRemove = askPieces(pieces, num)
         if (num > 0) {
+          println()
           if (usToAvailable)
             removeToAvailable(sp.name, toRemove)
           else
@@ -186,6 +187,7 @@ object EventHelpers {
         val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
         val toRemove = askPieces(pieces, num)
         if (num > 0) {
+          println()
           removeToOutOfPlay(name, toRemove)
           spacesUsed += name
         }
@@ -265,6 +267,7 @@ object EventHelpers {
         else
           askPiecesToPlace(name, forces.getTypes, numRemaining)
         if (pieces.nonEmpty) {
+          println()
           placePieces(name, pieces)
           spacesUsed += name
         }
@@ -312,7 +315,7 @@ object EventHelpers {
     spacesUsed
   }
 
-  // Move the given number pieces one or more spaces on the map to
+  // Move the given number pieces from one or more spaces on the map to
   // the given destination space.
   def moveMapPiecesToSpace(
     faction: Faction,
@@ -333,6 +336,7 @@ object EventHelpers {
         val pieces = sp.pieces.only(pieceTypes)
         val num    = askInt(s"Move how many pieces from $name", 0, numRemaining min pieces.total)
         val toMove = askPieces(pieces, num)
+        println()
         movePieces(toMove, name, destName)
         nextHumanMove(numRemaining - num)
       }

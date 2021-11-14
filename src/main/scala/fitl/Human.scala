@@ -3068,7 +3068,7 @@ object Human {
       else
         "Do not place any pieces"
       val choices = List(
-        choice(true,              "place-one",   "Place a single guerrilla"),
+        choice(maxGuerrillas == 1,"place-one",   "Place a single guerrilla"),
         choice(maxGuerrillas > 1, "place-many", s"Place up to $maxGuerrillas guerrillas at base"),
         choice(canPlaceBase,      "place-base", s"Replace two guerrillas with a base"),
         choice(canHide,           "hide",        "Flip all active guerrillas underground"),

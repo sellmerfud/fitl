@@ -435,6 +435,10 @@ object FireInTheLake {
     spaces(getAdjacent(name) + name).foldLeft(init)(func)
   }
 
+  def withOrAdjacentTotal(name: String)(func: Space => Int): Int = {
+    withOrAdjacentFold(name, 0) { (sum, sp) => sum + func(sp) }
+  }
+
   //  A cube can move onto adjacent LOCs/Cities and keep moving via adjacent LOCs/Cities until
   //  it reaches a space with an insurgent piece.
   //  Return a sequence of all spaces that can be reached from the given space by patrolling cubes.
@@ -1682,6 +1686,10 @@ object FireInTheLake {
 
     def canDo(action: Action) = availableActions contains action
 
+    def willBeEligibeNextTurn(faction: Faction) =
+      !ineligibleNextTurn(faction) &&
+      !(actors exists (_.faction == faction))
+
     def addActor(faction: Faction, action: Action): SequenceOfPlay = {
       if (actors.size < 2) {
         action match {
@@ -2118,7 +2126,9 @@ object FireInTheLake {
 
   def sequenceList(card: EventCard, sequence: SequenceOfPlay): Seq[String] = {
     def actorDisp(faction: Faction) = if (sequence.eligibleNextTurn(faction))
-      s"${faction}*"
+      s"${faction}(+)"
+      else if (sequence.ineligibleNextTurn(faction))
+      s"${faction}(-)"
     else
       faction.toString
     val b = new ListBuffer[String]

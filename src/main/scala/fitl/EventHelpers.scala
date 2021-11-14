@@ -102,8 +102,9 @@ object EventHelpers {
         val name     = askCandidate(s"Remove $desc from which space: ", candidates)
         val sp       = game.getSpace(name)
         val pieces   = sp.pieces.only(pieceTypes)
-        val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
-        val toRemove = askPieces(pieces, num)
+        val minNum   = if (candidates.size == 1) numRemaining min pieces.total else 0
+        val num      = askInt(s"Remove how many pieces from $name", minNum, numRemaining min pieces.total)
+        val toRemove = askPieces(pieces, num, pieceTypes.toSeq)
         if (num > 0) {
           println()
           if (usToAvailable)
@@ -121,8 +122,18 @@ object EventHelpers {
       if (candidates.nonEmpty) {
         val sp = if (friendly)
           Bot.pickSpaceRemoveFriendlyPieces(candidates, pieceTypes)
-        else
-          Bot.pickSpaceRemoveReplace(faction)(candidates)
+        else {
+          val narrowed = if (includesEnemyBase(faction, pieceTypes)) {
+            val priorities = List(new Bot.BooleanPriority[Space](
+              "With enemy base",
+              sp => includesEnemyBase(faction, sp.pieces.only(pieceTypes).getTypes)
+            ))
+            Bot.narrowCandidates(candidates, priorities)
+          }
+          else
+            candidates
+          Bot.pickSpaceRemoveReplace(faction)(narrowed)
+        }
         val pieces   = sp.pieces.only(pieceTypes)
         val toRemove = if (friendly)
           Bot.selectFriendlyRemoval(pieces, 1)
@@ -185,7 +196,7 @@ object EventHelpers {
         val sp       = game.getSpace(name)
         val pieces   = sp.pieces.only(pieceTypes)
         val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
-        val toRemove = askPieces(pieces, num)
+        val toRemove = askPieces(pieces, num, pieceTypes.toSeq)
         if (num > 0) {
           println()
           removeToOutOfPlay(name, toRemove)

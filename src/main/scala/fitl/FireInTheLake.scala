@@ -715,6 +715,12 @@ object FireInTheLake {
   def isForce(pieceType: PieceType)       = Forces contains pieceType
   def isFlippable(pieceType: PieceType)   = FlippablePieces contains pieceType
 
+  def areEnemies(us: Faction, them: Faction) = isCoin(us) != isCoin(them)
+
+  def includesEnemyBase(faction: Faction, pieceTypes: TraversableOnce[PieceType]) = {
+    pieceTypes exists { ptype => isBase(ptype) && areEnemies(faction, owner(ptype)) }
+  }
+
   val factionBases: Map[Faction, List[PieceType]] = Map(
     US   -> List(USBase),
     ARVN -> List(ARVNBase),
@@ -3657,14 +3663,14 @@ object FireInTheLake {
   def playCapability(cap: Capability): Unit = {
     game = game.copy(capabilities = cap :: game.capabilities)
     addOngoingEvent(cap.name)
-    log(s"Capability: '$cap' is now in effect")
+    log(s"\nCapability: '$cap' is now in effect")
   }
 
   def removeCapabilityFromPlay(cap: Capability): Unit = {
     if (game.capabilities contains cap) {
       game = game.copy(capabilities = game.capabilities filterNot (_ == cap))
       removeOngoingEvent(cap.name)
-      log(s"Remove capability: '$cap' from play")
+      log(s"\nRemove capability: '$cap' from play")
     }
   }
 
@@ -3673,13 +3679,13 @@ object FireInTheLake {
   def playMomentum(mo: String): Unit = {
     game = game.copy(momentum = mo :: game.momentum)
     addOngoingEvent(mo)
-    log(s"Momentum: '$mo' is now in play")
+    log(s"\nMomentum: '$mo' is now in play")
   }
 
   def removeMomentumFromPlay(mo: String): Unit = {
     game = game.copy(momentum = game.momentum filterNot (_ == mo))
     removeOngoingEvent(mo)
-    log(s"Remove Momentum: '$mo' from play")
+    log(s"\nRemove Momentum: '$mo' from play")
 
   }
 
@@ -3777,6 +3783,22 @@ object FireInTheLake {
       }
       for (desc <- pieces.descriptions)
         log(s"Move $desc from AVAILABLE to CASUALTIES")
+    }
+  }
+
+  def moveAvailableToOutOfPlay(pieces: Pieces, reason: Option[String] = None): Unit = if (pieces.total > 0) {
+    loggingPointsChanges {
+      val available = game.availablePieces
+      assert(available contains pieces, s"All requested pieces are not available: $pieces")
+      // Pieces in out of play are always normalized.
+      game = game.copy(outOfPlay = game.outOfPlay + pieces.normalized)
+
+      reason foreach { msg =>
+        log(s"\n$msg")
+        log(separator())
+      }
+      for (desc <- pieces.descriptions)
+        log(s"Move $desc from AVAILABLE to OUT OF PLAY")
     }
   }
 

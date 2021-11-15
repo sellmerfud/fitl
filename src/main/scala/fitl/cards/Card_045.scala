@@ -41,6 +41,19 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// NVA CAPABILITY
+//
+// Unshaded Text
+// Light armor target: Each NVA Attack space, first remove 1 NVA Troop cube.
+//
+// Shaded Text
+// Communist armored assault: NVA Attack in 1 space removes 1 enemy per Troop.
+//
+// Tips
+// The Capability will have no effect on NVA Attacks with Guerrillas where no NVA
+// Troops. The unshaded version will remove an NVA Troop even when NVA Guerrillas
+// Attack or Ambush in a space with an NVA Troop.
+
 object Card_045 extends EventCard(45, "PT-76",
   DualEvent,
   List(NVA, ARVN, US, VC),
@@ -50,9 +63,11 @@ object Card_045 extends EventCard(45, "PT-76",
           VC   -> (Performed -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = playCapability(PT76_Unshaded)
+
+  def shadedEffective(faction: Faction): Boolean = true
+  
+  def executeShaded(faction: Faction): Unit = playCapability(PT76_Shaded)
 }

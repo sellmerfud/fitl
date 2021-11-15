@@ -41,6 +41,18 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Tough terrain: Degrade the Trail by 2 boxes.
+// Until Coup, Infiltrate is max 1 space.
+// MOMENTUM
+//
+// Shaded Text
+// The way through: NVA free Infiltrate.
+// Then NVA add 3 times and VC 2 times Trail value in Resources.
+//
+// Tips
+// The Trail Degrades at once; the limit on Infiltrate lasts until the next Coup Round
+
 object Card_046 extends EventCard(46, "559th Transport Grp",
   DualEvent,
   List(NVA, ARVN, VC, US),
@@ -50,9 +62,24 @@ object Card_046 extends EventCard(46, "559th Transport Grp",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    if (game.trail > TrailMin)
+      degradeTrail(2)
+    playMomentum(Mo_559TransportGrp)
+  }
+
+  def shadedEffective(faction: Faction): Boolean = false // Bot never executes
+
+  def executeShaded(faction: Faction): Unit = {
+    val params = Params(event = true, free = true)
+
+    log("\nNVA performs free Infiltrate activity")
+    log(separator(char = '='))
+    Human.doInfiltrate(params)
+    log()
+    increaseResources(NVA, game.trail * 3)
+    increaseResources(VC, game.trail * 2)
+  }
 }

@@ -31,6 +31,19 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// Unshaded Text
+// Silver Bayonet: US free Air Lifts into 1 space with any NVA piece,
+// then free Sweeps and Assaults there.
+//
+// Shaded Text
+// Dong Xuan campaign—hot LZs: Select a Province with NVA Troops—remove a
+// die roll of US Troops within 1 space of it to Casualties.
+//
+// Tips For the unshaded Event, the US decides the details of the free actions
+// but must Air Lift, Sweep, and Assault with something. The Sweep could occur
+// even during Monsoon. The free US Assault can add an ARVN Assault at cost 0 (3.2.4).
+// For shaded, the US Troops can be any either in the same space as or adjacent to
+// the Province with NVA Troops.
 
 package fitl.cards
 
@@ -49,10 +62,94 @@ object Card_044 extends EventCard(44, "la Drang",
           NVA  -> (NotExecuted -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
+  val unshadedCandidate = (sp: Space) =>
+    !sp.isNorthVietnam &&
+    sp.pieces.has(NVAPieces)
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.spaces exists unshadedCandidate
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val candidates = game.spaces filter unshadedCandidate
+
+    if (candidates.isEmpty)
+      log("There are no spaces that qualify for the event")
+    else if (game.isHuman(faction)) {
+      val name = askCandidate("Select a space with NVA pieces: ", spaceNames(candidates))
+      val params = Params(event = true, free = true, singleTarget = Some(name))
+
+      loggingControlChanges {
+        log(s"\nUS performs free Air Lift into $name")
+        log(separator(char = '='))
+        Human.doAirLift(params)
+        log(s"\nUS performs free Sweep into $name")
+        log(separator(char = '='))
+        Human.executeSweep(US, params)
+        log(s"\nUS performs free Assault in $name")
+        log(separator(char = '='))
+        Human.performAssault(US, name, params)
+
+        val arvnEffective = assaultEffective(ARVN, true)(game.getSpace(name))
+        if (arvnEffective && askYorN(s"\nFollow up with ARVN assault in $name? (y/n) ")) {
+          log(s"\nUS adds a free follow up ARVN asault in $name")
+          Human.performAssault(ARVN, name, params)
+        }
+      }
+    }
+    else {  // Bot
+      val sp = US_Bot.pickSpaceRemoveReplace(candidates)
+      val params = Params(event = true, free = true, singleTarget = Some(sp.name))
+
+      loggingControlChanges {
+        log(s"US performs free Air Lift into ${sp.name}")
+        log(separator(char = '='))
+        US_Bot.airLiftActivity(params)
+        log(s"\nUS performs free Sweep into ${sp.name}")
+        log(separator(char = '='))
+        US_Bot.sweepOp(params)
+        log(s"\nUS performs free Assault in ${sp.name}")
+        log(separator(char = '='))
+        Bot.performAssault(faction, sp.name, params)
+
+        if (assaultEffective(ARVN, true)(game.getSpace(sp.name))) {
+          log(s"\nUS adds a free follow up ARVN asault in $name")
+          Bot.performAssault(ARVN, sp.name, params)
+        }
+      }
+    }
+  }
+
+  val shadedCandidate = (sp: Space) =>
+    sp.isProvince &&
+    sp.pieces.has(NVATroops) &&
+    withOrAdjacentExists(sp.name)(x => x.pieces.has(USTroops))
+
+  val mostUSTroops = List(
+    new Bot.HighestScore[Space](
+      "Most US Troops in/adjacent",
+      sp => withOrAdjacentTotal(sp.name)(_.pieces.totalOf(USTroops))
+    )
+  )
+
+  def shadedEffective(faction: Faction): Boolean = game.spaces exists shadedCandidate
+
+  def executeShaded(faction: Faction): Unit = {
+    val candidates = game.spaces filter shadedCandidate
+
+    if (candidates.isEmpty)
+      log("There are no spaces that qualify for the event")
+    else {
+      val name = if (game.isHuman(faction))
+        askCandidate("Select a Province with NVA Troops: ", spaceNames(candidates))
+      else
+        Bot.bestCandidate(candidates, mostUSTroops).name
+
+      val die = d6
+      log(s"\nRolling d6 to determine number of US Troops removed: $die")
+      log(separator())
+      log(s"$faction selects $name\n")
+
+      val validSpaces = spaceNames(spaces(getAdjacent(name) + name) filter (_.pieces.has(USTroops)))
+      removePiecesFromMap(faction, die, Set(USTroops), false, validSpaces)
+    }
+  }
 }

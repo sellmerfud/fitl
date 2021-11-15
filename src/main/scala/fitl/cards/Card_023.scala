@@ -69,15 +69,24 @@ object Card_023 extends EventCard(23, "Operation Attleboro", DualEvent,
 
     if (tunnelSpaces.nonEmpty) {
       val name = askCandidate("\nExecute event in which space: ", spaceNames(tunnelSpaces))
-      val params = Params(event = true, singleTarget = Some(name), vulnerableTunnels = true)
+      val params = Params(event = true,
+                          free  = true,
+                          singleTarget      = Some(name),
+                          vulnerableTunnels = true)
       loggingControlChanges {
+        log(s"\nUS performs free Air Lift into $name")
+        log(separator(char = '='))
         Human.doAirLift(params)
+        log(s"\nUS performs free Sweep into $name")
+        log(separator(char = '='))
         Human.executeSweep(US, params)
+        log(s"\nUS performs free Assault in $name")
+        log(separator(char = '='))
         Human.performAssault(US, name, params)
 
         val arvnEffective = assaultEffective(ARVN, true)(game.getSpace(name))
         if (arvnEffective && askYorN(s"\nFollow up with ARVN assault in $name? (y/n) ")) {
-          log(s"\nUS adds a follow up ARVN asault in $name")
+          log(s"\nUS adds a free follow up ARVN asault in $name")
           Human.performAssault(ARVN, name, params)
         }
       }

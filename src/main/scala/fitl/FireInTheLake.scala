@@ -3210,7 +3210,7 @@ object FireInTheLake {
       val promptLines = new ListBuffer[String]
       promptLines += ""
       promptLines += s">>> ${ordinal(coupNum)} Coup Round <<<"
-      promptLines += separator()
+      promptLines += separator(char = '=')
       promptLines += s"Current card: ${card.fullString}"
       promptLines += s"($opts): "
       promptLines.mkString("\n", "\n", "")
@@ -3239,7 +3239,7 @@ object FireInTheLake {
       val promptLines = new ListBuffer[String]
       promptLines += ""
       promptLines += s">>> $faction turn <<<"
-      promptLines += separator()
+      promptLines += separator(char = '=')
       promptLines ++= sequenceList(eventDeck(game.currentCard), game.sequence)
       promptLines += s"($opts): "
       promptLines.mkString("\n", "\n", "")
@@ -3388,7 +3388,7 @@ object FireInTheLake {
       catch {
         case AbortAction =>
           println("\n>>>> Aborting the current action <<<<")
-          println(separator())
+          println(separator(char = '='))
           displayGameStateDifferences(game, savedState)
           game = savedState
       }
@@ -3417,7 +3417,7 @@ object FireInTheLake {
       val promptLines = new ListBuffer[String]
       promptLines += ""
       promptLines += s">>> This game has ended <<<"
-      promptLines += separator()
+      promptLines += separator(char = '=')
       promptLines += s"($opts): "
       promptLines.mkString("\n", "\n", "")
     }
@@ -4919,7 +4919,7 @@ object FireInTheLake {
           path match {
             case None =>
               println(header)
-              println(separator())
+              println(separator(char = '='))
               for (msg <- msgs)
                 println(msg)
 

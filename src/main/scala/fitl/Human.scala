@@ -1385,7 +1385,8 @@ object Human {
         sp.population > 0    &&
         sp.support > Neutral &&
         sp.name != Saigon    &&
-        !Special.trainingSpaces(sp.name)
+        !Special.trainingSpaces(sp.name) &&
+        !Special.selectedSpaces(sp.name)
     }
 
     def nextGovernAction(): Unit = {

@@ -108,8 +108,18 @@ object Human {
   //  If `canRevealTunnel` is true, and no other Insurgent pieces
   //  remain, then the tunnel marker is removed.
   //  Return the pieces removed.
-  def killExposedInsurgents(name: String, maxRemoval: Int, canRevealTunnel: Boolean, vulnerableTunnels: Boolean = false): Pieces = {
-    val baseTargets = if (vulnerableTunnels) InsurgentBases else InsurgentNonTunnels
+  def killExposedInsurgents(name: String,
+                            maxRemoval: Int,
+                            canRevealTunnel: Boolean,
+                            vulnerableTunnels: Boolean = false,
+                            onlyTarget: Option[Faction] = None): Pieces = {
+    def validEnemy(types: TraversableOnce[PieceType]): TraversableOnce[PieceType] =
+      onlyTarget match {
+        case Some(f) => types filter (t => owner(t) == f)
+        case None    => types
+      }
+
+    val baseTargets = if (vulnerableTunnels) validEnemy(InsurgentBases) else validEnemy(InsurgentNonTunnels)
     loggingControlChanges {
       var removed    = Pieces()
       def pieces     = game.getSpace(name).pieces
@@ -123,26 +133,26 @@ object Human {
           removed = removed + toRemove
       }
 
-      (remaining min pieces.totalOf(ActiveGuerrillas)) match {
+      (remaining min pieces.totalOf(validEnemy(ActiveGuerrillas))) match {
         case 0 =>
         case num =>
           val prompt = s"\nRemove active guerrillas"
-          val toRemove = askPieces(pieces, num, ActiveGuerrillas, Some(prompt))
+          val toRemove = askPieces(pieces, num, validEnemy(ActiveGuerrillas).toSeq, Some(prompt))
           removeToAvailable(name, toRemove)
           removed = removed + toRemove
       }
 
-      if (!pieces.has(NVATroops::Guerrillas)) {
+      if (!pieces.has(validEnemy(NVATroops::Guerrillas))) {
         (remaining min pieces.totalOf(baseTargets)) match {
           case 0 =>
           case num =>
             val prompt = s"\nRemove bases"
-            val toRemove = askPieces(pieces, num, baseTargets, Some(prompt))
+            val toRemove = askPieces(pieces, num, baseTargets.toSeq, Some(prompt))
             removeToAvailable(name, toRemove)
             removed = removed + toRemove
         }
 
-        if (!vulnerableTunnels && canRevealTunnel && remaining > 0 && pieces.has(InsurgentTunnels)) {
+        if (!vulnerableTunnels && canRevealTunnel && remaining > 0 && pieces.has(validEnemy(InsurgentTunnels))) {
           val die = d6
           val success = die > 3
           log("\nNext piece to remove would be a tunneled base")
@@ -150,7 +160,7 @@ object Human {
           log(s"Die roll is: ${die} [${if (success) "Tunnel destroyed!" else "No effect"}]")
           if (success) {
             val prompt = "\nRemove tunnel marker"
-            val tunnel = askPieces(pieces, 1, InsurgentTunnels, Some(prompt))
+            val tunnel = askPieces(pieces, 1, validEnemy(InsurgentTunnels).toSeq, Some(prompt))
             removeTunnelMarker(name, tunnel)
           }
         }
@@ -2574,8 +2584,8 @@ object Human {
         askMenu(choices, "\nChoose one:").head match {
           case "assault" =>
             val assaultParams = Params(
-              assaultRemovesTwoExtra = pattonUshaded,
-              free                   = true)
+              free          = true,
+              assaultParams = AssaultParams(removeTwoExtra = pattonUshaded))
             val name = askSimpleMenu(candidates, "\nAssault in which LOC:").head
             performAssault(faction, name, assaultParams)
 
@@ -2801,13 +2811,22 @@ object Human {
   def performAssault(faction: Faction, name: String, params: Params): Unit = {
     val remove1BaseFirst   = faction == US && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = faction == US && capabilityInPlay(SearchAndDestroy_Unshaded)
+    def validEnemy(types: TraversableOnce[PieceType]): TraversableOnce[PieceType] =
+      params.assaultParams.onlyTarget match {
+        case Some(f) => types filter (t => owner(t) == f)
+        case None    => types
+      }
+      
     val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
-    val baseTargets = if (params.vulnerableTunnels) InsurgentBases else InsurgentNonTunnels
+    val baseTargets = if (params.vulnerableTunnels)
+      validEnemy(InsurgentBases)
+    else
+      validEnemy(InsurgentNonTunnels)
     val sp          = game.getSpace(name)
     def pieces      = game.getSpace(name).pieces  // Always get fresh instance
-    val baseFirst   = remove1BaseFirst && pieces.has(baseTargets) && !pieces.has(UndergroundGuerrillas)
-    val underground = remove1Underground && pieces.has(UndergroundGuerrillas)
-    val totalLosses = sp.assaultFirepower(faction) + (if (params.assaultRemovesTwoExtra) 2 else 0)
+    val baseFirst   = remove1BaseFirst && pieces.has(baseTargets) && !pieces.has(validEnemy(UndergroundGuerrillas))
+    val underground = remove1Underground && pieces.has(validEnemy(UndergroundGuerrillas))
+    val totalLosses = sp.assaultFirepower(faction) + (if (params.assaultParams.removeTwoExtra) 2 else 0)
     var killedPieces = Pieces()
     def remaining   = totalLosses - killedPieces.total
 
@@ -2828,7 +2847,7 @@ object Human {
       // Abrams unshaded
       if (remaining > 0 && baseFirst) {
         log(s"\nRemove a base first [$Abrams_Unshaded]")
-        val removed = askPieces(pieces, 1, baseTargets)
+        val removed = askPieces(pieces, 1, baseTargets.toSeq)
         removeToAvailable(name, removed)
         killedPieces = killedPieces + removed
       }
@@ -2839,7 +2858,7 @@ object Human {
       // those hits.
       val killedUnderground = if (underground) {
         log(s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]")
-        val removed = askPieces(pieces, 1, UndergroundGuerrillas)
+        val removed = askPieces(pieces, 1, validEnemy(UndergroundGuerrillas).toSeq)
         removeToAvailable(name, removed)
         if (remaining > 0) {
           killedPieces = killedPieces + removed  // Counts against total hits
@@ -2853,7 +2872,9 @@ object Human {
 
       // Remove exposed insurgent pieces
       killedPieces = killedPieces + killExposedInsurgents(name, remaining,
-                                         canRevealTunnel = true, params.vulnerableTunnels)
+                                         canRevealTunnel = true,
+                                         params.vulnerableTunnels,
+                                         params.assaultParams.onlyTarget)
       // Add any removed underground guerrilla that did NOT count toward remaining hits above
       killedPieces = killedPieces + killedUnderground
 
@@ -2939,6 +2960,33 @@ object Human {
 
     def canSpecial = Special.allowed
 
+    def assaultIn(name: String): Unit = {
+      val assaultParams = if (m48Patton &&
+                              m48PattonSpaces.size < 2 &&
+                              !game.getSpace(name).isLowland &&
+                              askYorN(s"Remove 2 extra pieces in this Assault [$M48Patton_Unshaded]? (y/n) ")) {
+        log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
+        m48PattonSpaces = name :: m48PattonSpaces
+        params.copy(assaultParams = params.assaultParams.copy(removeTwoExtra = true))
+      }
+      else
+        params
+      performAssault(faction, name, assaultParams)
+
+      val canFollowup = faction == US &&
+                        addedARVNAssault == false &&
+                        game.getSpace(name).pieces.hasExposedInsurgents &&
+                        game.getSpace(name).pieces.has(ARVNCubes) &&
+                        (bodyCount || game.arvnResources >= 3)
+
+      if (canFollowup && askYorN(s"Follow up with ARVN assault in $name? (y/n) ")) {
+        log(s"\nUS adds a follow up ARVN asault in $name")
+        performAssault(ARVN, name, params)
+      }
+      assaultSpaces = assaultSpaces :+ name
+    }
+
+
     def selectAssaultSpace(): Unit = {
 
       val limitOK    = params.maxSpaces map (n => assaultSpaces.size < n) getOrElse true
@@ -2971,29 +3019,7 @@ object Human {
       askMenu(choices, "\nAssault:").head match {
         case "select" =>
           askCandidateOrBlank("\nAssault in which space: ", candidates) foreach { name =>
-            val assaultParams = if (m48Patton &&
-                                    m48PattonSpaces.size < 2 &&
-                                    !game.getSpace(name).isLowland &&
-                                    askYorN(s"Remove 2 extra pieces in this Assault [$M48Patton_Unshaded]? (y/n) ")) {
-              log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
-              m48PattonSpaces = name :: m48PattonSpaces
-              params.copy(assaultRemovesTwoExtra = true)
-            }
-            else
-              params
-            performAssault(faction, name, assaultParams)
-
-            val canFollowup = faction == US &&
-                              addedARVNAssault == false &&
-                              game.getSpace(name).pieces.hasExposedInsurgents &&
-                              game.getSpace(name).pieces.has(ARVNCubes) &&
-                              (bodyCount || game.arvnResources >= 3)
-
-            if (canFollowup && askYorN(s"Follow up with ARVN assault in $name? (y/n) ")) {
-              log(s"\nUS adds a follow up ARVN asault in $name")
-              performAssault(ARVN, name, params)
-            }
-            assaultSpaces = assaultSpaces :+ name
+            assaultIn(name)
           }
           selectAssaultSpace()
 
@@ -3018,7 +3044,14 @@ object Human {
     if (!params.event)
       logOpChoice(faction, Assault, notes)
 
-    selectAssaultSpace()
+    // Some events dictate assaulting only
+    // in specific spaces.
+    if (params.assaultParams.specificSpaces.nonEmpty) {
+      for (name <- params.assaultParams.specificSpaces)
+        assaultIn(name)
+    }
+    else
+      selectAssaultSpace()
 
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))

@@ -1028,12 +1028,18 @@ object FireInTheLake {
     }
   }
 
-  def assaultEffective(faction: Faction, vulnerableTunnels: Boolean)(sp: Space): Boolean = {
+  def assaultEffective(faction: Faction, vulnerableTunnels: Boolean, enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
     val firepower = faction match {
       case US => usFirepower(sp)
       case _  => arvnFirepower(sp)
     }
-    (assaultFirepower(faction)(sp) min vulnerableInsurgents(sp.pieces, vulnerableTunnels).total) > 0
+    val enemyPieces = (sp: Space) =>
+      enemies.foldLeft(Pieces()) { 
+        case (pieces, NVA) => pieces + sp.pieces.only(NVAPieces)
+        case (pieces, VC)  => pieces + sp.pieces.only(VCPieces)
+        case (pieces, _)   => pieces
+      }
+    (assaultFirepower(faction)(sp) min vulnerableInsurgents(enemyPieces(sp), vulnerableTunnels).total) > 0
   }
 
   // Used during a turn to keep track of pieces that have already moved
@@ -1603,17 +1609,24 @@ object FireInTheLake {
       (designated map (allowed =>  allowed.contains(name)) getOrElse true)
     }
   }
+
+  case class AssaultParams(
+    onlyTarget: Option[Faction] = None,      // Chu Luc (unshaded)
+    specificSpaces: Set[String] = Set.empty, // Chu Luc (unshaded)
+    removeTwoExtra: Boolean     = false      // M48 Patton (unshaded)
+  )
+
   // Parameters used when executing operations and special activities
   // This is used by both the Humand and Bot objects.
   case class Params(
     specialActivity: Boolean        = false, // May select a Special Activity
     maxSpaces: Option[Int]          = None,
     free: Boolean                   = false, // Events grant free commands
-    assaultRemovesTwoExtra: Boolean = false, // M48 Patton (unshaded)
     onlyIn: Option[Set[String]]     = None,  // Limit command to the given spaces
     event: Boolean                  = false,
     singleTarget: Option[String]    = None,  // Airlift/Sweep into this space only (used by events)
     strikeParams: AirStrikeParams   = AirStrikeParams(),
+    assaultParams: AssaultParams    = AssaultParams(),
     vulnerableTunnels: Boolean      = false  // Used by events
   ) {
     val limOpOnly = maxSpaces == Some(1)
@@ -4165,10 +4178,10 @@ object FireInTheLake {
       Pieces()
     }
     else {
-      availTypes match {
-        case pieceType::Nil => println(s"\nPlace up to ${amountOf(maxPieces, pieceType.singular)} in $spaceName")
-        case _              => println(s"\nPlace up to ${amountOf(maxPieces, "piece")} in $spaceName (${andList(availTypes)})")
-      }
+      // availTypes match {
+      //   case pieceType::Nil => println(s"\nPlace up to ${amountOf(maxPieces, pieceType.singular)} in $spaceName")
+      //   case _              => println(s"\nPlace up to ${amountOf(maxPieces, "piece")} in $spaceName (${andList(availTypes)})")
+      // }
 
       def nextType(placed: Pieces, remainingTypes: List[PieceType]): Pieces = {
         val maxRemaining = maxPieces - placed.total
@@ -4182,7 +4195,7 @@ object FireInTheLake {
             nextType(placed, remainingTypes.tail)
           }
           else {
-            val num = askInt(s"\nPlace how many ${pieceType.genericPlural}? ", 0, maxOfType)
+            val num = askInt(s"\nPlace how many ${pieceType.genericPlural} in $spaceName? ", 0, maxOfType)
             val numAvail = game.availablePieces.totalOf(pieceType)
             val finalNum = if (num <= numAvail)
                num

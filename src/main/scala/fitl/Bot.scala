@@ -477,16 +477,32 @@ object Bot {
   //  Mo_BodyCount              - Cost=0 AND +3 Aid per guerrilla removed
 
   def performAssault(faction: Faction, name: String, params: Params): Unit = {
+    def validEnemy(types: TraversableOnce[PieceType]): TraversableOnce[PieceType] =
+      params.assaultParams.onlyTarget match {
+        case Some(f) => types filter (t => owner(t) == f)
+        case None    => types
+      }
+
+    def validPieces(pieces: Pieces): Pieces =
+      params.assaultParams.onlyTarget match {
+        case Some(NVA) => pieces.only(NVAPieces)
+        case Some(VC)  => pieces.only(VCPieces)
+        case _         => pieces
+      }
+
     val remove1BaseFirst   = faction == US && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = faction == US && capabilityInPlay(SearchAndDestroy_Unshaded)
     val m48Patton          = faction == US && capabilityInPlay(M48Patton_Unshaded)
     val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
-    val baseTargets        = if (params.vulnerableTunnels) InsurgentBases else InsurgentNonTunnels
+    val baseTargets        = if (params.vulnerableTunnels)
+      validEnemy(InsurgentBases)
+    else
+      validEnemy(InsurgentNonTunnels)
     val sp          = game.getSpace(name)
     def pieces      = game.getSpace(name).pieces  // Always get fresh instance
-    val baseFirst   = remove1BaseFirst && pieces.has(baseTargets) && !pieces.has(UndergroundGuerrillas)
-    val underground = remove1Underground && pieces.has(UndergroundGuerrillas)
-    val totalLosses = sp.assaultFirepower(faction) + (if (params.assaultRemovesTwoExtra) 2 else 0)
+    val baseFirst   = remove1BaseFirst && pieces.has(baseTargets) && !pieces.has(validEnemy(UndergroundGuerrillas))
+    val underground = remove1Underground && pieces.has(validEnemy(UndergroundGuerrillas))
+    val totalLosses = sp.assaultFirepower(faction)
     var killedPieces = Pieces()
     def remaining   = totalLosses - killedPieces.total
 
@@ -518,7 +534,7 @@ object Bot {
       // those hits.
       val killedUnderground = if (underground) {
         log(s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]")
-        val removed = selectEnemyRemovePlaceActivate(pieces.only(UndergroundGuerrillas), 1)
+        val removed = selectEnemyRemovePlaceActivate(pieces.only(validEnemy(UndergroundGuerrillas)), 1)
         removeToAvailable(name, removed)
         if (remaining > 0) {
           killedPieces = killedPieces + removed  // Counts against total hits
@@ -531,7 +547,7 @@ object Bot {
         Pieces()
 
       // Remove exposed insurgent pieces, check for tunnel marker removal
-      val (killedExposed, affectedTunnel) = selectRemoveEnemyInsurgentBasesLast(pieces, remaining, params.vulnerableTunnels)
+      val (killedExposed, affectedTunnel) = selectRemoveEnemyInsurgentBasesLast(validPieces(pieces), remaining, params.vulnerableTunnels)
       killedPieces = killedPieces + killedExposed
       // Add any removed underground guerrilla that did NOT count toward remaining hits above
       killedPieces = killedPieces + killedUnderground
@@ -4636,6 +4652,12 @@ object Bot {
         var assaultSpaces = Set.empty[String]
         val maxAssault    = params.maxSpaces getOrElse NO_LIMIT
 
+        def assaultIn(name: String): Unit = {
+          performAssault(ARVN, name, params)
+          assaultSpaces += name
+        }
+
+
         def nextAssault(): Unit = {
           val free           = params.free || momentumInPlay(Mo_BodyCount)
           val check          = previousAssaults.nonEmpty || assaultSpaces.nonEmpty
@@ -4649,13 +4671,20 @@ object Bot {
 
             if (!params.event && previousAssaults.isEmpty && assaultSpaces.isEmpty)
               logOpChoice(ARVN, Assault)
-            performAssault(ARVN, sp.name, params)
-            assaultSpaces += sp.name
+            assaultIn(sp.name)
             nextAssault()
           }
         }
 
-        nextAssault()
+        // Some events dictate assaulting only
+        // in specific spaces.
+        if (params.assaultParams.specificSpaces.nonEmpty) {
+          for (name <- params.assaultParams.specificSpaces)
+            assaultIn(name)
+        }
+        else
+          nextAssault()
+
         if (assaultSpaces.nonEmpty)
           Some(Assault)
         else {

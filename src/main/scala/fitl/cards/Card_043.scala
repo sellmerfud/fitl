@@ -41,6 +41,17 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Free World aids Saigon: 2 ARVN or 2 US Bases out-of-play to Available.
+// Then ARVN Resources +6 or Aid +12.
+//
+// Shaded Text
+// Moscow aids Hanoi: Improve the Trail 1 box. 
+// Then either Improve it 1 more box or add +10 NVA Resources.
+//
+// Tips
+// Choose either 2 ARVN or 2 US Bases, not 1 ARVN Base and 1 US Base.
+
 object Card_043 extends EventCard(43, "Economic Aid",
   DualEvent,
   List(NVA, ARVN, US, VC),
@@ -50,9 +61,72 @@ object Card_043 extends EventCard(43, "Economic Aid",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    game.outOfPlay.has(CoinBases) ||
+    game.usAid < EdgeTrackMax     ||
+    (faction == ARVN && game.trackResources(ARVN) && game.arvnResources < EdgeTrackMax)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+
+  def executeUnshaded(faction: Faction): Unit = {
+    val numUS   = game.outOfPlay.totalOf(USBase) min 2
+    val numARVN = game.outOfPlay.totalOf(ARVNBase) min 2
+
+    if (numUS == 0 && numARVN == 0)
+      log("There are no Out of Play US or ARVN bases")
+    else {
+      val baseType = if (game.isHuman(faction)) {
+        val choices = List(
+          choice(numUS   > 0, USBase,   amountOf(numUS, "US Base")),
+          choice(numARVN > 0, ARVNBase, amountOf(numARVN, "ARVN Base")),
+        ).flatten
+        val sorted = if (faction == US) choices else choices.reverse
+        askMenu(choices, "\nChoose Out of Play Bases to move to Available:").head
+      }
+      else faction match {
+        case US => if (numUS   > 0) USBase else ARVNBase
+        case _  => if (numARVN > 0) USBase else ARVNBase
+      }
+      
+      val bases = baseType match {
+        case USBase => Pieces(usBases = numUS)
+        case _      => Pieces(arvnBases = numARVN)
+      }
+      moveOutOfPlayToAvailable(bases)
+    }
+
+    if (game.isHuman(faction)) {
+      val choices = List(
+        "arvn" -> "Increase ARVN resources +6",
+        "aid"  -> "Increase US Aid +12")
+      askMenu(choices, "\nChoose one:").head match {
+        case "arvn" =>
+          log()
+          increaseResources(ARVN, 6)
+        case _      =>
+          log()
+          increaseUsAid(12)
+      }
+    }
+    else if (faction == ARVN && game.trackResources(ARVN) && game.arvnResources < EdgeTrackMax)
+      increaseResources(ARVN, 6)
+    else
+      increaseUsAid(12)
+  }
+
+  def shadedEffective(faction: Faction): Boolean = false  // Not executed by Bots
+  def executeShaded(faction: Faction): Unit = {
+    val choices = List(
+      "trail-2" -> "Improve the Trail by 2 boxes",
+      "trail-1" -> "Improve the Trail by 1 box and increase NVA resources +10")
+
+    askMenu(choices, "\nChoose one:").head match {
+      case "trail-2" =>
+        log()
+        improveTrail(2)
+      case _         =>
+        log()
+        improveTrail(1)
+        increaseResources(NVA, 10)
+    }
+  }
 }

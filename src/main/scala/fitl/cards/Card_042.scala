@@ -41,6 +41,18 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Chinese opening to US: NVA Resources –10.
+// NVA must remove a die roll in Troops.
+//
+// Shaded Text
+// Chinese boost aid to North: NVA add +10 Resources.
+// VC add Trail value in Resources.
+//
+// Tips
+// For the unshaded Event, the NVA get to choose which of
+// their Troops are removed from the map.
+
 object Card_042 extends EventCard(42, "Chou En Lai",
   DualEvent,
   List(NVA, ARVN, US, VC),
@@ -50,9 +62,27 @@ object Card_042 extends EventCard(42, "Chou En Lai",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = 
+    game.isHuman(NVA) ||
+    game.totalOnMap(_.pieces.totalOf(NVATroops)) > 0
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+
+  def executeUnshaded(faction: Faction): Unit = {
+    val die = d6
+    val num = die min game.totalOnMap(_.pieces.totalOf(NVATroops))
+    val validSpaces = spaceNames(game.spaces filter (_.pieces.has(NVATroops)))
+
+    decreaseResources(NVA, 10)
+    log(s"\nRolling d6 to determine number of Troops lost: $die")
+    log(separator())
+
+    removePiecesFromMap(NVA, num, Set(NVATroops), true, validSpaces)
+  }
+
+  def shadedEffective(faction: Faction): Boolean = false  // Never played by Bots
+
+  def executeShaded(faction: Faction): Unit = {
+    increaseResources(NVA, 10)
+    increaseResources(VC, game.trail)
+  }
 }

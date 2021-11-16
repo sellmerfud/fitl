@@ -71,7 +71,7 @@ object Card_051 extends EventCard(51, "301st Supply Bn",
     val candidates = game.spaces filter unshadedCandidate
 
     if (candidates.isEmpty)
-      log("\nThere are no spaces that qualify for the event")
+      log("There are no spaces that qualify for the event")
     else
       removePiecesFromMap(faction, 6, InsurgentForces, false, spaceNames(candidates))
   }

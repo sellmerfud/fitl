@@ -1372,6 +1372,7 @@ object FireInTheLake {
   case class Capability(name: String, shaded: Boolean, faction: Faction) {
     lazy val flavor = if (shaded) "shaded" else "unshaded"
     override def toString() = s"$name ($flavor)"
+    def flip = copy(shaded = !shaded)
   }
 
   def shadedCapability(name: String, faction: Faction)   = Capability(name, true, faction)
@@ -3689,6 +3690,15 @@ object FireInTheLake {
       log(s"\nRemove capability: '$cap' from play")
     }
   }
+
+  def flipCapability(cap: Capability): Unit = {
+    if (game.capabilities contains cap) {
+      game = game.copy(capabilities = cap.flip :: (game.capabilities filterNot (_ == cap)))
+      val desc = if (cap.shaded) "unshaded" else "shaded"
+      log(s"\nFlip capability: '$cap' to its $desc side")
+    }
+  }
+
 
   def momentumInPlay(mo: String) = game.momentum contains mo
 

@@ -35,11 +35,23 @@
 package fitl.cards
 
 import scala.collection.immutable.ListMap
+import scala.util.Random.shuffle
 import fitl.FireInTheLake._
 import fitl.EventHelpers._
 import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
+
+// Unshaded Text
+// Whiz-kid corporation: Flip 1 shaded US Capability to unshaded.
+//
+// Unshaded Text
+// Systems analysis in ignorance of local conditions:
+// Flip 1 unshaded US Capability to shaded.
+//
+// Tips
+// A player may execute either version (5.2), so ARVN may
+// flip a US unshaded Capability to shaded.
 
 object Card_052 extends EventCard(52, "RAND",
   DualEvent,
@@ -49,10 +61,42 @@ object Card_052 extends EventCard(52, "RAND",
           NVA  -> (Critical -> Shaded),
           VC   -> (Critical -> Shaded))) {
 
+  def isCandidate(shaded: Boolean)(cap: Capability) =
+    cap.faction == US && cap.shaded == shaded
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    game.capabilities exists isCandidate(shaded = true)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val candidates = game.capabilities filter isCandidate(shaded = true)
+
+    if (candidates.isEmpty)
+      log("There are no shaded US capabilities in play")
+    else {
+      val cap = if (game.isHuman(faction))
+        askSimpleMenu(candidates, "Choose shaded US capability to flip:").head
+      else
+        shuffle(candidates).head
+
+      flipCapability(cap)
+    }
+  }
+
+  def shadedEffective(faction: Faction): Boolean =
+        game.capabilities exists isCandidate(shaded = false)
+
+  def executeShaded(faction: Faction): Unit = {
+    val candidates = game.capabilities filter isCandidate(shaded = false)
+
+    if (candidates.isEmpty)
+      log("There are no unshaded US capabilities in play")
+    else {
+      val cap = if (game.isHuman(faction))
+        askSimpleMenu(candidates, "Choose unshaded US capability to flip:").head
+      else
+        shuffle(candidates).head
+
+      flipCapability(cap)
+    }
+  }
 }

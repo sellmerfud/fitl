@@ -35,11 +35,26 @@
 package fitl.cards
 
 import scala.collection.immutable.ListMap
+import scala.collection.mutable.ListBuffer
 import fitl.FireInTheLake._
 import fitl.EventHelpers._
 import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
+
+// Unshaded Text
+// Ineffective tactics: Remove 2 NVA Troops each from up to 3
+// spaces in South Vietnam. Remain Eligible.
+//
+// Shaded Text
+// Facilities damaged: Remove up to 1 US and 2 ARVN Bases from
+// any Provinces (US to Casualties).
+//
+// Tips
+// Removal of pieces may change Control (1.7). The Bases may not be 
+// removed from Cities. "US to Casualties" means that any US Base
+// removed goes to the Casualties box, while ARVN Bases removed go
+// to ARVN Available Forces as usual (1.4.1).
 
 object Card_053 extends EventCard(53, "Sappers",
   DualEvent,
@@ -49,10 +64,141 @@ object Card_053 extends EventCard(53, "Sappers",
           NVA  -> (NotExecuted -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
+  val unshadedCandidate = (sp: Space) =>
+    isInSouthVietnam(sp.name) &&
+    sp.pieces.has(NVATroops)
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.spaces exists unshadedCandidate
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val candidates = game.spaces filter unshadedCandidate
+
+    if (candidates.isEmpty)
+      log("There are no spaces in South Vietnam with NVA Troops")
+    else {
+      val selectedSpaces = if (candidates.size <= 3)
+        spaceNames(candidates)
+      else if (game.isHuman(faction)) {
+        def nextSpace(count: Int, candidates: List[String]): List[String] = {
+          if (count <= 3 && candidates.nonEmpty) {
+            val name = askSimpleMenu(candidates, s"Choose ${ordinal(count)} space:").head
+            name::nextSpace(count + 1, candidates filterNot (_ == name))
+          }
+          else
+            Nil
+        }
+        nextSpace(1, spaceNames(candidates)).reverse
+      }
+      else {
+        def nextSpace(count: Int, candidates: List[Space]): List[String] = {
+          if (count <= 3 && candidates.nonEmpty) {
+            val name = Bot.pickSpaceRemoveReplace(faction)(candidates).name
+            name::nextSpace(count + 1, candidates filterNot (_.name == name))
+          }
+          else
+            Nil
+        }
+        nextSpace(1, candidates).reverse
+      }
+
+      if (game.isHuman(faction))
+        println()
+
+      for (name <- selectedSpaces) {
+        val sp = game.getSpace(name)
+        val num = sp.pieces.totalOf(NVATroops) min 2
+        removePieces(name, Pieces(nvaTroops = num))
+      }
+      remainEligibleNextTurn(faction)
+    }
+  }
+
+  val hasUSBase = (sp: Space) => sp.isProvince && sp.pieces.has(USBase)
+  val hasARVNBase = (sp: Space) => sp.isProvince && sp.pieces.has(ARVNBase)
+  val shadedCandidate = (sp: Space) => hasUSBase(sp) || hasARVNBase(sp)
+
+  def shadedEffective(faction: Faction): Boolean = game.nonLocSpaces exists shadedCandidate
+
+  def executeShaded(faction: Faction): Unit =  {
+    val usCandidates = game.nonLocSpaces filter hasUSBase
+    val arvnCandidates = game.nonLocSpaces filter hasARVNBase
+    val maxARVN = (arvnCandidates map (_.pieces.totalOf(ARVNBase))).sum
+    case class Selection(name: String, baseType: PieceType)
+
+    def reduceArvn(arvn: List[Space], name: String): List[Space] = {
+      val sp = arvn.find(_.name == name).get
+      if (sp.pieces.totalOf(ARVNBase) == 1)
+        arvn filterNot(_.name == name)
+      else
+        arvn map { sp => 
+          if (sp.name == name)
+            sp.copy(pieces = sp.pieces - Pieces(arvnBases = 1))
+          else
+            sp
+        }
+    }
+
+    val usSelection = if (usCandidates.isEmpty) {
+      log("There are no US Bases in any Provinces")
+      Nil
+    }
+    else if (game.isBot(faction)) {
+      val sp = Bot.pickSpaceRemoveReplace(faction)(usCandidates)
+      Selection(sp.name, USBase)::Nil
+    }
+    else if (askYorN("Do you wish to remove a US Base? (y/n) ")) {
+      val name = askSimpleMenu(spaceNames(usCandidates), "\nRemove a US Base from which Province:").head
+      Selection(name, USBase)::Nil
+    }
+    else
+      Nil
+
+    val arvnSelection = if (maxARVN == 0) {
+      log("There are no ARVN Bases in any Provinces")
+      Nil
+    }
+    else if (game.isBot(faction)) {
+      def nextSpace(numRemaining: Int, candidates: List[Space]): List[Selection] = {
+        if (numRemaining > 0 && candidates.nonEmpty) {
+          val sp = Bot.pickSpaceRemoveReplace(faction)(candidates)
+          Selection(sp.name, ARVNBase)::nextSpace(numRemaining - 1, reduceArvn(candidates, sp.name))
+        }
+        else
+          Nil
+      }
+      nextSpace(2, arvnCandidates)
+    }
+    else {
+      val num = askInt("Remove how many ARVN Bases", 0, maxARVN min 2)
+      if (num == 0)
+        Nil
+      else if (num == maxARVN) {
+        val b = new ListBuffer[Selection]()
+        for (sp <- arvnCandidates)
+          for (i <- 1 to sp.pieces.totalOf(ARVNBase))
+            b += Selection(sp.name, ARVNBase)
+        b.toList
+      }
+      else {
+        def nextSpace(numRemaining: Int, candidates: List[Space]): List[Selection] = {
+          if (numRemaining > 0 && candidates.nonEmpty) {
+            val name = askSimpleMenu(spaceNames(candidates), "\nRemove an ARVN Base from which Province:").head
+            Selection(name, ARVNBase)::nextSpace(numRemaining - 1, reduceArvn(candidates, name))
+          }
+          else
+            Nil
+        }
+        nextSpace(num, arvnCandidates).reverse
+      }
+    }
+
+    val selections = usSelection:::arvnSelection
+    log()
+    if (selections.isEmpty)
+      log("No US or ARVN bases removed")
+    else
+      for (Selection(name, baseType) <- usSelection:::arvnSelection)
+        removePieces(name, Pieces().set(1, baseType))
+
+  }
 }

@@ -1812,25 +1812,22 @@ object Human {
 
     def nextBombardAction(): Unit = {
       val candidates = spaceNames(game.spaces filter isCandidate)
-      val canSelect  = bombardSpaces.size < maxSpaces && candidates.nonEmpty
-      val choices    = List(
-        choice(canSelect, "select",   "Select a space to Bombard"),
-        choice(true,      "finished", "Finished with Bombard special activity")
-      ).flatten
+      if (bombardSpaces.size < maxSpaces && candidates.nonEmpty) {
+        val choices = (candidates map (n => n -> n)) :+
+                      ("finished" -> "Finished with Bombard special activity")
+        println(s"\n${amountOf(bombardSpaces.size, "space")} of $maxSpaces selected for Bombard")
+        println(separator())
+        if (bombardSpaces.nonEmpty)
+          wrap("", bombardSpaces.toList, showNone = false) foreach println
 
-      println(s"\n${amountOf(bombardSpaces.size, "space")} of $maxSpaces selected for Bombard")
-      println(separator())
-      wrap("", bombardSpaces.toList, showNone = false) foreach println
+        askMenu(choices, "\nChoose space to Bombard:").head match {
+          case "finished" =>
 
-      askMenu(choices, "\nBombard:").head match {
-        case "select" =>
-          askCandidateOrBlank("\nBombard in which space: ", candidates) foreach { name =>
-            bombardSpace(name)
-            bombardSpaces = bombardSpaces + name
-          }
-        nextBombardAction()
-
-        case _ =>
+          case name =>
+              bombardSpace(name)
+              bombardSpaces = bombardSpaces + name
+              nextBombardAction()
+        }
       }
     }
 

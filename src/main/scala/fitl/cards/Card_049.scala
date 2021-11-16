@@ -41,6 +41,19 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Soviet escalation matched: Place any 6 ARVN pieces anywhere in South Vietnam.
+//
+// Shaded Text
+// Heavy divisions, big guns: NVA in any 3 spaces places enough Troops
+// to double their number. It then free Bombards.
+//
+// Tips "Pieces" include Bases. For the unshaded Event, the executing
+// Faction would decide the pieces and locations. For the shaded,
+// NVA decides; in each selected space, place the same number of NVA
+// Troops as are already there, then execute a Bombard Special Activity.
+// The Bombard need not involve any of the Troops just placed.
+
 object Card_049 extends EventCard(49, "Russian Arms",
   DualEvent,
   List(NVA, ARVN, VC, US),
@@ -50,9 +63,38 @@ object Card_049 extends EventCard(49, "Russian Arms",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.availablePieces.has(ARVNPieces)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val validSpaces = spaceNames(game.spaces filter (sp => isInSouthVietnam(sp.name)))
+    placePiecesOnMap(faction, 6, ARVNPieces, validSpaces)
+  }
+
+  def shadedEffective(faction: Faction): Boolean = false  // Never executed by Bots
+
+  // Human player only
+  def executeShaded(faction: Faction): Unit = {
+    val candidates = spaceNames(game.spaces filter (_.pieces.has(NVATroops)))
+
+    if (candidates.isEmpty)
+      log("There are no spaces with NVA Troops")
+    else {
+
+      def placeTroops(count: Int, candidates: List[String]): Unit = {
+        if (count <= 3 && candidates.nonEmpty) {
+          val name = askCandidate(s"\nSelect ${ordinal(count)} space to place Troops: ", candidates)
+          val sp = game.getSpace(name)
+          val num = sp.pieces.totalOf(NVATroops)
+
+          ensurePieceTypeAvailable(NVATroops, num)
+          log()
+          placePieces(name, Pieces(nvaTroops = num))
+          placeTroops(count + 1, candidates filterNot (_ == name))
+        }
+      }
+
+      placeTroops(1, candidates)
+      Human.doBombard(Params(event = true, free = true))
+    }
+  }
 }

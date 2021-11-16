@@ -34,14 +34,17 @@
 package fitl
 
 import java.io.IOException
-import scala.util.Random.{shuffle, nextInt}
 import scala.annotation.tailrec
-import scala.util.Properties.{lineSeparator, isWin}
 import scala.collection.immutable.ListMap
 import scala.collection.mutable.ListBuffer
 import scala.io.StdIn.readLine
-import Ordering.Implicits._
 import scala.language.implicitConversions
+import scala.util.Properties.isWin
+import scala.util.Properties.lineSeparator
+import scala.util.Random.nextInt
+import scala.util.Random.shuffle
+
+import Ordering.Implicits._
 import FUtil.Pathname
 import scenarios._
 import Bot.{ TrungCard, TrungDeck }

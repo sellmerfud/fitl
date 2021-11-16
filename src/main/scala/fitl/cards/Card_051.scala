@@ -41,6 +41,17 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Combat units diverted to logistics: Remove 6 non-Base Insurgent
+// pieces from outside South Vietnam.
+//
+// Shaded Text
+// Trail construction unit: Improve Trail by 2 boxes and add
+// a die roll of NVA Resources.
+//
+// Tips
+// "Non-Base Insurgent pieces" include NVA Troops and NVA and VC Guerrillas.
+
 object Card_051 extends EventCard(51, "301st Supply Bn",
   DualEvent,
   List(NVA, VC, US, ARVN),
@@ -50,9 +61,30 @@ object Card_051 extends EventCard(51, "301st Supply Bn",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  val unshadedCandidate = (sp: Space) =>
+    !isInSouthVietnam(sp.name) &&
+    sp.pieces.has(InsurgentForces)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.spaces exists unshadedCandidate
+
+  def executeUnshaded(faction: Faction): Unit = {
+    val candidates = game.spaces filter unshadedCandidate
+
+    if (candidates.isEmpty)
+      log("\nThere are no spaces that qualify for the event")
+    else
+      removePiecesFromMap(faction, 6, InsurgentForces, false, spaceNames(candidates))
+  }
+
+  def shadedEffective(faction: Faction): Boolean = false  // Not executed by Bots
+  def executeShaded(faction: Faction): Unit = {
+    val die = d6
+
+    improveTrail(2)
+    if (game.trackResources(NVA)) {
+      log(s"\nRolling die for NVA resources: $die")
+      log(separator())
+      increaseResources(NVA, die)
+    }
+  }
 }

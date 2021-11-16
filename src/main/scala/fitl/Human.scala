@@ -853,7 +853,7 @@ object Human {
     action match {
       case Event         => executeEvent(faction)
       case OpPlusSpecial => executeOp(faction, Params(specialActivity = true))
-      case OpOnly        => executeOp(faction)
+      case OpOnly        => executeOp(faction, Params())
       case LimitedOp     => executeOp(faction, Params(maxSpaces = Some(1)))
       case Pass          => factionPasses(faction)
     }
@@ -2122,7 +2122,7 @@ object Human {
     }
   }
 
-  def executeOp(faction: Faction, params: Params = Params()): Unit = {
+  def executeOp(faction: Faction, params: Params): Unit = {
     initTurnVariables(params)
 
     faction match {
@@ -3073,6 +3073,7 @@ object Human {
     val sa2s        = faction == NVA && !mcnamara && capabilityInPlay(SA2s_Shaded)
     val aaa         = faction == NVA && !mcnamara && !params.limOpOnly && capabilityInPlay(AAA_Unshaded)
     val cadres      = faction == VC  && capabilityInPlay(Cadres_Shaded)
+    val maxRally    = params.maxSpaces getOrElse NO_LIMIT
     var rallySpaces = List.empty[String]
     var didCadres   = false
     def canSpecial  = Special.allowed
@@ -3133,10 +3134,11 @@ object Human {
     }
 
     def selectRallySpace(): Unit = {
-      val candidates = spaceNames(game.nonLocSpaces filter (sp => sp.support <= Neutral && !rallySpaces.contains(sp.name)))
+      val candidates = spaceNames(game.nonLocSpaces filter { sp =>
+        !rallySpaces.contains(sp.name) && (sp.population == 0 || sp.support <= Neutral)
+      })
       val hasTheCash = params.free || game.resources(faction) > 0
-      val atMax      = params.maxSpaces map (_ >= rallySpaces.size) getOrElse false
-      val canSelect  = !atMax && candidates.nonEmpty && hasTheCash
+      val canSelect  = rallySpaces.size < maxRally && candidates.nonEmpty && hasTheCash
       val choices = List(
         choice(canSelect,  "select",  s"Select a rally space"),
         choice(canSpecial, "special",  "Perform a Special Activity"),
@@ -3222,6 +3224,7 @@ object Human {
     var destinations    = Set.empty[String]
     val mainForceBns    = capabilityInPlay(MainForceBns_Unshaded)
     val claymores       = momentumInPlay(Mo_Claymores)
+    var paid            = Set.empty[String]
     // Normally movedInto(name) == frozen(name), however for NVA pieces moving along the trail
     // they can be in the movedInto bucket but not the frozen bucket
     val movedInto       = new MovingGroups()  // All pieces that have moved into each dest space
@@ -3242,7 +3245,7 @@ object Human {
       else {
         val choices = (srcCandidates map (name => name -> name)) :+ ("none" -> "Do not move any pieces")
 
-        val srcName = askMenu(choices, "Move pieces from:").head
+        val srcName = askMenu(choices, "\nMove pieces from:").head
         if (srcName != "none") {
           val src         = game.getSpace(srcName)
           val dest        = game.getSpace(destName)
@@ -3253,11 +3256,12 @@ object Human {
           val notYetMoved = moveable - movedInto(srcName)
           val numCoin     = dest.pieces.totalOf(CoinForces)
 
-          if (free || game.resources(faction) > 0) {
-            if (!free) {
+          if (paid(destName) || free || game.resources(faction) > 0) {
+            if (!paid(destName) && !free) {
               log(s"\n$faction pays to move pieces into $destName")
               log(separator())
               decreaseResources(faction, 1)
+              paid += destName
             }
 
             val num         = askInt(s"Move how many pieces from $srcName", 1, moveable.total)
@@ -3296,6 +3300,7 @@ object Human {
             }
             else
               movedInto.add(destName, movers)
+            moveToDestination(destName)
           }
           else
             println(s"\n$faction does not have a resource to pay for the move into $destName")
@@ -3490,13 +3495,14 @@ object Human {
     def nextTerrorAction(): Unit = {
       val hasTheCash   = params.free || game.resources(faction) > 0
       var canTerrorize = (sp: Space) => {
-        val canPay   = sp.isLoC || hasTheCash
-        val hasPiece = faction match {
+        val canTerror = sp.isLoC || sp.population > 0
+        val canPay    = sp.isLoC || hasTheCash
+        val hasPiece  = faction match {
           case VC if cadres => sp.pieces.has(VCGuerrillas_U) && sp.pieces.totalOf(VCGuerrillas) > 1
           case VC           => sp.pieces.has(VCGuerrillas_U)
           case _            => sp.pieces.has(NVAGuerrillas_U) || sp.pieces.has(NVATroops)
         }
-        !selectedSpaces.contains(sp.name) && canPay && hasPiece
+        !selectedSpaces.contains(sp.name) && canTerror && canPay && hasPiece
       }
       val candidates = spaceNames(game.spaces filter canTerrorize)
       val canSelect  = candidates.nonEmpty && selectedSpaces.size < maxSpaces

@@ -393,7 +393,7 @@ object Bot {
     var ambushSpaces     = Set.empty[String]
     var mainForceBnsUsed = false
     val limited          = momentumInPlay(Mo_TyphoonKate) || capabilityInPlay(BoobyTraps_Unshaded)
-    val maxAmbush = if (limited) 1 else 2
+    val maxAmbush = params.maxSpaces getOrElse { if (limited) 1 else 2 }
     val notes = List(
       noteIf(momentumInPlay(Mo_TyphoonKate),s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
       noteIf(capabilityInPlay(BoobyTraps_Unshaded), s"You may ambush in only one space [$BoobyTraps_Unshaded]")
@@ -664,8 +664,8 @@ object Bot {
 
   def assaultResult(faction: Faction, vulnerableTunnels: Boolean)(sp: Space): Space = {
     val num            = assaultFirepower(faction)(sp) min vulnerableInsurgents(sp.pieces, vulnerableTunnels).total
-    val (newPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, num)
-    sp.copy(pieces = newPieces)
+    val (deadPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, num)
+    sp.copy(pieces = sp.pieces - deadPieces)
   }
 
   def assaultWouldRemoveBase(faction: Faction, vulnerableTunnels: Boolean)(sp: Space): Boolean = {
@@ -4178,14 +4178,14 @@ object Bot {
 
     // Return true if an assault on one of the spaces
     def arvnAssaultWouldUnblockCanTo_HueRouteSpace(candidates: TraversableOnce[Space]): Boolean =
-        candidates exists assaultInWouldUnblockAlongCanTho_HueRoute(ARVN, false)
+      candidates exists assaultInWouldUnblockAlongCanTho_HueRoute(ARVN, false)
 
     def arvnAssaultWouldAddControlOrUnblockCanTo_Hue: Boolean = {
       arvnAssaultWouldAddCoinControlToASpace ||
       arvnAssaultWouldUnblockCanTo_HueRouteSpace(game.patrolSpaces)
     }
 
-    def fiveArvnTroopPlusRangesInAnySpace: Boolean =
+    def fiveArvnTroopsPlusRangersInAnySpace: Boolean =
       game.spaces exists { sp => sp.pieces.totalOf(ARVNTroops::Rangers) >= 5 }
 
     def any2PopSpaceWithSupportAndMoreArvnCubesThanUsCubes: Boolean =
@@ -5480,7 +5480,7 @@ object Bot {
         sp.pieces.totalOf(VCGuerrillas) > 2 &&
         !sp.pieces.has(VCBases)
       }
-
+      val maxAttacks = params.maxSpaces getOrElse NO_LIMIT
       //  The delta of pieces killed if pt76_shaded used in the space
       case class PT76_Space(name: String, nvaTroops: Int, delta: Int)
       val pt76_unshaded   = capabilityInPlay(PT76_Unshaded)
@@ -5490,7 +5490,7 @@ object Bot {
 
       // Return true if we can continue attacking (ie. did not fail and activation roll)
       def nextAttack(candidates: List[Space], useTroops: Boolean, needActivation: Boolean): Boolean = {
-        if (candidates.nonEmpty) {
+        if (attackSpaces.size < maxAttacks && candidates.nonEmpty) {
           if (checkActivation(NVA, needActivation, actNum)) {
             val sp         = pickSpaceRemoveReplace(candidates)
 
@@ -5578,7 +5578,7 @@ object Bot {
         }
 
         attackSpaces ++= ambushSpaces
-        keepAttacking  = canContinue
+        keepAttacking = canContinue
         ambushSpaces.nonEmpty
       }
       else
@@ -5629,14 +5629,15 @@ object Bot {
     //  an activation roll after conducting Terror on a LoC.
     //  -------------------------------------------------------------
     def terrorOp(params: Params, actNum: Int): Option[InsurgentOp] = {
+      val maxTerror = params.maxSpaces getOrElse NO_LIMIT
       val isCandidate = (sp: Space) => {
         (sp.pieces.has(NVAGuerrillas_U) || sp.pieces.has(NVATroops)) &&
         ((sp.isLoC && sp.terror == 0 && sp.printedEconValue > 0) ||
          (!sp.isLoC && sp.population > 0 && (sp.terror == 0 || sp.support > Neutral)))
       }
 
-      def nextTerror(candidates: List[Space], needActivation: Boolean): Unit = {
-        if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
+      def nextTerror(numRemaining: Int, candidates: List[Space], needActivation: Boolean): Unit = {
+        if (numRemaining > 0 && candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
           val sp = pickSpacePlaceTerror(candidates)
 
             log(s"\n$NVA selects ${sp.name} for Terror")
@@ -5649,7 +5650,7 @@ object Bot {
             if (!sp.isLoC && sp.support > Neutral)
               decreaseSupport(sp.name, 1)
 
-          nextTerror(candidates filterNot (_.name == sp.name), needActivation = !sp.isLoC)
+          nextTerror(numRemaining - 1, candidates filterNot (_.name == sp.name), needActivation = !sp.isLoC)
         }
       }
 
@@ -5657,7 +5658,7 @@ object Bot {
         logOpChoice(NVA, Terror)
       val candidates = game.spaces filter isCandidate
       if (candidates.nonEmpty) {
-        nextTerror(candidates, false)
+        nextTerror(maxTerror, candidates, false)
         Some(Terror)
       }
       else {
@@ -6249,9 +6250,11 @@ object Bot {
         sp.pieces.totalOf(VCGuerrillas) > 2 &&
         !sp.pieces.has(VCBases)
       }
+      val maxAttacks = params.maxSpaces getOrElse NO_LIMIT
+      var attackSpaces = Set.empty[String]
 
       def nextAttack(candidates: List[Space], needActivation: Boolean): Unit = {
-        if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
+        if (attackSpaces.size < maxAttacks && candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
           val sp         = pickSpaceRemoveReplace(candidates)
           val guerrillas = sp.pieces.only(VCGuerrillas)
           val coinPieces = sp.pieces.only(CoinPieces)
@@ -6263,7 +6266,8 @@ object Bot {
           log(s"\n$VC Attacks in ${sp.name}")
           log(separator())
           log(s"Die roll: $die [${if (success) "Success!" else "Failure"}]")
-
+          attackSpaces += sp.name
+          
           if (success) {
             val deadPieces    = selectRemoveEnemyCoinBasesLast(coinPieces, num)
             val attritionNum  = deadPieces.totalOf(USTroops::USBase::Nil) min guerrillas.total
@@ -6287,6 +6291,7 @@ object Bot {
       else
         (Set.empty, true)
 
+      attackSpaces ++= ambushSpaces
       val ambushed = ambushSpaces.nonEmpty
       // If we have not failed an activation roll then continue attacking in
       // spaces the 3+ VC Guerrillas and not VC Base
@@ -6313,7 +6318,7 @@ object Bot {
     //    Loc     - no activation number roll
     //  -------------------------------------------------------------
     def terrorOp(params: Params, actNum: Int): Option[InsurgentOp] = {
-
+      val maxTerror   = params.maxSpaces getOrElse NO_LIMIT
       val isCandidate = (sp: Space) => {
         val needed = if (sp.pieces.has(VCBases)) 2 else 1
         sp.pieces.totalOf(VCGuerrillas_U) >= needed &&
@@ -6321,8 +6326,8 @@ object Bot {
          (!sp.isLoC && sp.population > 0 && (sp.terror == 0 || sp.support != ActiveOpposition)))
       }
 
-      def nextTerror(candidates: List[Space], needActivation: Boolean): Unit = {
-        if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
+      def nextTerror(numRemaining: Int, candidates: List[Space], needActivation: Boolean): Unit = {
+        if (numRemaining > 0 && candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
           val sp = pickSpacePlaceTerror(candidates)
 
             log(s"\n$VC selects ${sp.name} for Terror")
@@ -6339,7 +6344,7 @@ object Bot {
             if (!sp.isLoC && sp.support != ActiveOpposition)
               decreaseSupport(sp.name, 1)
 
-          nextTerror(candidates filterNot (_.name == sp.name), !sp.isLoC)
+          nextTerror(numRemaining - 1, candidates filterNot (_.name == sp.name), !sp.isLoC)
         }
       }
 
@@ -6347,7 +6352,7 @@ object Bot {
         logOpChoice(VC, Terror)
       val candidates = game.spaces filter isCandidate
       if (candidates.nonEmpty) {
-        nextTerror(candidates, false)
+        nextTerror(maxTerror, candidates, false)
         Some(Terror)
       }
       else {
@@ -6638,6 +6643,8 @@ object Bot {
   // and operation.  Probably won't happend but this will prevent and
   // endless loop.
   def executeOp(faction: Faction, params: Params): ExecuteResult = {
+    initTurnVariables()
+
     val firstCard = drawTrungCard(faction)
 
     def logTrungDraw(card: TrungCard): Unit = {
@@ -7005,7 +7012,7 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      if (!ARVN_Bot.fiveArvnTroopPlusRangesInAnySpace)
+      if (!ARVN_Bot.fiveArvnTroopsPlusRangersInAnySpace)
         TrungDraw
       else {
         val transported = params.specialActivity && ARVN_Bot.transportActivity(params)

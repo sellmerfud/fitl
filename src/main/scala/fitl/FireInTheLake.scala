@@ -2018,10 +2018,10 @@ object FireInTheLake {
 
   def statusSummary: Seq[String] = {
     val scoreLabels: Map[Faction, String] = Map(
-      US   -> "Total Support + Avail US",
-      ARVN ->"Coin Control + Patronage",
-      NVA  -> "NVA Control + NVA Bases",
-      VC   -> "Total Opp. + VC Bases"
+      US   -> "US   - Total Support + Avail US",
+      ARVN -> "ARVN - COIN Control  + Patronage",
+      NVA  -> "NVA  - NVA Control   + NVA Bases",
+      VC   -> "VC   - Total Opp.    + VC Bases"
     )
     val padLen = scoreLabels.values.map(_.length).max
     val b = new ListBuffer[String]
@@ -2042,9 +2042,9 @@ object FireInTheLake {
     if (game.trackResources(ARVN))
       b += f"ARVN resources : ${game.arvnResources}%2d"
     if (game.isHuman(NVA))
-      b += f"NVA resources  : ${game.nvaResources}%2d"
+      b += f"NVA  resources : ${game.nvaResources}%2d"
     val agitate = if (game.isBot(VC)) " (Agitate Total)" else ""
-    b += f"VC resources   : ${game.vcResources}%2d${agitate}"
+    b += f"VC   resources : ${game.vcResources}%2d${agitate}"
     b += separator()
     if (game.useEcon)
       b += f"Econ           : ${game.econ}%2d"

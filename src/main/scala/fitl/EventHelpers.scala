@@ -129,7 +129,7 @@ object EventHelpers {
             sp => includesEnemyBase(faction, sp.pieces.only(pieceTypes).getTypes)
           ))
           val narrowed = Bot.narrowCandidates(candidates, priorities)
-          
+
           Bot.pickSpaceRemoveReplace(faction)(narrowed)
         }
         val pieces   = sp.pieces.only(pieceTypes)
@@ -294,10 +294,10 @@ object EventHelpers {
           None
       }
       else {
-        val candiates = game.spaces filter isValid
-        if (candiates.nonEmpty) {
+        val candidates = game.spaces filter isValid
+        if (candidates.nonEmpty) {
           val isTroop = piece.has(USTroops::NVATroops::ARVNTroops::Nil)
-          Some(Bot.pickSpacePlaceForces(faction, isTroop)(candiates))
+          Some(Bot.pickSpacePlaceForces(faction, isTroop)(candidates))
         }
         else
           None
@@ -320,6 +320,88 @@ object EventHelpers {
         nextHumanPlacement(numToPlace min game.piecesToPlace.only(pieceTypes).total)
       else
         nextBotPlacement(numToPlace, game.availablePieces.only(pieceTypes))
+    }
+    spacesUsed
+  }
+
+  // Place pieces from Out Of Play
+  // Returns the set of spaces where pieces were placed
+  def placeOutOfPlayPiecesOnMap(faction: Faction, numToPlace: Int, pieceTypes: TraversableOnce[PieceType],
+                                validSpaces: TraversableOnce[String]): Set[String] = {
+    val actualNum = numToPlace min game.outOfPlay.totalOf(pieceTypes)
+    val validNames = validSpaces.toSet
+    val isValid = (sp: Space) => validNames(sp.name)
+    val canTakeBase  = (sp: Space) => isValid(sp) && sp.totalBases < 2
+    val desc = andList(pieceTypes map (_.genericPlural))
+    var spacesUsed = Set.empty[String]
+
+    def nextHumanPlacement(numRemaining: Int): Unit = if (numRemaining > 0) {
+      val bases      = game.outOfPlay.only(pieceTypes).only(BasePieces)
+      val forces     = game.outOfPlay.only(pieceTypes).except(BasePieces)
+      val candidates = if (forces.nonEmpty)
+        spaceNames(game.spaces filter isValid)
+      else
+        spaceNames(game.spaces filter canTakeBase)
+
+      if (candidates.nonEmpty) {
+        println(s"\nNumber of $desc placed: ${actualNum - numRemaining} of ${actualNum}")
+        val name      = askCandidate(s"Place $desc in which space: ", candidates)
+        val sp        = game.getSpace(name)
+        val placeBase = bases.nonEmpty && canTakeBase(sp) &&
+                        askYorN(s"Do you wish to place a base in $name? (y/n) ")
+        val pieces    = if (placeBase)
+          askPieces(bases, 1)
+        else {
+          val num = askInt(s"\nPlace how many pieces in $name", 0, numRemaining)
+          askPieces(forces, num)
+        }
+        if (pieces.nonEmpty) {
+          println()
+          placePiecesFromOutOfPlay(name, pieces)
+          spacesUsed += name
+        }
+        nextHumanPlacement(numRemaining - pieces.total)
+      }
+    }
+
+    def nextBotPlacement(numRemaining: Int, oopPieces: Pieces): Unit = if (numRemaining > 0 && oopPieces.nonEmpty) {
+      val piece = Bot.selectFriendlyToPlaceOrMove(oopPieces, 1)
+      val optSpace = if (piece.has(BasePieces)) {
+        val candidates = game.spaces filter canTakeBase
+        if (candidates.nonEmpty)
+          Some(Bot.pickSpacePlaceBases(faction)(candidates))
+        else
+          None
+      }
+      else {
+        val candidates = game.spaces filter isValid
+        if (candidates.nonEmpty) {
+          val isTroop = piece.has(USTroops::NVATroops::ARVNTroops::Nil)
+          Some(Bot.pickSpacePlaceForces(faction, isTroop)(candidates))
+        }
+        else
+          None
+      }
+      optSpace match {
+        case Some(sp) =>
+          placePiecesFromOutOfPlay(sp.name, piece)
+          spacesUsed += sp.name
+          nextBotPlacement(numRemaining - 1, oopPieces - piece)
+        case None =>
+          // It is possible that there are base available but no
+          // space can accomodate a base, so remove the piece from
+          // consideration and continue
+          nextBotPlacement(numRemaining, oopPieces - piece)
+      }
+    }
+
+    if (actualNum > 0) {
+      loggingControlChanges {
+        if (game.isHuman(faction))
+          nextHumanPlacement(actualNum)
+        else
+          nextBotPlacement(actualNum, game.outOfPlay.only(pieceTypes))
+      }
     }
     spacesUsed
   }

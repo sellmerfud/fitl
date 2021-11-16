@@ -41,6 +41,18 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Shaded Text
+// CIDG camp holds out: Remove up to 3 Guerrillas from a Province
+// with a COIN Base. Set the space to Active Support.
+//
+// Shaded Text
+// Camp overrun: Remove a COIN Base from a Province with 0-2 COIN
+// cubes (US to Casualties) and set it to Active Opposition.
+//
+// Tips "COIN" means US or ARVN. "US to Casualties" means that any
+// US pieces removed go to the Casualties box, while ARVN piece removed
+// go to ARVN Available Forces as usual (1.4.1).
+
 object Card_048 extends EventCard(48, "Nam Dong",
   DualEvent,
   List(NVA, ARVN, VC, US),
@@ -49,10 +61,76 @@ object Card_048 extends EventCard(48, "Nam Dong",
           NVA  -> (NotExecuted -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
+  val unshadedCandidate = (sp: Space) =>
+    sp.isProvince &&
+    sp.pieces.has(CoinBases) &&
+    (sp.pieces.has(Guerrillas) || sp.support != ActiveSupport)
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    game.nonLocSpaces exists unshadedCandidate
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val candidates = game.nonLocSpaces filter unshadedCandidate
+
+    if (candidates.isEmpty)
+      log("There are no spaces that qualify for the event")
+    else {
+      val name = if (game.isHuman(faction))
+        askCandidate("Execute the event in which space: ", spaceNames(candidates))
+      else if (faction == US)
+        US_Bot.pickSpaceTowardActiveSupport(candidates).name
+      else
+        ARVN_Bot.pickSpaceTowardPassiveSupport(candidates).name
+
+      val sp = game.getSpace(name)
+      val maxNum = sp.pieces.totalOf(Guerrillas) min 3
+      val guerrillas = if (maxNum == 0)
+        Pieces()
+      else if (game.isHuman(faction)) {
+        val num = askInt("Remove how many guerrillas", 0, maxNum)
+        askPieces(sp.pieces.only(Guerrillas), num)
+      }
+      else
+        Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(Guerrillas), maxNum)
+
+      log()
+      loggingControlChanges {
+        removePieces(name, guerrillas)
+        setSupport(name, ActiveSupport)
+      }
+    }
+  }
+
+  val shadedCandidate = (sp: Space) =>
+    sp.isProvince &&
+    sp.pieces.has(CoinBases) &&
+    sp.pieces.totalOf(CoinCubes) < 3
+
+  def shadedEffective(faction: Faction): Boolean =
+    game.nonLocSpaces exists shadedCandidate
+
+  def executeShaded(faction: Faction): Unit = {
+    val candidates = game.nonLocSpaces filter shadedCandidate
+
+    if (candidates.isEmpty)
+      log("There are no spaces that qualify for the event")
+    else {
+      val (name, base) = if (game.isHuman(faction)) {
+        val name = askCandidate("Execute the event in which space: ", spaceNames(candidates))
+        val base = askPieces(game.getSpace(name).pieces.only(CoinBases), 1)
+        (name, base)
+      }
+      else {
+        val sp = VC_Bot.pickSpaceTowardActiveOpposition(candidates)
+        val base = Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(CoinBases), 1)
+        (sp.name, base)
+      }
+
+      log()
+      loggingControlChanges {
+        removePieces(name, base)
+        setSupport(name, ActiveOpposition)
+      }
+    }
+  }
 }

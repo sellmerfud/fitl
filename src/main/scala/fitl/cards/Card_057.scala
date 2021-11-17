@@ -41,6 +41,16 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Protests ignored: Any 2 US Casualties to Available.
+//
+// Shaded Text
+// US accused of neocolonialist war: 2 Available US Troops out of play.
+// NVA add a die roll of Resources.
+//
+// Tips
+// "US Casualties" may include Troops, Bases, and Irregulars.
+
 object Card_057 extends EventCard(57, "International Unrest",
   DualEvent,
   List(NVA, VC, ARVN, US),
@@ -50,9 +60,40 @@ object Card_057 extends EventCard(57, "International Unrest",
           VC   -> (Performed   -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    game.casualties.totalOf(USPieces) > 0
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val num = game.casualties.totalOf(USPieces) min 2
+
+    if (num == 0)
+      log("There a no US casualties")
+    else {
+      val usPieces = if (game.isHuman(faction))
+        askPieces(game.casualties.only(USPieces), num, prompt = Some("Select US casualties"))
+      else
+        Bot.selectFriendlyToPlaceOrMove(game.casualties.only(USPieces), num)
+
+      moveCasualtiesToAvailable(usPieces)
+    }
+  }
+
+  def shadedEffective(faction: Faction): Boolean =
+    game.availablePieces.has(USTroops)
+
+  def executeShaded(faction: Faction): Unit = {
+    val num = game.availablePieces.totalOf(USTroops) min 2
+
+    if (num == 0)
+      log("There are no available US Troops")
+    else 
+      moveAvailableToOutOfPlay(Pieces(usTroops = num))
+
+    if (game.trackResources(NVA)) {
+      val die = d6
+      log(s"\nRolling d6 to increase NVA resources: $die")
+      log(separator())
+      increaseResources(NVA, die)
+    }
+  }
 }

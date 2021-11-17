@@ -9,8 +9,8 @@ rem Set the current working directory to the directory where this script is runn
 rem This is important so that all of our relative path references work correctly.
 pushd %~dp0
 
-set CLASSPATH=lib\fitl_2.11-4.15.jar;lib\optparse_2.11-2.2.jar;lib\scala-library-2.11.0.jar;^
-lib\scala-parser-combinators_2.11-1.1.2.jar
+set CLASSPATH=lib\fire-in-the-lake_2.12-0.1.jar;lib\optparse_2.12-2.2.jar;lib\scala-library-2.12.15.jar;^
+lib\scala-parser-combinators_2.12-1.1.2.jar;lib\scala-reflect-2.12.15.jar;lib\scalactic_2.12-3.0.1.jar
 java -cp %CLASSPATH%  fitl.FireInTheLake %*
 
 popd

@@ -41,6 +41,18 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Premature conventional buildup: In each of any 3 spaces,
+// replace any 2 Guerrillas with 1 NVA Troop.
+//
+// Shaded Text
+// Military strategist: NVA free Marches into up to 3 spaces then executes
+// any 1 free Op or Special Activity within each, if desired.
+//
+// Tips
+// The 3 spaces must be 3 different spaces, not the same space more than
+// once. The NVA would March even during Monsoon.
+
 object Card_056 extends EventCard(56, "Vo Nguyen Giap",
   DualEvent,
   List(NVA, VC, ARVN, US),
@@ -49,10 +61,114 @@ object Card_056 extends EventCard(56, "Vo Nguyen Giap",
           NVA  -> (NotExecuted -> Shaded),
           VC   -> (NotExecuted -> Shaded))) {
 
+  val unshadedCandidate = (sp: Space) => sp.pieces.has(Guerrillas)
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = false // Not executed by Bots
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    // Set the order so that we ask for VC pieces first!
+    val GTypes = List(VCGuerrillas_A, VCGuerrillas_U, NVAGuerrillas_A, NVAGuerrillas_U)
+
+    def nextSpace(count: Int, candidates: List[String]): Unit = {
+      if (count <= 3 && candidates.nonEmpty) {
+        val name = askCandidate(s"\nSelect ${ordinal(count)} space: ", candidates)
+        val pieces = game.getSpace(name).pieces
+        val toReplace = askPieces(pieces, 2, GTypes, Some("Select guerrillas to replace"))
+        loggingControlChanges {
+          ensurePieceTypeAvailable(NVATroops, 1)
+          removeToAvailable(name, toReplace)
+          placePieces(name, Pieces(nvaTroops = 1))
+        }
+        nextSpace(count + 1, candidates filterNot (_ == name))
+      }
+    }
+
+    nextSpace(1, spaceNames(game.spaces filter unshadedCandidate))
+  }
+
+  def shadedEffective(faction: Faction): Boolean = false // Not executed by Bots
+
+  def executeShaded(faction: Faction): Unit = {
+
+    def selectDestinations(count: Int, selected: Set[String]): Set[String] = {
+      if (count <= 3) {
+        val choices = List(
+          "select"   -> s"Select ${ordinal(count)} march destination",
+          "finished" -> "Finished selecting march destinations"
+        )
+        println("\nSpaces selected")
+        println(separator())
+        wrap("", selected.toList) foreach println
+        askMenu(choices, "\nChoose one:").head match {
+          case "select" =>
+            val candidates = spaceNames(game.spaces) filterNot selected.contains
+            val name = askCandidate("Enter march destination: ", candidates)
+            selectDestinations(count + 1, selected + name)
+          case _ => selected
+        }
+      }
+      else
+        selected
+    }
+
+    val opChoices = List(
+      Rally      -> "Rally Operation",
+      March      -> "March Operation",
+      Attack     -> "Attack Operation",
+      Terror     -> "Terror Operation",
+      Infiltrate -> "Infiltrate Activity",
+      Bombard    -> "Bombard Activity",
+      Ambush     -> "Ambush Activity",
+      "cancel"   -> "None"
+    )
+
+    def doAction(name: String): Unit = {
+      val params = Params(
+        event     = true,
+        free      = true,
+        onlyIn    = Some(Set(name)),
+        maxSpaces = Some(1)
+      )
+      val bombardParams = Params(
+        event     = true,
+        free      = true,
+        onlyIn    = Some(getAdjacent(name) + name),
+        maxSpaces = Some(1)
+      )
+      Human.initTurnVariables(false)
+      askMenu(opChoices, s"\nChoose Operation/Activity to perform in $name").head match {
+        case Rally      => Human.executeRally(NVA, params)
+        case March      => Human.executeMarch(NVA, params)
+        case Attack     => Human.executeAttack(NVA, params)
+        case Terror     => Human.executeTerror(NVA, params)
+        case Infiltrate => Human.doInfiltrate(params)
+        case Bombard    => Human.doBombard(bombardParams)
+        case Ambush     => Human.performAmbush(name, NVA, March, free = true)
+      }
+    }
+
+
+    def nextAction(candidates: List[String]): Unit = if (candidates.nonEmpty) {
+      val choices = (candidates map (n => n -> n)) :+ ("finished" -> "Finished performing Ops/Activities")
+      askMenu(choices, "\nPeform an Operation or Activity in which space:").head match {
+        case "finished" =>
+        case name =>
+          doAction(name)
+          nextAction(candidates filterNot (_ == name))
+      }
+    }
+
+    val destinations = selectDestinations(1, Set.empty)
+    if (destinations.nonEmpty) {
+      val marchParams = Params(
+        event     = true,
+        free      = true,
+        onlyIn    = Some(destinations),
+        maxSpaces = Some(1)
+      )
+
+      Human.executeMarch(NVA, marchParams)
+      nextAction(destinations.toList.sorted(SpaceNameOrdering))
+    }
+  }
 }

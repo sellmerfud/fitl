@@ -101,16 +101,16 @@ object Card_025 extends EventCard(25, "TF-116 Riverines",
             case "finished" =>
             case name =>
               val params = Params(event = true, free = true, singleTarget = Some(name))
-              Human.initTurnVariables(params)
+              Human.initTurnVariables(false)
               Human.executeSweep(assaulter, params)
-              Human.initTurnVariables(params)
+              Human.initTurnVariables(false)
               Human.performAssault(assaulter, name, params)
               val addArvnAssault =
                 assaulter == US &&
                 assaultEffective(ARVN, false)(game.getSpace(name)) &&
                 askYorN(s"\nAdd a free ARVN assault in $name? (y/n) ")
               if (addArvnAssault) {
-                Human.initTurnVariables(params)
+                Human.initTurnVariables(false)
                 Human.performAssault(ARVN, name, params)
               }
               nextSpace(assaulter, candidates filterNot (_ == name))

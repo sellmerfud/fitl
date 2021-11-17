@@ -41,6 +41,21 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Bottlenecks: Degrade Trail 2 boxes. NVA selects and removes 4 of
+// its pieces each from Laos and Cambodia.
+//
+// Shaded Text
+// Convoys: Add twice Trail value to each NVA and VC Resources.
+// NVA moves its unTunneled Bases anywhere within Laos/Cambodia.
+//
+// Tips
+// For the unshaded Event, NVA may have to remove as many as 8 pieces
+// total—4 in Laos and 4 in Cambodia; "pieces" include Bases. For shaded,
+// NVA may pick up all its unTunneled Bases from Laos and Cambodia spaces,
+// then replace them into any Laos and Cambodia spaces desired, within
+// stacking (1.4.2).
+
 object Card_055 extends EventCard(55, "Trucks",
   DualEvent,
   List(NVA, VC, US, ARVN),
@@ -50,9 +65,71 @@ object Card_055 extends EventCard(55, "Trucks",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    game.trail > TrailMin ||
+    (game.spaces exists (sp => sp.pieces.has(NVAPieces) && isInLaosCambodia(sp.name)))
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    degradeTrail(2)
+    removePiecesFromMap(NVA, 4, NVAPieces, friendly = true, validSpaces = LaosCambodia)
+  }
+
+  def shadedEffective(faction: Faction): Boolean = false // Not executed by Bots
+
+  def shadedCandidates = spaceNames(spaces(LaosCambodia) filter (_.pieces.has(NVABase)))
+
+  def executeShaded(faction: Faction): Unit = {
+    increaseResources(NVA, game.trail * 2)
+    increaseResources(VC, game.trail * 2)
+
+    def nextHumanMove(): Unit = {
+      val candidates = shadedCandidates
+      val choices = (candidates map (n => n -> n)) :+
+                    ("finished" -> "Finished moving untunneled bases")
+      askMenu(choices, "\nMove an untunneled Base in which space:").head match {
+        case "finished" =>
+        case name =>
+          val targets = spaceNames(spaces(LaosCambodia) filter (sp => sp.name != name && sp.totalBases < 2))
+          if (targets.isEmpty)
+            println("\nThere is no other space in Laos/Cambodia that can take a base")
+          else {
+            val choices = (targets map (n => n -> n)) :+ ("cancel" -> s"Do not move the base from $name")
+            askMenu(choices, "\nMove the base to which space:").head match {
+              case "cancel" =>
+              case target =>
+                log()
+                movePieces(Pieces(nvaBases = 1), name, target)
+            }
+          }
+          nextHumanMove()
+      }
+    }
+
+    val nakedBase = (sp: Space) => sp.pieces.has(NVABase) && !sp.pieces.has(NVAForces)
+
+    // Only move bases that are not accompanied by NVA Troops/Guerrillas
+    def nextBotMove(): Unit = {
+      (spaces(LaosCambodia) filter nakedBase).headOption match {
+        case None =>
+        case Some(sp) =>
+          val targets = (spaces(LaosCambodia) filter { t =>
+            t.name != sp.name &&
+            t.totalBases < 2  &&
+            t.pieces.has(NVAForces)
+          })
+          if (targets.nonEmpty) {
+            val target = NVA_Bot.pickSpacePlaceBases(targets)
+            movePieces(Pieces(nvaBases = 1),  sp.name, target.name)
+            nextBotMove();
+          }
+      }
+    }
+
+    if (shadedCandidates.isEmpty)
+      log("\nThere are no untunneled NVA Bases in Laos/Cambodia")
+    else if (game.isHuman(NVA))
+      nextHumanMove()
+    else
+      nextBotMove()
+  }
 }

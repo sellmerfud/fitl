@@ -41,6 +41,21 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Drive on Vientiane: NVA removes 6 of its pieces total
+// from North Vietnam and Laos.
+//
+// Shaded Text
+// Trail security: If no COIN cubes in Laos, Improve Trail 2 boxes.
+// If there are, US and ARVN Redeploy them to Vietnam.
+//
+// Tips
+// "Pieces" can include Bases. "COIN" means US or ARVN.
+// ARVN Redeploys ARVN Troops to Cities without NVA Control, any US or 
+// ARVN Bases in South Vietnam, or Saigon, and
+// Police to LoCs or COIN Control in South Vietnam (6.4.2).
+// US Redeploys US Troops to anywhere in South Vietnam (including LoCs, if desired).
+
 object Card_058 extends EventCard(58, "Pathet Lao",
   DualEvent,
   List(NVA, VC, ARVN, US),
@@ -49,10 +64,69 @@ object Card_058 extends EventCard(58, "Pathet Lao",
           NVA  -> (NotExecuted -> Shaded),
           VC   -> (NotExecuted -> Shaded))) {
 
+  val unshadedCandidate = (sp: Space) =>
+    (sp.isNorthVietnam || Laos.contains(sp.name)) &&
+    sp.pieces.has(NVAPieces)
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.spaces exists unshadedCandidate
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val candiates = game.spaces filter unshadedCandidate
+
+    if (candiates.isEmpty)
+      log("There are no NVA pieces in North Vietnam or Laos")
+    else
+      removePiecesFromMap(NVA, 6, NVAPieces, friendly = true, validSpaces = NorthVietnam::Laos);
+  }
+
+  def shadedEffective(faction: Faction): Boolean = false  // Not use by the Bots
+  def executeShaded(faction: Faction): Unit = {
+    val candidates = spaceNames(spaces(Laos) filter (_.pieces.has(CoinCubes)))
+
+    if (candidates.isEmpty)
+      improveTrail(2)
+    else {
+      val southVietnam   = (sp: Space) => isInSouthVietnam(sp.name)
+      val arvnTroopDest  = (sp: Space) =>
+        southVietnam(sp) && (
+          sp.name == Saigon ||
+          sp.pieces.has(CoinBases) ||
+          (sp.isCity && !sp.nvaControlled)
+        )
+      val policeDest = (sp: Space) =>
+        sp.isLoC ||
+        (southVietnam(sp) && sp.coinControlled)
+
+      val arvnTroopDests  = spaceNames(game.spaces filter arvnTroopDest).toSet
+      val arvnPoliceDests = spaceNames(game.spaces filter policeDest).toSet
+      val usTroopsDests   = spaceNames(game.spaces filter southVietnam).toSet
+
+      loggingControlChanges {
+        for (name <- candidates) {
+          val sp = game.getSpace(name)
+          val arvnTroops = sp.pieces.only(ARVNTroops)
+          val arvnPolice = sp.pieces.only(ARVNPolice)
+          val usTroops   = sp.pieces.only(USTroops)
+  
+          if (arvnTroops.nonEmpty) {
+            log(s"\nRedeploying ARVN Troops out of $name")
+            log(separator())
+            movePiecesFromSpace(ARVN, name, arvnTroops, arvnTroopDests)
+          }
+  
+          if (arvnPolice.nonEmpty) {
+            log(s"\nRedeploying ARVN Police out of $name")
+            log(separator())
+            movePiecesFromSpace(ARVN, name, arvnPolice, arvnPoliceDests)
+          }
+  
+          if (usTroops.nonEmpty) {
+            log(s"\nRedeploying US Troops out of $name")
+            log(separator())
+            movePiecesFromSpace(US, name, usTroops, usTroopsDests)
+          }
+        }
+      }
+    }
+  }
 }

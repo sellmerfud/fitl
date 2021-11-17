@@ -326,7 +326,7 @@ object EventHelpers {
 
   // Place pieces from Out Of Play
   // Returns the set of spaces where pieces were placed
-  def placeOutOfPlayPiecesOnMap(faction: Faction, numToPlace: Int, pieceTypes: TraversableOnce[PieceType],
+  def placeOutOfPlayPiecesToMap(faction: Faction, numToPlace: Int, pieceTypes: TraversableOnce[PieceType],
                                 validSpaces: TraversableOnce[String]): Set[String] = {
     val actualNum = numToPlace min game.outOfPlay.totalOf(pieceTypes)
     val validNames = validSpaces.toSet
@@ -406,7 +406,7 @@ object EventHelpers {
     spacesUsed
   }
 
-  // Move the given number pieces from one or more spaces on the map to
+  // Move the given number of pieces from one or more spaces on the map to
   // the given destination space.
   def moveMapPiecesToSpace(
     faction: Faction,
@@ -455,6 +455,51 @@ object EventHelpers {
     }
   }
 
+  // Move the given number of pieces from the given origin space to one
+  // or move destination spaces.
+  // Used by events that redeploy pieces.
+  // The Bots us the Place pieces priorities.
+  def movePiecesFromSpace(
+    faction: Faction,
+    originName: String,
+    pieces: Pieces,
+    validDestinations: Set[String]): Unit = {
+
+    loggingControlChanges {
+      if (game.isHuman(faction)) {
+        def nextMove(remainingPieces: Pieces): Unit = if (remainingPieces.nonEmpty) {
+
+          println()
+          wrap("Remaining pieces: ", remainingPieces.descriptions) foreach println
+          val destName = askCandidate("\nSelect a destination space: ", validDestinations.toSeq)
+          val num      = askInt(s"Move how many pieces to $destName", 0, remainingPieces.total)
+          val movers   = askPieces(remainingPieces, num)
+          movePieces(movers, originName, destName)
+          nextMove(remainingPieces - movers)
+        }
+
+        loggingControlChanges {
+          nextMove(pieces)
+        }
+      }
+      else { // Bot
+        val destCandidates = spaces(validDestinations)
+        var remainingPieces = pieces
+
+        loggingControlChanges {
+          while (remainingPieces.nonEmpty) {
+            val mover = Bot.selectFriendlyToPlaceOrMove(remainingPieces, 1)
+            val sp    = if (isBase(mover.getTypes.head))
+              Bot.pickSpacePlaceBases(faction)(destCandidates)
+            else
+              Bot.pickSpacePlaceForces(faction)(destCandidates)
+            movePieces(mover, originName, sp.name)
+            remainingPieces = remainingPieces - mover
+          }
+        }
+      }
+    }
+  }
 }
 
 

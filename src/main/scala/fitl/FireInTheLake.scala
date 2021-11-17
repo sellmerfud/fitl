@@ -292,12 +292,13 @@ object FireInTheLake {
   val LOC_CanTho_BacLieu          = "LOC Can Tho -- Bac Lieu"
   val LOC_CanTho_LongPhu          = "LOC Can Tho -- Long Phu"
 
-  val Cities       =  List(Hue, DaNang, Kontum, QuiNhon, CamRahn, AnLoc, Saigon, CanTho)
-  val OutsideSouth =  List(NorthVietnam, CentralLaos, SouthernLaos, NortheastCambodia,
-                           TheFishhook, TheParrotsBeak, Sihanoukville)
+  val Cities       = List(Hue, DaNang, Kontum, QuiNhon, CamRahn, AnLoc, Saigon, CanTho)
+  val OutsideSouth = List(NorthVietnam, CentralLaos, SouthernLaos, NortheastCambodia,
+                          TheFishhook, TheParrotsBeak, Sihanoukville)
 
-  val LaosCambodia =  List(CentralLaos, SouthernLaos, NortheastCambodia,
-                           TheFishhook, TheParrotsBeak, Sihanoukville)
+  val Laos         = List(CentralLaos, SouthernLaos)
+  val LaosCambodia = List(CentralLaos, SouthernLaos, NortheastCambodia,
+                          TheFishhook, TheParrotsBeak, Sihanoukville)
 
   val MekongLoCs = List(LOC_Saigon_CanTho, LOC_CanTho_ChauDoc, LOC_CanTho_LongPhu)
 

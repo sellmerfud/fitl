@@ -41,6 +41,20 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Daring rescue: 2 Troop Casualties to Available.
+// NVA Ineligible through next card. US Eligible.
+//
+// Shaded Text
+// No prisoners there: Any 2 Casualties out of play.
+// US Ineligible through next card
+//
+// Tips
+// For the unshaded text, place the US Eligibility Cylinder
+// from wherever it is into the “Eligible Factions” box.
+// If US executed the Event and ARVN 2nd Eligible, 
+// ARVN may execute Ops & Special Activity as usual.
+
 object Card_054 extends EventCard(54, "Son Tay",
   DualEvent,
   List(NVA, VC, US, ARVN),
@@ -50,9 +64,37 @@ object Card_054 extends EventCard(54, "Son Tay",
           VC   -> (Performed   -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    game.casualties.has(USTroops) ||
+    game.sequence.willBeEligibeNextTurn(NVA)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val num = game.casualties.totalOf(USTroops) min 2
+
+    if (num == 0)
+      log("There are no US Troops in the Casualties box")
+    else
+      moveCasualtiesToAvailable(Pieces(usTroops = num))
+
+    makeIneligibleThroughNextTurn(NVA)
+    remainEligibleNextTurn(US)
+  }
+
+  def shadedEffective(faction: Faction): Boolean =
+    game.casualties.nonEmpty
+
+  def executeShaded(faction: Faction): Unit = {
+    if (game.casualties.isEmpty)
+      log("There are no pieces in the Casualties box")
+    else {
+      val pieces = if (game.isHuman(faction))
+        askPieces(game.casualties, 2, prompt = Some("Select causualties to move Out of Play"))
+      else
+        Bot.selectEnemyRemovePlaceActivate(game.casualties, 2)
+
+      moveCasualtiesToOutOfPlay(pieces)
+    }
+
+    makeIneligibleThroughNextTurn(US)
+  }
 }

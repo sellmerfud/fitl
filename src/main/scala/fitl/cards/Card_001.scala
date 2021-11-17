@@ -87,6 +87,6 @@ object Card_001 extends EventCard(1, "Gulf of Tonkin",
   def executeShaded(faction: Faction): Unit = {
     // Aid -1 per Casualty.  All Casualties out of play.
     decreaseUsAid(game.casualties.total)
-    moveAllCasualtiesToOutOfPlay(game.casualties)
+    moveCasualtiesToOutOfPlay(game.casualties)
   }
 }

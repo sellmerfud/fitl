@@ -3091,7 +3091,7 @@ object FireInTheLake {
       log("\nROTATION: Move US base casualites and 1/3 US Troop casualties to Out of Play")
       log(separator())
       if (toOutOfPlay.nonEmpty)
-        moveAllCasualtiesToOutOfPlay(toOutOfPlay)
+        moveCasualtiesToOutOfPlay(toOutOfPlay)
       else
         log("There are no US bases or Troops to move Out of Play")
 
@@ -3860,7 +3860,7 @@ object FireInTheLake {
     }
   }
 
-  def moveAllCasualtiesToOutOfPlay(pieces: Pieces, reason: Option[String] = None): Unit = if (pieces.total > 0) {
+  def moveCasualtiesToOutOfPlay(pieces: Pieces, reason: Option[String] = None): Unit = if (pieces.total > 0) {
     loggingPointsChanges {
       assert(game.casualties contains pieces, s"All requested pieces are not in casualties: $pieces")
       game = game.copy(casualties = game.casualties - pieces.normalized,

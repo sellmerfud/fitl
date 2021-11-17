@@ -1621,6 +1621,10 @@ object FireInTheLake {
     removeTwoExtra: Boolean     = false      // M48 Patton (unshaded)
   )
 
+  case class MarchParams(
+    onlyFrom: Set[String] = Set.empty  // If not empty, restricts where pieces can march from.
+  )
+
   // Parameters used when executing operations and special activities
   // This is used by both the Humand and Bot objects.
   case class Params(
@@ -1632,7 +1636,8 @@ object FireInTheLake {
     singleTarget: Option[String]    = None,  // Airlift/Sweep into this space only (used by events)
     strikeParams: AirStrikeParams   = AirStrikeParams(),
     assaultParams: AssaultParams    = AssaultParams(),
-    vulnerableTunnels: Boolean      = false  // Used by events
+    marchParams:   MarchParams      = MarchParams(),
+    vulnerableTunnels: Boolean      = false  // Used by events assault/air strik
   ) {
     val limOpOnly = maxSpaces == Some(1)
 

@@ -3378,7 +3378,7 @@ object Bot {
         }
       }
 
-      def doArvnSweeps(): Unit = if (!game.inMonsoon) {
+      def doArvnSweeps(): Unit = if (params.event || !game.inMonsoon) {
         val candidates = game.nonLocSpaces filter canArvnSweep
         if (canAdvise && candidates.nonEmpty) {
           val sp = bestCandidate(candidates, arvnSweepPriorities)
@@ -5383,7 +5383,7 @@ object Bot {
     //    March not allowed in Monsoon.
     //  -------------------------------------------------------------
     def marchOp(params: Params, actNum: Int, withLoC: Boolean, withLaosCambodia: Boolean): Option[InsurgentOp] = {
-      if (game.inMonsoon)
+      if (!params.event && game.inMonsoon)
         None
       else {
         // Select a LoC march destination candidate
@@ -5519,6 +5519,7 @@ object Bot {
             attackSpaces += sp.name
             log(s"\n$NVA Attacks in ${sp.name} using $forceDisplay")
             log(separator())
+            revealPieces(sp.name, toActivate)
             if (!useTroops)
               log(s"Die roll: $die [${if (success) "Success!" else "Failure"}]")
 
@@ -5537,7 +5538,6 @@ object Bot {
                 Pieces(nvaGuerrillas_A = attritionNum) // All NVA guerrillas will have been activated
               }
 
-              revealPieces(sp.name, toActivate)
               loggingControlChanges {
                 removePieces(sp.name, deadPieces)
                 removeToAvailable(sp.name, attrition, Some("Attrition:"))
@@ -6186,7 +6186,7 @@ object Bot {
     //    March not allowed in Monsoon.
     //  -------------------------------------------------------------
     def marchOp(params: Params, actNum: Int): Option[InsurgentOp] = {
-      if (game.inMonsoon)
+      if (!params.event && game.inMonsoon)
         None
       else {
         val nextLoCCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {

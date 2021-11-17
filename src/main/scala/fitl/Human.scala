@@ -730,7 +730,10 @@ object Human {
           loggingControlChanges {
             if (faction == NVA && op == Attack && capabilityInPlay(PT76_Unshaded) && sp.pieces.has(NVATroops))
               removeToAvailable(name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
-            revealPieces(name, Pieces().set(1, ambusher))
+
+            // Some events allow ambush without requiring and underground guerrilla
+            if (target.pieces.has(ambusher)) 
+              revealPieces(name, Pieces().set(1, ambusher))
             removePieces(targetName, deadPieces)
           }
           Special.selectedSpaces = Special.selectedSpaces + name
@@ -787,6 +790,8 @@ object Human {
       if (!free)
         decreaseResources(faction, 1)
 
+      revealPieces(name, toActivate)
+
       loggingControlChanges {
         if (faction == NVA && capabilityInPlay(PT76_Unshaded) && troops.nonEmpty)
           removeToAvailable(name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
@@ -796,7 +801,6 @@ object Human {
           val deadPieces = askEnemyCoin(coinPieces, num, prompt = Some(s"Attacking in $name"))
           val attrition  = deadPieces.only(USTroops::USBase::Nil).total min sp.pieces.only(guerrilla_types).total
   
-          revealPieces(name, toActivate)
           removePieces(name, deadPieces)
           removeToAvailable(name, Pieces().set(attrition, active), Some("Attrition:"))  // All guerrillas are now active
         }
@@ -3254,8 +3258,17 @@ object Human {
         moveable - movedInto(name)
     }
 
+    def getMarchSources(destName: String): List[String] = {
+      val adjacent = if (params.marchParams.onlyFrom.isEmpty)
+        getAdjacent(destName)
+      else
+        getAdjacent(destName) filter params.marchParams.onlyFrom
+      
+      (adjacent filter (moveablePieces(_).nonEmpty)).toList.sorted(SpaceNameOrdering)
+    }
+
     def moveToDestination(destName: String): Unit = {
-      val srcCandidates = getAdjacent(destName).toList.sorted filter (moveablePieces(_).total > 0)
+      val srcCandidates = getMarchSources(destName)
       if (srcCandidates.isEmpty)
         println(s"\nThere are no pieces that can reach $destName")
       else {

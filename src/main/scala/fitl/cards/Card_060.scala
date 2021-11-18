@@ -41,6 +41,18 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Pulitzer photo inspires: 3 out-of-play US pieces to Available.
+//
+// Shaded Text
+// Photos galvanize home front: NVA place 6 Troops outside South Vietnam,
+// add +6 Resources, and, if executing, stay Eligible.
+//
+// Tips
+// For the unshaded Event, Troops and Bases in US Available both affect
+// the US Support + Available score (7.2). If NVA is the Faction executing
+// the shaded Event, it stays Eligible.
+
 object Card_060 extends EventCard(60, "War Photographer",
   DualEvent,
   List(NVA, VC, ARVN, US),
@@ -50,9 +62,37 @@ object Card_060 extends EventCard(60, "War Photographer",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.outOfPlay.has(USPieces)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val usPieces = game.outOfPlay.only(USPieces)
+
+    val toAvail = if (usPieces.isEmpty) {
+      log("There are no Out of Play US Pieces")
+      Pieces()
+    }
+    else if (game.isHuman(faction))
+      askPieces(usPieces, 3, prompt = Some("Move Out of Play US pieces to Available:"))
+    else
+      Bot.selectFriendlyToPlaceOrMove(usPieces, 3)
+
+    println()
+    moveOutOfPlayToAvailable(toAvail)
+    
+  }
+
+  def shadedEffective(faction: Faction): Boolean = false  // Not executed by Bots
+
+  def executeShaded(faction: Faction): Unit = {
+    val num = if (game.isHuman(NVA))
+      6
+    else
+      game.availablePieces.totalOf(NVATroops) min 6  // Bot only places from available
+
+    placePiecesOnMap(NVA, num, Set(NVATroops), NorthVietnam::LaosCambodia)
+    println()
+    increaseResources(NVA, 6)
+    if (faction == NVA)
+      remainEligibleNextTurn(NVA)
+  }
 }

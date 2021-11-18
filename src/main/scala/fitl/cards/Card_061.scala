@@ -41,6 +41,19 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// ARVN CAPABILITY
+//
+// Unshaded Text
+// Shock force: ARVN in 1 Transport destination after Ops may free Assault.
+//
+// Shaded Text
+// Sedentary sinecures: Transport Rangers only.
+//
+// Tips
+// The unshaded “after Ops” means that the ARVN Assault occurs once all Transport
+// and accompanying Operations are completed. Shaded effect means that no
+// ARVN Troops—only Rangers—can move by Transport Special Activity the rest of the game.
+
 object Card_061 extends EventCard(61, "Armored Cavalry",
   DualEvent,
   List(ARVN, US, NVA, VC),
@@ -50,9 +63,9 @@ object Card_061 extends EventCard(61, "Armored Cavalry",
           VC   -> (Critical  -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
+  def executeUnshaded(faction: Faction): Unit = playCapability(ArmoredCavalry_Unshaded)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def shadedEffective(faction: Faction): Boolean = true
+  def executeShaded(faction: Faction): Unit = playCapability(ArmoredCavalry_Shaded)
 }

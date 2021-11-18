@@ -332,7 +332,7 @@ object EventHelpers {
     val validNames = validSpaces.toSet
     val isValid = (sp: Space) => validNames(sp.name)
     val canTakeBase  = (sp: Space) => isValid(sp) && sp.totalBases < 2
-    val desc = andList(pieceTypes map (_.genericPlural))
+    val desc = andList(game.outOfPlay.only(pieceTypes).getTypes map (_.genericPlural))
     var spacesUsed = Set.empty[String]
 
     def nextHumanPlacement(numRemaining: Int): Unit = if (numRemaining > 0) {

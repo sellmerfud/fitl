@@ -297,8 +297,8 @@ object FireInTheLake {
                           TheFishhook, TheParrotsBeak, Sihanoukville)
 
   val Laos         = List(CentralLaos, SouthernLaos)
-  val LaosCambodia = List(CentralLaos, SouthernLaos, NortheastCambodia,
-                          TheFishhook, TheParrotsBeak, Sihanoukville)
+  val Cambodia     = List(NortheastCambodia, TheFishhook, TheParrotsBeak, Sihanoukville)
+  val LaosCambodia = Laos:::Cambodia
 
   val MekongLoCs = List(LOC_Saigon_CanTho, LOC_CanTho_ChauDoc, LOC_CanTho_LongPhu)
 
@@ -421,6 +421,8 @@ object FireInTheLake {
   def getAdjacentLOCsAndCities(name: String): Set[String] = getAdjacentLOCs(name) ++ getAdjacentCities(name)
   def getAdjacentNonLOCs(name: String): Set[String] = getAdjacentProvinces(name) ++ getAdjacentCities(name)
 
+  def isInLaos(name: String)         = Laos contains name
+  def isInCambodia(name: String)     = Cambodia contains name
   def isInLaosCambodia(name: String) = LaosCambodia contains name
   def isOutsideSouth(name: String)   = OutsideSouth contains name
   def isInSouthVietnam(name: String) = !isOutsideSouth(name)
@@ -693,6 +695,7 @@ object FireInTheLake {
   val ARVNCubes           = List(ARVNPolice, ARVNTroops)
   val FlippablePieces     = List(Irregulars_U, Irregulars_A, Rangers_U, Rangers_A,
                                                   NVAGuerrillas_U, NVAGuerrillas_A, VCGuerrillas_U, VCGuerrillas_A)
+  val SpecialForces       = Rangers:::Irregulars
   val Guerrillas          = List(NVAGuerrillas_A, VCGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_U)
   val ActiveGuerrillas    = List(NVAGuerrillas_A, VCGuerrillas_A)
   val UndergroundGuerrillas = List(NVAGuerrillas_U, VCGuerrillas_U)
@@ -1615,6 +1618,18 @@ object FireInTheLake {
     }
   }
 
+  case class AirLiftParams(
+    onlyTo: Set[String] = Set.empty,
+    allowedTypes: Set[PieceType] = Set.empty
+  ) {
+    def canLiftTo(name: String) = onlyTo.isEmpty || onlyTo(name)
+    def allowedType(t: PieceType) = allowedTypes.isEmpty || allowedTypes(t)
+    def allowedPieces(pieces: Pieces) = if (allowedTypes.isEmpty)
+      pieces
+    else
+      pieces.only(allowedTypes)
+  }
+
   case class AssaultParams(
     onlyTarget: Option[Faction] = None,      // Chu Luc (unshaded)
     specificSpaces: Set[String] = Set.empty, // Chu Luc (unshaded)
@@ -1623,7 +1638,9 @@ object FireInTheLake {
 
   case class MarchParams(
     onlyFrom: Set[String] = Set.empty  // If not empty, restricts where pieces can march from.
-  )
+  ) {
+    def canMarchFrom(name: String) = onlyFrom.isEmpty || onlyFrom(name)
+  }
 
   // Parameters used when executing operations and special activities
   // This is used by both the Humand and Bot objects.
@@ -1635,6 +1652,7 @@ object FireInTheLake {
     event: Boolean                  = false,
     singleTarget: Option[String]    = None,  // Airlift/Sweep into this space only (used by events)
     strikeParams: AirStrikeParams   = AirStrikeParams(),
+    airliftParams: AirLiftParams    = AirLiftParams(),
     assaultParams: AssaultParams    = AssaultParams(),
     marchParams:   MarchParams      = MarchParams(),
     vulnerableTunnels: Boolean      = false  // Used by events assault/air strik
@@ -2165,7 +2183,7 @@ object FireInTheLake {
     val b = new ListBuffer[String]
     b += s"Current card  : ${card.fullString}"
     if (!card.isCoup) {
-      val actors     = sequence.actors map (a => s"${actorDisp(a.faction)} => ${a.action.name}")
+      val actors     = sequence.actors map (a => s"${actorDisp(a.faction)} -> ${a.action.name}")
       val eligible   = card.factionOrder filter sequence.eligibleThisTurn   map (_.name)
       val ineligible = card.factionOrder filter sequence.ineligibleThisTurn map (_.name)
       val passed     = card.factionOrder filter sequence.passed     map (_.name)

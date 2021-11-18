@@ -74,7 +74,7 @@ object Card_036 extends EventCard(36, "Hamburger Hill",
       !sp.isNorthVietnam &&
       sp.isHighland &&
       sp.pieces.has(InsurgentBases) &&
-      Bot.canMoveTo(US, sp.name, EventMove(None), Set(USTroops))
+      Bot.canMoveTo(US, sp.name, EventMove(None), Set(USTroops), Params())
     }
 
   def unshadedEffective(faction: Faction): Boolean = unshadedBotCandidates.nonEmpty

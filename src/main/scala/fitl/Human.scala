@@ -1000,6 +1000,7 @@ object Human {
   // Any US Troops plus up to 4 (Irregulars, Rangers, ARVN Troops)
   // among 4 selected spaces (2 in Monsoon, Never N. Vietnam)
   def doAirLift(params: Params): Unit = {
+    val airliftParams = params.airliftParams
     val Others: List[PieceType] = ARVNTroops::Rangers:::Irregulars
     val maxAirLiftSpaces = if (params.maxSpaces.nonEmpty)
       params.maxSpaces.get
@@ -1012,8 +1013,8 @@ object Human {
     // All US Troops and Others that have moved are always included.
     // Others that have not moved only if total others < 4
     def moveablePieces(sp: Space) = {
-      val usTroopsAndLiftedOthers = sp.pieces.only(USTroops) + liftedOthers(sp.name)
-      val unmovedOthers = sp.pieces.only(Others) - liftedOthers(sp.name)
+      val usTroopsAndLiftedOthers = airliftParams.allowedPieces(sp.pieces.only(USTroops) + liftedOthers(sp.name))
+      val unmovedOthers = airliftParams.allowedPieces(sp.pieces.only(Others) - liftedOthers(sp.name))
 
       if (totalLiftedOthers < 4)
         usTroopsAndLiftedOthers + unmovedOthers
@@ -1030,6 +1031,7 @@ object Human {
     def liftOutCandidates = if (airLiftSpaces.size > 1)
       airLiftSpaces.filter{ name => 
         Some(name) != params.singleTarget &&
+        params.airliftParams.canLiftTo(name) &&
         moveablePieces(game.getSpace(name)).nonEmpty
       }
     else
@@ -2715,12 +2717,17 @@ object Human {
       }
     }
 
+    def isSweepCandidate = (sp: Space) =>
+      params.spaceAllowed(sp.name) &&
+      !sp.isNorthVietnam &&
+      !sweepSpaces(sp.name)
+
     // Select provinces/cities (not N. Vietnam)
     def selectSweepSpace(): Unit = {
       // Note: we allow selecting spaces without cubes or adjacent cubes because
       // the user may air lift cube in...
       val candidates = if (sweepSpaces.size < maxSpaces)
-        spaceNames(game.nonLocSpaces filterNot (sp => sp.isNorthVietnam || sweepSpaces(sp.name)))
+        spaceNames(game.nonLocSpaces filter isSweepCandidate)
       else
         Nil
       val canSweep = candidates.nonEmpty && (faction == US || params.free || game.arvnResources >= 3)
@@ -3259,10 +3266,7 @@ object Human {
     }
 
     def getMarchSources(destName: String): List[String] = {
-      val adjacent = if (params.marchParams.onlyFrom.isEmpty)
-        getAdjacent(destName)
-      else
-        getAdjacent(destName) filter params.marchParams.onlyFrom
+      val adjacent = getAdjacent(destName) filter params.marchParams.canMarchFrom
       
       (adjacent filter (moveablePieces(_).nonEmpty)).toList.sorted(SpaceNameOrdering)
     }

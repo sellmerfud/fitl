@@ -326,7 +326,7 @@ object EventHelpers {
 
   // Place pieces from Out Of Play
   // Returns the set of spaces where pieces were placed
-  def placeOutOfPlayPiecesToMap(faction: Faction, numToPlace: Int, pieceTypes: TraversableOnce[PieceType],
+  def placeOutOfPlayPiecesOnMap(faction: Faction, numToPlace: Int, pieceTypes: TraversableOnce[PieceType],
                                 validSpaces: TraversableOnce[String]): Set[String] = {
     val actualNum = numToPlace min game.outOfPlay.totalOf(pieceTypes)
     val validNames = validSpaces.toSet

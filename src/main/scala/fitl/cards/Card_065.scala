@@ -41,6 +41,15 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Free World allies: Place 4 out-of-play US pieces onto the map.
+//
+// Shaded Text
+// Withdrawal: US must remove a die roll in pieces from the map to out of play.
+//
+// Tips
+// "Pieces" can include Bases. For the shaded text, the US decides which US pieces to remove.
+
 object Card_065 extends EventCard(65, "International Forces",
   DualEvent,
   List(ARVN, US, NVA, VC),
@@ -50,9 +59,21 @@ object Card_065 extends EventCard(65, "International Forces",
           VC   -> (Performed   -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.outOfPlay.totalOf(USPieces) > 0
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    placeOutOfPlayPiecesOnMap(faction, 4, USPieces, spaceNames(game.spaces filter (!_.isNorthVietnam)))
+  }
+
+  def shadedEffective(faction: Faction): Boolean = game.totalOnMap(_.pieces.totalOf(USPieces)) > 0
+
+  def executeShaded(faction: Faction): Unit = {
+    val die = d6
+    // US removes the pieces regarless of which faction is executing the event
+    log(s"\nRolling d6 to determine number of pieces to remove: $die")
+    log(separator())
+    log(s"US chooses ${amountOf(die, "piece")} to remove to Out of Play")
+    log()
+    removePiecesToOutOfPlay(US, die, USPieces, true, spaceNames(game.spaces))
+  }
 }

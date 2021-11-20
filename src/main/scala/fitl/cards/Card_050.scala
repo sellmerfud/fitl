@@ -76,7 +76,7 @@ object Card_050 extends EventCard(50, "Uncle Ho",
       ).flatten
       askMenu(choices, "\nChoose one:").head match {
         case "troops" =>
-          placeOutOfPlayPiecesToMap(faction, 4, Set(USTroops), validSpaces)
+          placeOutOfPlayPiecesOnMap(faction, 4, Set(USTroops), validSpaces)
 
         case _ =>
           increaseResources(ARVN, 9)
@@ -86,7 +86,7 @@ object Card_050 extends EventCard(50, "Uncle Ho",
       if (faction == ARVN && game.trackResources(ARVN))
         increaseResources(ARVN, 9)
       else if (numOopTroops > 0)
-        placeOutOfPlayPiecesToMap(faction, 4, Set(USTroops), validSpaces)
+        placeOutOfPlayPiecesOnMap(faction, 4, Set(USTroops), validSpaces)
 
     }
 

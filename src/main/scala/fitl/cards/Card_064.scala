@@ -41,6 +41,15 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Single Event Text
+// Uneasy allies: Aid +10 or –10. Patronage +3 or -5.
+// If US or ARVN executing, that Faction Pacifies as if Support Phase.
+// If Insurgent executing, that Faction remains Eligible.
+//
+// Tips
+// Either the US or the ARVN only—whichever is executing the Event—Pacifies,
+// not one after the other as during the Support Phase (6.3.1).
+
 object Card_064 extends EventCard(64, "Honolulu Conference",
   SingleEvent,
   List(ARVN, US, NVA, VC),
@@ -50,9 +59,44 @@ object Card_064 extends EventCard(64, "Honolulu Conference",
           VC   -> (Performed   -> Unshaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = singleNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    if (isCoin(faction)) {
+      (game.arvnResources > pacifyCost && (game.nonLocSpaces exists pacifyCandidate(faction))) ||
+      game.usAid     < EdgeTrackMax ||
+      game.patronage < EdgeTrackMax
+    }
+    else
+      game.usAid > 0 || game.patronage > 0
 
+  def executeUnshaded(faction: Faction): Unit = {
+    val (addAid, addPat) = if (game.isHuman(faction)) {
+      val aidChoices = List(true -> "Increase US Aid +10", false -> "Decrease US Aid -10")
+      val patChoices = List(true -> "Increase Patronage Aid +3", false -> "Decrease Patronage -5")
+      (askMenu(aidChoices, "\nChoose one:").head, askMenu(patChoices, "\nChoose one:").head)
+    }
+    else if (isCoin(faction))
+      (true, false)  // Only US Bot uses this event, so we decrease Patronage
+    else
+      (false, false)
+
+    println()
+    if (addAid)
+      increaseUsAid(10)
+    else
+      decreaseUsAid(10)
+    
+    if (addPat)
+      increasePatronage(3)
+    else
+      decreasePatronage(5)
+
+    if (isCoin(faction))
+      coupSupportPhase(forEvent = true, factions = Set(faction))
+    else
+      remainEligibleNextTurn(faction)
+  }
+
+  // Single event - These functions are not used
   def shadedEffective(faction: Faction): Boolean = false
   def executeShaded(faction: Faction): Unit = ()
 }

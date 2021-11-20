@@ -2314,7 +2314,9 @@ object FireInTheLake {
 
           game = initialGameState(scenario, humanFactions, usePeriodEvents)
 
+          log()
           log("Start of Game")
+          log(separator(char = '='))
           logSummary(scenarioSummary)
           log()
           scenario.additionalSetup()
@@ -2810,12 +2812,28 @@ object FireInTheLake {
     pause()
   }
 
+  def pacifyCandidate(faction: Faction)(sp: Space) = {
+    val maxSupport = if (game.isHuman(faction) || faction == US) ActiveSupport else PassiveSupport
+    val troops     = if (faction == US) USTroops else ARVNTroops
+    sp.coinControlled         &&
+    sp.support < maxSupport   &&
+    sp.pieces.has(ARVNPolice) &&
+    sp.pieces.has(troops)
+  }
+
+  def pacifyCost = if (game.trackResources(ARVN)) {
+    if (isRVNLeader(RVN_Leader_NguyenCaoKy))    4
+    else if (momentumInPlay(Mo_BlowtorchKomer)) 1
+    else                                        3
+  }
+  else 0
+
   // Support Phase of Coup Round
   // RVN_Leader_NguyenCaoKy - US/ARVN pacification costs 4 resources per Terror/Level
   // Mo_BlowtorchKomer      - Pacify costs 1 resource per step/terror, during Support phase
   // MandateOfHeaven_Shaded - ARVN Pacify is maximum 1 space (instead of 4)
   // Cadres_Unshaded        - VC to Agigate must remove 2 VC guerrillas per space (or not possible there)
-  def coupSupportPhase(): Unit = {
+  def coupSupportPhase(forEvent: Boolean = false, factions: Set[Faction] = Set(US, ARVN, VC)): Unit = {
     // The leader would have just been played and thus take precedence
     val nguyenCaoKy = game.trackResources(ARVN) && isRVNLeader(RVN_Leader_NguyenCaoKy)
     val blowtorch   = game.trackResources(ARVN) && momentumInPlay(Mo_BlowtorchKomer) && !nguyenCaoKy
@@ -2830,7 +2848,6 @@ object FireInTheLake {
       noteIf(cadres, "VC to Agigate must remove 2 VC guerrillas per space")
     ).flatten
 
-    val pacifyCost     = if (nguyenCaoKy) 4 else if (blowtorch) 1 else 3
     val agitateCost    = 1
     var botPoints      = rollDice(2)  // When both US and ARVN are Bots
     var agitateSpaces  = Set.empty[String]
@@ -2845,22 +2862,15 @@ object FireInTheLake {
       else
         arvnSpaces += name
 
-    def pacifyCandidate(faction: Faction)(sp: Space) = {
-      val maxSupport = if (game.isHuman(faction) || faction == US) ActiveSupport else PassiveSupport
-      val troops     = if (faction == US) USTroops else ARVNTroops
-      !pacifySpaces(sp.name)    &&
-      sp.coinControlled         &&
-      sp.support < maxSupport   &&
-      sp.pieces.has(ARVNPolice) &&
-      sp.pieces.has(troops)
-    }
+    def isCandidate(faction: Faction)(sp: Space) = !pacifySpaces(sp.name) && pacifyCandidate(faction)(sp)
+
     def canPacify(faction: Faction) =
       pacifySpaces.size < 4 &&
       (faction == US || !mandate || arvnSpaces.isEmpty) &&
       (if (game.trackResources(ARVN)) game.arvnResources >= pacifyCost else botPoints > 0)
 
     def pacify(faction: Faction): Unit = {
-      val candidates = game.nonLocSpaces filter pacifyCandidate(faction)
+      val candidates = game.nonLocSpaces filter isCandidate(faction)
 
       if (canPacify(faction) && candidates.nonEmpty) {
         if (game.isBot(faction)) {
@@ -2930,38 +2940,50 @@ object FireInTheLake {
 
     }
 
-    log(s"\nSupport Phase")
-    log(separator(char = '='))
-
-    log("\nPacification")
-    log(separator())
-    for (note <- pacifyNotes)
-      log(note)
+    if (!forEvent) {
+      log(s"\nSupport Phase")
+      log(separator(char = '='))
+    }
 
     loggingPointsChanges {
+      if (factions(US) || factions(ARVN)) {
+        log("\nPacification")
+        log(separator())
+        for (note <- pacifyNotes)
+          log(note)
+      }
+
       if (!game.trackResources(ARVN))
         log(s"Rolling 2d6 to determine max pacification: $botPoints")
-      pacify(US)
-      if (usSpaces.isEmpty)
-        log("\nUS did not pacify any spaces")
-      if (game.isBot(US) || usSpaces.isEmpty)
-      pause()
 
-      pacify(ARVN)
-      if (arvnSpaces.isEmpty)
-        log("\nARVN did not pacify any spaces")
-      if (game.isBot(ARVN) || arvnSpaces.isEmpty)
-      pause()
+      if (factions(US)) {
+        pacify(US)
+        if (usSpaces.isEmpty)
+          log("\nUS did not pacify any spaces")
+        if (game.isBot(US) || usSpaces.isEmpty)
+          pause()
+      }
 
-      log("\nAgitation")
-      log(separator())
-      for (note <- agitateNotes)
-        log(note)
-      agitate()
-      if (agitateSpaces.isEmpty)
-        log("\nVC did not agitate any spaces")
-      if (game.isBot(VC) || agitateSpaces.isEmpty)
-      pause()
+      if (factions(ARVN)) {
+        pacify(ARVN)
+        if (arvnSpaces.isEmpty)
+          log("\nARVN did not pacify any spaces")
+        if (game.isBot(ARVN) || arvnSpaces.isEmpty)
+          pause()        
+      }
+
+      if (factions(VC)) {
+        log("\nAgitation")
+        log(separator())
+        for (note <- agitateNotes)
+          log(note)
+
+        agitate()
+        if (agitateSpaces.isEmpty)
+          log("\nVC did not agitate any spaces")
+        if (game.isBot(VC) || agitateSpaces.isEmpty)
+          pause()
+      }
     }
   }
 

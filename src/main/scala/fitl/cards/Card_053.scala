@@ -73,41 +73,43 @@ object Card_053 extends EventCard(53, "Sappers",
   def executeUnshaded(faction: Faction): Unit = {
     val candidates = game.spaces filter unshadedCandidate
 
-    if (candidates.isEmpty)
+    val selectedSpaces = if (candidates.isEmpty)
+      Nil
+    else if (game.isHuman(faction)) {
+      val num = askInt("\nRemove NVA Troops from how many spaces", 0, candidates.size min 3)
+      val choices = spaceNames(candidates) map (n => n -> n) 
+      if (num > 0)
+        askMenu(choices, s"\nSelect ${amountOf(num, "space")} to remove NVA Troops", numChoices = num)
+      else
+        Nil
+    }
+    else {  // Bot
+      def nextSpace(count: Int, candidates: List[Space]): List[String] = {
+        if (count <= 3 && candidates.nonEmpty) {
+          val name = Bot.pickSpaceRemoveReplace(faction)(candidates).name
+          name::nextSpace(count + 1, candidates filterNot (_.name == name))
+        }
+        else
+          Nil
+      }
+
+      if (candidates.size <= 3)
+        spaceNames(candidates)
+      else
+        nextSpace(1, candidates).reverse
+    }
+
+    if (selectedSpaces.isEmpty)
       log("There are no spaces in South Vietnam with NVA Troops")
     else {
-      val selectedSpaces = if (candidates.size <= 3)
-        spaceNames(candidates)
-      else if (game.isHuman(faction)) {
-        def nextSpace(count: Int, candidates: List[String]): List[String] = {
-          if (count <= 3 && candidates.nonEmpty) {
-            val name = askSimpleMenu(candidates, s"Choose ${ordinal(count)} space:").head
-            name::nextSpace(count + 1, candidates filterNot (_ == name))
-          }
-          else
-            Nil
-        }
-        nextSpace(1, spaceNames(candidates)).reverse
-      }
-      else {
-        def nextSpace(count: Int, candidates: List[Space]): List[String] = {
-          if (count <= 3 && candidates.nonEmpty) {
-            val name = Bot.pickSpaceRemoveReplace(faction)(candidates).name
-            name::nextSpace(count + 1, candidates filterNot (_.name == name))
-          }
-          else
-            Nil
-        }
-        nextSpace(1, candidates).reverse
-      }
 
-      if (game.isHuman(faction))
-        println()
-
-      for (name <- selectedSpaces) {
-        val sp = game.getSpace(name)
-        val num = sp.pieces.totalOf(NVATroops) min 2
-        removePieces(name, Pieces(nvaTroops = num))
+      println()
+      loggingControlChanges {
+        for (name <- selectedSpaces) {
+          val sp = game.getSpace(name)
+          val num = sp.pieces.totalOf(NVATroops) min 2
+          removePieces(name, Pieces(nvaTroops = num))
+        }
       }
       remainEligibleNextTurn(faction)
     }

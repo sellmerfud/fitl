@@ -68,22 +68,29 @@ object Card_056 extends EventCard(56, "Vo Nguyen Giap",
   def executeUnshaded(faction: Faction): Unit = {
     // Set the order so that we ask for VC pieces first!
     val GTypes = List(VCGuerrillas_A, VCGuerrillas_U, NVAGuerrillas_A, NVAGuerrillas_U)
+    val candidates = spaceNames(game.spaces filter unshadedCandidate)
+    val selectedSpaces = if (candidates.isEmpty)
+      Nil
+    else if (candidates.size <= 3)
+      candidates
+    else {
+      val choices = candidates map (n => n -> n)
+      askMenu(choices, "\nSelect 3 spaces to replace guerrillas with an NVA Troop", numChoices = 3)
+    }
 
-    def nextSpace(count: Int, candidates: List[String]): Unit = {
-      if (count <= 3 && candidates.nonEmpty) {
-        val name = askCandidate(s"\nSelect ${ordinal(count)} space: ", candidates)
-        val pieces = game.getSpace(name).pieces
-        val toReplace = askPieces(pieces, 2, GTypes, Some("Select guerrillas to replace"))
-        loggingControlChanges {
+    loggingControlChanges {
+      if (selectedSpaces.isEmpty)
+        log("There are no spaces that qualify for the event")
+      else
+        for (name <- selectedSpaces) {
+          println()
+          val pieces    = game.getSpace(name).pieces
+          val toReplace = askPieces(pieces, 2, GTypes, Some(s"Select guerrillas to replace in $name"))
           ensurePieceTypeAvailable(NVATroops, 1)
           removeToAvailable(name, toReplace)
           placePieces(name, Pieces(nvaTroops = 1))
         }
-        nextSpace(count + 1, candidates filterNot (_ == name))
-      }
     }
-
-    nextSpace(1, spaceNames(game.spaces filter unshadedCandidate))
   }
 
   def shadedEffective(faction: Faction): Boolean = false // Not executed by Bots

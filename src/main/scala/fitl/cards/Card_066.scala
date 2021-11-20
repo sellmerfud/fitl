@@ -41,6 +41,21 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Interventionist: Aid and ARVN Resources each +9.
+// Up to 2 US pieces from out-of-play to South Vietnam or,
+// if desired, Patronage -3.
+//
+// Shaded Text
+// Saigon seen as US puppet: Remove Support from 3 spaces outside Saigon.
+// Patronage –3.
+//
+// Tips
+// The unshaded "if desired" means that the executing Faction may decline
+// both the US pieces and the drop in Patronage. "Pieces" includes Bases.
+// The shaded "remove Support" means remove any Active or Passive Support
+// marker from the space, leaving it Neutral (1.6.2).
+
 object Card_066 extends EventCard(66, "Ambassador Taylor",
   DualEvent,
   List(ARVN, US, VC, NVA),
@@ -50,9 +65,83 @@ object Card_066 extends EventCard(66, "Ambassador Taylor",
           VC   -> (Performed   -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    game.usAid < EdgeTrackMax ||
+    (game.trackResources(ARVN) && game.arvnResources < EdgeTrackMax) ||
+    game.outOfPlay.totalOf(USPieces) > 0 ||
+    game.arvnPoints >= 42
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    sealed trait EventAction
+    case object USOOP     extends EventAction
+    case object PATRONAGE extends EventAction
+    case object NOTHING   extends EventAction
+
+    val action: EventAction = if (game.isHuman(faction)) {
+      val choices = List(
+        USOOP     -> "Up to 2 US Pieces from Out of Play to South Vietnam",
+        PATRONAGE -> "Decrease Patronage -3",
+        NOTHING   -> "None of the above"
+      )
+      askMenu(choices, "\nChoose one:").head
+    }
+    else if (game.arvnPoints >= 42)
+      PATRONAGE
+    else
+      USOOP
+
+    println()
+    loggingControlChanges {
+      increaseUsAid(9)
+      increaseResources(ARVN, 9)
+      action match {
+        case USOOP     => placeOutOfPlayPiecesOnMap(faction, 2, USPieces, SouthVietnam)
+        case PATRONAGE => decreasePatronage(3)
+        case NOTHING   => 
+      }
+    }
+  }
+
+  def shadedCandidate = (sp: Space) =>
+    sp.name != Saigon &&
+    sp.population > 0 &&
+    sp.support > Neutral
+
+  def shadedEffective(faction: Faction): Boolean =
+    (game.nonLocSpaces exists shadedCandidate) ||
+    game.arvnPoints >= 42
+
+  def executeShaded(faction: Faction): Unit = {
+    val candidates = game.nonLocSpaces filter shadedCandidate
+
+    val selectedSpaces = if (candidates.isEmpty)
+      Nil
+    else if (candidates.size <= 3)
+      spaceNames(candidates)
+    else if (game.isHuman(faction)) {
+      val choices = spaceNames(candidates) map (n => n -> n)
+      askMenu(choices, "\nRemove Support from 3 spaces outside Saigon:", numChoices = 3)
+    }
+    else {
+      def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
+        if (numRemaining > 0 && candidates.nonEmpty) {
+          val name = Bot.pickSpaceWithMostSupport(candidates).name
+          name::nextSpace(numRemaining - 1, candidates filterNot (_.name == name))
+        }
+        else
+          Nil
+      }
+      nextSpace(3, candidates)
+    }
+
+    println()
+    loggingPointsChanges {
+      if (selectedSpaces.isEmpty)
+        log("There are no spaces outside of Saigon with Support")
+      else
+        for (name <- selectedSpaces)
+          setSupport(name, Neutral)
+      decreasePatronage(3)
+    }
+  }
 }

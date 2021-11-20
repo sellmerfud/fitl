@@ -66,7 +66,6 @@ object Card_063 extends EventCard(63, "Fact Finding",
 
   def executeUnshaded(faction: Faction): Unit = {
     val numOopUS = game.outOfPlay.totalOf(USPieces)
-    val SoutVietnam = spaceNames(game.spaces) filter isInSouthVietnam
     val action = if (game.isHuman(faction)) {
       val choices = List(
         "oopUS"     -> "Move 2 US Pieces from Out of Play to South Vietnam",
@@ -81,7 +80,7 @@ object Card_063 extends EventCard(63, "Fact Finding",
 
     action match {
       case "oopUS" if numOopUS == 0 => log("\nThere are no Out of Play US pieces")
-      case "oopUS" => placeOutOfPlayPiecesOnMap(faction, 2 min numOopUS, USPieces, SoutVietnam)
+      case "oopUS" => placeOutOfPlayPiecesOnMap(faction, 2 min numOopUS, USPieces, SouthVietnam)
       case _       =>
         val die = d6
         val num = d6 min game.patronage
@@ -123,8 +122,7 @@ object Card_063 extends EventCard(63, "Fact Finding",
     }
     else {
       // NVA or VC
-      val priorities = List(new Bot.HighestScore[Space]("Most support", _.supportValue))
-      val city = setCity(Bot.bestCandidate(candidates, priorities).name)
+      val city = setCity(Bot.pickSpaceWithMostSupport(candidates).name)
       (city, Resources)
     }
 

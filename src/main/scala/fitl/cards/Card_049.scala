@@ -75,26 +75,26 @@ object Card_049 extends EventCard(49, "Russian Arms",
   // Human player only
   def executeShaded(faction: Faction): Unit = {
     val candidates = spaceNames(game.spaces filter (_.pieces.has(NVATroops)))
+    val choices = candidates map (n => n -> n)
+    val num = choices.size min 3
+    val selectedSpaces = askMenu(choices, s"\nSelect ${amountOf(num, "space")} to double the amount of NVA Troops", numChoices = num)
 
-    if (candidates.isEmpty)
+    println()
+    if (selectedSpaces.isEmpty)
       log("There are no spaces with NVA Troops")
     else {
-
-      def placeTroops(count: Int, candidates: List[String]): Unit = {
-        if (count <= 3 && candidates.nonEmpty) {
-          val name = askCandidate(s"\nSelect ${ordinal(count)} space to place Troops: ", candidates)
+      loggingControlChanges {
+        for (name <- selectedSpaces) {
           val sp = game.getSpace(name)
           val num = sp.pieces.totalOf(NVATroops)
-
+  
           ensurePieceTypeAvailable(NVATroops, num)
-          log()
           placePieces(name, Pieces(nvaTroops = num))
-          placeTroops(count + 1, candidates filterNot (_ == name))
         }
       }
-
-      placeTroops(1, candidates)
-      Human.doBombard(Params(event = true, free = true))
     }
+
+    log()
+    Human.doBombard(Params(event = true, free = true))
   }
 }

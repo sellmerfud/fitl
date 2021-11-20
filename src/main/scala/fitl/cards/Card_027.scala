@@ -101,35 +101,39 @@ object Card_027 extends EventCard(27, "Phoenix Program",
   def executeShaded(faction: Faction): Unit = {
     val validSpaces = game.nonLocSpaces filter isPhoenixShadedSpace
 
+    val selectedSpaces = if (validSpaces.isEmpty)
+      Nil
+    else if (validSpaces.size <= 2)
+      spaceNames(validSpaces)
+    else if (game.isHuman(faction)) {
+      val choices = spaceNames(validSpaces) map (n => n ->n )
+      askMenu(choices, s"\nChoose 2 spaces to set to Active Opposition:", numChoices = 2)
+    }
+    else {  // Bot
+      def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
+        if (numRemaining > 0 && candidates.nonEmpty) {
+          val sp = VC_Bot.pickSpaceTowardActiveOpposition(candidates)
+          sp.name :: nextSpace(numRemaining - 1, candidates filterNot (_.name == sp.name))
+        }
+        else
+          Nil
+      }
+      nextSpace(2, validSpaces).reverse
+    }
+
+
     loggingPointsChanges {
-      if (validSpaces.isEmpty)
+      if (selectedSpaces.isEmpty)
         log("There are no spaces that meet the event criteria")
-      else if (game.isHuman(faction)) {
-        def nextSpace(count: Int, candidates: List[String]): Unit = if (count <= 2 && candidates.nonEmpty) {
-          val name = askCandidate(s"Select ${ordinal(count)} space:", candidates)
-          log(s"$faction selects $name")
+      else
+        for (name <- selectedSpaces) {
+          log()
+          setSupport(name, ActiveOpposition)
           if (game.terrorMarkersAvailable > 0)
             addTerror(name, 1)
           else
-            log("There are no available terror markers")
-          setSupport(name, ActiveOpposition)
-          nextSpace(count + 1, candidates filterNot (_ == name))
+            log(s"There are no available terror markers to add to $name")
         }
-        nextSpace(1, spaceNames(validSpaces))
-      }
-      else {
-        def nextSpace(numRemaining: Int, candidates: List[Space]): Unit = if (numRemaining > 0 && candidates.nonEmpty) {
-          val sp = VC_Bot.pickSpaceTowardActiveOpposition(candidates)
-          log(s"$faction selects ${sp.name}")
-          if (game.terrorMarkersAvailable > 0)
-            addTerror(sp.name, 1)
-          else
-            log("There are no available terror markers")
-          setSupport(sp.name, ActiveOpposition)
-          nextSpace(numRemaining - 1, candidates filterNot (_.name == sp.name))
-        }
-        nextSpace(2, validSpaces)
-      }
     }
   }
 }

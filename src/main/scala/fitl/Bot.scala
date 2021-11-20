@@ -328,6 +328,10 @@ object Bot {
     assaultResult(faction, vulnerableTunnels)(sp).pieces.totalOf(InsurgentForces) == 0
   }
 
+  def pickSpaceWithMostSupport(candidates: List[Space]) = {
+    val priorities = List(new Bot.HighestScore[Space]("Most support", _.supportValue))
+    bestCandidate(candidates, priorities)
+  }
   //  Return the corresponding function for the given bot
   def pickSpaceRemoveReplace(faction: Faction) = faction match {
     case US   => US_Bot.pickSpaceRemoveReplace _

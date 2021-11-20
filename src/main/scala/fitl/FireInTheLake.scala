@@ -1346,6 +1346,8 @@ object FireInTheLake {
 
   val SpaceNames = DefaultSpaces.sorted map (_.name)
 
+  val SouthVietnam = SpaceNames filter isInSouthVietnam
+
   // Markers
   val Marker_PeaceTalks = "Peace Talks"
 
@@ -4124,7 +4126,10 @@ object FireInTheLake {
           selected = available
         else {
           println()
-          prompt foreach println
+          prompt foreach { p =>
+            println(p)
+            println(separator())
+          }
           println(s"Select ${amountOf(numPieces, "piece")} among the following:")
           wrap("  ", available.descriptions) foreach println
           println()

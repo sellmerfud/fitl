@@ -88,34 +88,44 @@ object EventHelpers {
     validSpaces: TraversableOnce[String],
     usToAvailable: Boolean = false): Set[String] = {
     val validNames = validSpaces.toSet
-    val hasPieces = (sp: Space) => validNames(sp.name) && sp.pieces.has(pieceTypes)
     val pieceNames = (pieceTypes map (_.genericPlural)).toList.distinct
     val desc = if (pieceNames.size > 3) "pieces" else andList(pieceNames)
     var spacesUsed = Set.empty[String]
 
-    def nextHumanRemoval(numRemaining: Int): Unit = if (numRemaining > 0) {
-      val candidates = spaceNames(game.spaces filter hasPieces)
-      if (candidates.nonEmpty) {
-        println(s"\nNumber of $desc removed: ${numToRemove - numRemaining} of ${numToRemove}")
-        val name     = askCandidate(s"Remove $desc from which space: ", candidates)
-        val sp       = game.getSpace(name)
-        val pieces   = sp.pieces.only(pieceTypes)
-        val minNum   = if (candidates.size == 1) numRemaining min pieces.total else 0
-        val num      = askInt(s"Remove how many pieces from $name", minNum, numRemaining min pieces.total)
-        val toRemove = askPieces(pieces, num, pieceTypes.toSeq)
-        if (num > 0) {
-          println()
-          if (usToAvailable)
-            removeToAvailable(sp.name, toRemove)
-          else
-            removePieces(name, toRemove)
-          spacesUsed += name
+
+    def humanRemoval(): Unit = {
+      var removed = Map.empty[String, Pieces].withDefaultValue(Pieces())
+      val hasPieces = (sp: Space) => validNames(sp.name) && (sp.pieces - removed(sp.name)).has(pieceTypes)
+
+      def nextHumanRemoval(numRemaining: Int): Unit = if (numRemaining > 0) {
+        val candidates = spaceNames(game.spaces filter hasPieces)
+        if (candidates.nonEmpty) {
+          println(s"\nNumber of $desc removed: ${numToRemove - numRemaining} of ${numToRemove}")
+          val name     = askCandidate(s"Remove $desc from which space: ", candidates)
+          val sp       = game.getSpace(name)
+          val pieces   = sp.pieces.only(pieceTypes) - removed(sp.name)
+          val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
+          val toRemove = askPieces(pieces, num, pieceTypes.toSeq)
+          if (toRemove.nonEmpty)
+            removed += (name -> (removed(name) + toRemove))
+          nextHumanRemoval(numRemaining - num)
         }
-        nextHumanRemoval(numRemaining - num)
+      }
+
+      nextHumanRemoval(numToRemove)
+      println()
+      for ((name, pieces) <- removed) {
+        if (usToAvailable)
+          removeToAvailable(name, pieces)
+        else
+          removePieces(name, pieces)
+        spacesUsed += name
       }
     }
 
+
     def nextBotRemoval(numRemaining: Int): Unit = if (numRemaining > 0) {
+      val hasPieces = (sp: Space) => validNames(sp.name) && sp.pieces.has(pieceTypes)
       val candidates = game.spaces filter hasPieces
       if (candidates.nonEmpty) {
         val sp = if (friendly)
@@ -166,7 +176,7 @@ object EventHelpers {
       if (totalPieces <= numToRemove)
         removeAll()
       else if (game.isHuman(faction))
-        nextHumanRemoval(numToRemove)
+        humanRemoval()
       else
         nextBotRemoval(numToRemove)
     }
@@ -184,25 +194,35 @@ object EventHelpers {
     val desc = andList(pieceTypes map (_.genericPlural))
     var spacesUsed = Set.empty[String]
 
-    def nextHumanRemoval(numRemaining: Int): Unit = if (numRemaining > 0) {
-      val candidates = spaceNames(game.spaces filter hasPieces)
-      if (candidates.nonEmpty) {
-        println(s"\nNumber of $desc removed to Out of Play: ${numToRemove - numRemaining} of ${numToRemove}")
-        val name     = askCandidate(s"Remove $desc from which space: ", candidates)
-        val sp       = game.getSpace(name)
-        val pieces   = sp.pieces.only(pieceTypes)
-        val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
-        val toRemove = askPieces(pieces, num, pieceTypes.toSeq)
-        if (num > 0) {
-          println()
-          removeToOutOfPlay(name, toRemove)
-          spacesUsed += name
+    def humanRemoval(): Unit = {
+      var removed = Map.empty[String, Pieces].withDefaultValue(Pieces())
+      val hasPieces = (sp: Space) => validNames(sp.name) && (sp.pieces - removed(sp.name)).has(pieceTypes)
+
+      def nextHumanRemoval(numRemaining: Int): Unit = if (numRemaining > 0) {
+        val candidates = spaceNames(game.spaces filter hasPieces)
+        if (candidates.nonEmpty) {
+          println(s"\nNumber of $desc removed to Out of Play: ${numToRemove - numRemaining} of ${numToRemove}")
+          val name     = askCandidate(s"Remove $desc from which space: ", candidates)
+          val sp       = game.getSpace(name)
+          val pieces   = sp.pieces.only(pieceTypes)
+          val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
+          val toRemove = askPieces(pieces, num, pieceTypes.toSeq)
+          if (toRemove.nonEmpty)
+            removed += (name -> (removed(name) + toRemove))
+          nextHumanRemoval(numRemaining - num)
         }
-        nextHumanRemoval(numRemaining - num)
+      }
+      
+      nextHumanRemoval(numToRemove)
+      println()
+      for ((name, pieces) <- removed) {
+        removeToOutOfPlay(name, pieces)
+        spacesUsed += name
       }
     }
 
     def nextBotRemoval(numRemaining: Int): Unit = if (numRemaining > 0) {
+      val hasPieces = (sp: Space) => validNames(sp.name) && sp.pieces.has(pieceTypes)
       val candidates = game.spaces filter hasPieces
       if (candidates.nonEmpty) {
         val sp = if (friendly)
@@ -238,7 +258,7 @@ object EventHelpers {
       if (totalPieces <= numToRemove)
         removeAll()
       else if (game.isHuman(faction))
-        nextHumanRemoval(numToRemove)
+        humanRemoval()
       else
         nextBotRemoval(numToRemove)
     }

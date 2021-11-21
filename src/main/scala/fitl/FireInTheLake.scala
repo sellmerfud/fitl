@@ -4199,7 +4199,8 @@ object FireInTheLake {
       val maxInSpace   = numInSpace min numRemaining
       val numFromSpace = askInt(s"Remove how many ${pieceType.genericPlural}", 0, maxInSpace)
       val toRemove     = askPieces(pieces, numFromSpace, types)
-      removed += (name -> (removed(name) + toRemove))
+      if (toRemove.nonEmpty)
+        removed += (name -> (removed(name) + toRemove))
       nextSpace(numRemaining - numFromSpace)
     }
 

@@ -328,6 +328,11 @@ object Bot {
     assaultResult(faction, vulnerableTunnels)(sp).pieces.totalOf(InsurgentForces) == 0
   }
 
+  def pickSpaceWithMostPieces(pieceTypes: TraversableOnce[PieceType])(candidates: List[Space]) = {
+    val priorities = List(new Bot.HighestScore[Space](s"Most ${andList(pieceTypes)}", _.pieces.totalOf(pieceTypes)))
+    bestCandidate(candidates, priorities)
+  }
+
   def pickSpaceWithMostSupport(candidates: List[Space]) = {
     val priorities = List(new Bot.HighestScore[Space]("Most support", _.supportValue))
     bestCandidate(candidates, priorities)

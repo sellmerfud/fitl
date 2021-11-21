@@ -89,10 +89,8 @@ object EventHelpers {
     usToAvailable: Boolean = false): Set[String] = {
     val validNames = validSpaces.toSet
     val hasPieces = (sp: Space) => validNames(sp.name) && sp.pieces.has(pieceTypes)
-    val desc = if (pieceTypes.size > 3)
-      "pieces"
-    else
-      andList(pieceTypes map (_.genericPlural))
+    val pieceNames = (pieceTypes map (_.genericPlural)).toList.distinct
+    val desc = if (pieceNames.size > 3) "pieces" else andList(pieceNames)
     var spacesUsed = Set.empty[String]
 
     def nextHumanRemoval(numRemaining: Int): Unit = if (numRemaining > 0) {

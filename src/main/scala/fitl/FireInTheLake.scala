@@ -584,15 +584,6 @@ object FireInTheLake {
     areAdjacent(srcName, destName) || (getAdjacentLOCs(srcName) exists locAccess)
   }
 
-  sealed abstract class PieceType(val name: String) {
-    def singular        = name
-    def plural          = s"${name}s"
-    def genericSingular = singular
-    def genericPlural   = s"${genericSingular}s"
-
-    override def toString() = plural
-  }
-
   // Used by Bot code
   // Spaces that can reach the destination for Sweeping
   def getSweepOrigins(destName: String): Set[String] = {
@@ -645,6 +636,15 @@ object FireInTheLake {
         case false                 => log("No troop is removed")
       }
     }
+  }
+
+  sealed abstract class PieceType(val name: String) {
+    def singular        = name
+    def plural          = s"${name}s"
+    def genericSingular = singular
+    def genericPlural   = s"${genericSingular}s"
+
+    override def toString() = plural
   }
 
   object PieceType {
@@ -2290,7 +2290,7 @@ object FireInTheLake {
           val scenario = scenarios(scenarioName)
           val usePeriodEvents = scenario.periodCapabilities.nonEmpty && askYorN("\nAre you using period events? (y/n) ")
           val humanFactions: Set[Faction] = {
-            val num = askInt("How many factions will be played by human players", 0, 4, Some(1), allowAbort = false)
+            val num = askInt("\nHow many factions will be played by human players", 0, 4, Some(1), allowAbort = false)
             def nextHuman(humans: Set[Faction]): Set[Faction] = {
               if (humans.size == num)
                 humans
@@ -4177,46 +4177,49 @@ object FireInTheLake {
   }
 
   // Ask the user to remove the given number of pieces of the requested type from the map.
-  def voluntaryRemoval(num: Int, pieceType: PieceType, prohibitedSpaces: Set[String] = Set.empty): Unit = if (num > 0) {
+  def voluntaryRemoval(num: Int, pieceType: PieceType, prohibited: Set[String] = Set.empty): Unit = if (num > 0) {
     val types = simiarTypes(pieceType)  // Account for Active/Underground if necessary
-    val candidateNames = spaceNames(game.spaces filterNot (sp => prohibitedSpaces(sp.name)) filter (_.pieces.has(types)))
-    def availPieces(names: List[String]) = names.foldLeft(0)((sum, n) => sum + game.getSpace(n).pieces.totalOf(types))
-    assert(availPieces(candidateNames) >= num, "voluntaryRemoval: Not enough pieces on map!")
-
-    def nextSpace(removed: Vector[(String, Pieces)], candidates: List[String]): Vector[(String, Pieces)] = {
-      val removedSoFar = removed.foldLeft(0) { case (sum, (_, n)) => sum + n.total }
-      val numLeft      = num - removedSoFar
-      val avail        = availPieces(candidates)
-      if (numLeft == 0)
-        removed
-      else if (avail == numLeft) {
-        // Remove all remaining pieces
-        removed ++ (candidates map (n => (n -> game.getSpace(n).pieces.only(types))))
+    val numOnMap = game.totalOnMap(_.pieces.totalOf(types))
+    var removed = Map.empty[String, Pieces].withDefaultValue(Pieces())
+    def candidates = spaceNames(
+      game.spaces filter { sp =>
+        val numInSpace = sp.pieces.totalOf(types) - removed(sp.name).total
+        !prohibited(sp.name) &&
+         numInSpace > 0
       }
-      else {
-        val name = askCandidate(s"\nSelect space to remove ${pieceType.genericPlural}: ", candidates)
-        val sp = game.getSpace(name)
-        val pieces = sp.pieces.only(types)
-        val numInSpace = pieces.total min numLeft
-        val minFromSpace = 1 max (numLeft - (avail - numInSpace))
-        val num = askInt(s"Remove how many ${pieceType.genericPlural}", minFromSpace, numInSpace)
-        val toRemove = askPieces(pieces, num, types)
+    )
 
-        nextSpace(removed :+ (name -> toRemove), candidates filterNot (_ == name))
-      }
+    def nextSpace(numRemaining: Int): Unit = if (numRemaining > 0) {
+      val desc = amountOf(numRemaining, pieceType.genericSingular, Some(pieceType.genericPlural))
+      println(s"\nYou must remove $desc from the map")
+      val name         = askCandidate(s"\nSelect space to remove ${pieceType.genericPlural}: ", candidates)
+      val sp           = game.getSpace(name)
+      val pieces       = sp.pieces.only(types)
+      val numInSpace   = pieces.total - removed(name).total
+      val maxInSpace   = numInSpace min numRemaining
+      val numFromSpace = askInt(s"Remove how many ${pieceType.genericPlural}", 0, maxInSpace)
+      val toRemove     = askPieces(pieces, numFromSpace, types)
+      removed += (name -> (removed(name) + toRemove))
+      nextSpace(numRemaining - numFromSpace)
     }
 
-    val removed = nextSpace(Vector.empty, candidateNames)
+    assert(numOnMap >= num, s"voluntaryRemoval: Not enough ${pieceType.genericPlural} on map!")
+
+    if (numOnMap == num) {
+      for (name <- candidates; sp = game.getSpace(name))
+        removed += (name -> sp.pieces.only(types))
+    }
+    else    
+      nextSpace(num)
 
     if (removed.nonEmpty)
       loggingControlChanges {
-        log()
-        for ((name, removedPieces) <- removed) {
+        println()
+        for ((name, pieces) <- removed) {
           val sp = game.getSpace(name)
-          val updated = sp.copy(pieces = sp.pieces - removedPieces)
+          val updated = sp.copy(pieces = sp.pieces - pieces)
           game = game.updateSpace(updated)
-          for (desc <- removedPieces.descriptions)
-            log(s"Remove $desc from $name to AVAILABLE")
+          log(s"Remove ${andList(pieces.descriptions)} from $name to AVAILABLE")
         }
       }
   }
@@ -4273,7 +4276,7 @@ object FireInTheLake {
               println
               if (askYorN("Do you wish to voluntarily remove pieces to make up the difference? (y/n) ")) {
                 val numToRemove = askInt("How many pieces do you wish to remove from the map", 0, num - numAvail)
-                voluntaryRemoval(numToRemove, pieceType, prohibitedSpaces = Set(spaceName))
+                voluntaryRemoval(numToRemove, pieceType, prohibited = Set(spaceName))
                 numAvail + numToRemove
               }
               else
@@ -4324,7 +4327,7 @@ object FireInTheLake {
         // None available, so ask where to remove one voluntarily
         println(s"\nThere are no ${baseType.genericPlural} in the available box")
         if (askYorN("Do you wish to voluntarily remove a base from the map? (y/n) ")) {
-          voluntaryRemoval(1, baseType, prohibitedSpaces = Set(spaceName))
+          voluntaryRemoval(1, baseType, prohibited = Set(spaceName))
           Pieces().set(1, baseType)
         }
         else
@@ -5099,7 +5102,10 @@ object FireInTheLake {
         }
       }
 
-      showPage(0)
+      if (game.history.size > 1)
+        showPage(0)
+      else
+        println("\nThere are no previous save points")
     }
     catch {
       case AbortAction =>

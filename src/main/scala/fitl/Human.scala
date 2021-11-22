@@ -101,6 +101,31 @@ object Human {
     def cancelled() = specialTaken = false
   }
 
+  
+  // Used by events that allow a faction to choose a special activity.
+  def chooseSpecialActivity(faction: Faction, only: Set[SpecialActivity] = AllSpecials): SpecialActivity = {
+    val available = FactionSpecials(faction) filter only
+
+    askSimpleMenu(available, "\nChoose a Special Activity:").head
+  }
+
+  // Called by events to execute a Special Activity
+  def eventSpecialActivity(faction: Faction, activity: SpecialActivity, params: Params): Unit = {
+    activity match {
+      case Advise     => doAdvise(params)
+      case AirLift    => doAirLift(params)
+      case AirStrike  => doAirStrike(params)
+      case Govern     => doGovern(params)
+      case Transport  => doTransport(params)
+      case Raid       => doRaid(params)
+      case Infiltrate => doInfiltrate(params)
+      case Bombard    => doBombard(params)
+      case Ambush     => doAmbush(faction, params)
+      case Tax        => doTax(params)
+      case Subvert    => doSubvert(params)
+    }
+  }
+
   //  Kill exposed insurgent pieces up to the max allowd.
   //  NVA Troops first
   //  Then active guerrillas (prompt user for which to remove)
@@ -732,7 +757,7 @@ object Human {
               removeToAvailable(name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
 
             // Some events allow ambush without requiring and underground guerrilla
-            if (target.pieces.has(ambusher)) 
+            if (target.pieces.has(ambusher))
               revealPieces(name, Pieces().set(1, ambusher))
             removePieces(targetName, deadPieces)
           }
@@ -800,7 +825,7 @@ object Human {
           val num        = askInt("\nRemove how many pieces", 1, maxNum, Some(maxNum))
           val deadPieces = askEnemyCoin(coinPieces, num, prompt = Some(s"Attacking in $name"))
           val attrition  = deadPieces.only(USTroops::USBase::Nil).total min sp.pieces.only(guerrilla_types).total
-  
+
           removePieces(name, deadPieces)
           removeToAvailable(name, Pieces().set(attrition, active), Some("Attrition:"))  // All guerrillas are now active
         }
@@ -862,7 +887,7 @@ object Human {
 
     action match {
       case Event         => executeEvent(faction)
-      case OpPlusSpecial => executeOp(faction, Params(specialActivity = true))
+      case OpPlusSpecial => executeOp(faction, Params(addSpecialActivity = true))
       case OpOnly        => executeOp(faction, Params())
       case LimitedOp     => executeOp(faction, Params(maxSpaces = Some(1)))
       case Pass          => factionPasses(faction)
@@ -1023,13 +1048,13 @@ object Human {
     }
 
     def airLiftCandidates = spaceNames(game.spaces filter { sp =>
-      !sp.isNorthVietnam && 
+      !sp.isNorthVietnam &&
       params.spaceAllowed(sp.name) &&
       !airLiftSpaces.contains(sp.name)
     })
 
     def liftOutCandidates = if (airLiftSpaces.size > 1)
-      airLiftSpaces.filter{ name => 
+      airLiftSpaces.filter{ name =>
         Some(name) != params.singleTarget &&
         params.airliftParams.canLiftTo(name) &&
         moveablePieces(game.getSpace(name)).nonEmpty
@@ -1206,7 +1231,7 @@ object Human {
         val canDegrade = params.strikeParams.canDegradeTrail &&
                          !oriskany &&
                          !hasDegraded &&
-                         game.trail > minTrail && 
+                         game.trail > minTrail &&
                          hitsRemaining > 1
         val topChoices = List(
           choice(canSelect,  "select",  "Select a space to Strike"),
@@ -1264,7 +1289,7 @@ object Human {
           }
           val maxNumber    = numExposedInsurgents(pieces) min hitsRemaining min paramMax
           val num          = askInt(s"\nRemove how many pieces from $name", 1, maxNumber)
-          
+
           log(s"\nUS Air Strikes $name")
           log(separator())
           killExposedInsurgents(name, num, canRevealTunnel = false, params.vulnerableTunnels)
@@ -1810,7 +1835,7 @@ object Human {
 
       params.spaceAllowed(sp.name) &&
       !bombardSpaces(sp.name) &&
-      enemyCondition && 
+      enemyCondition &&
       (sp.pieces.totalOf(NVATroops) > 2 || hasAdjacentTroops)
     }
 
@@ -1824,7 +1849,7 @@ object Human {
       removePieces(name, toRemove)
     }
 
-    def getCandidates = spaceNames(game.spaces filter isCandidate) 
+    def getCandidates = spaceNames(game.spaces filter isCandidate)
 
     def nextBombardAction(): Unit = {
       val candidates = getCandidates
@@ -2142,7 +2167,7 @@ object Human {
   }
 
   def executeOp(faction: Faction, params: Params): Unit = {
-    initTurnVariables(params.specialActivity)
+    initTurnVariables(params.addSpecialActivity)
 
     faction match {
       case US  | ARVN => executeCoinOp(faction, params)
@@ -2813,7 +2838,7 @@ object Human {
       logOpChoice(faction, Sweep, notes)
 
 
-    if (params.singleTarget.nonEmpty)  
+    if (params.singleTarget.nonEmpty)
       sweepSpaces = Set(params.singleTarget.get)
     else
       selectSweepSpace()
@@ -2837,7 +2862,7 @@ object Human {
         case Some(f) => types filter (t => owner(t) == f)
         case None    => types
       }
-      
+
     val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
     val baseTargets = if (params.vulnerableTunnels)
       validEnemy(InsurgentBases)
@@ -3267,7 +3292,7 @@ object Human {
 
     def getMarchSources(destName: String): List[String] = {
       val adjacent = getAdjacent(destName) filter params.marchParams.canMarchFrom
-      
+
       (adjacent filter (moveablePieces(_).nonEmpty)).toList.sorted(SpaceNameOrdering)
     }
 

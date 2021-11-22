@@ -1606,6 +1606,17 @@ object FireInTheLake {
   case object Tax        extends SpecialActivity("Tax")
   case object Subvert    extends SpecialActivity("Subvert")
 
+  val AllSpecials: Set[SpecialActivity] = 
+    Set(Advise, AirLift, AirStrike, Govern, Transport, Raid,
+        Infiltrate, Bombard, Ambush, Tax, Subvert)
+
+  val FactionSpecials: Map[Faction, List[SpecialActivity]] = Map(
+    US   -> List(Advise, AirLift, AirStrike),
+    ARVN -> List(Govern, Transport, Raid),
+    NVA  -> List(Infiltrate, Bombard, Ambush),
+    VC   -> List(Tax, Subvert, Ambush))
+
+
   // Air Strike params used by Events that carry out
   // air strikes with special rules.
   case class AirStrikeParams(
@@ -1647,7 +1658,8 @@ object FireInTheLake {
   // Parameters used when executing operations and special activities
   // This is used by both the Humand and Bot objects.
   case class Params(
-    specialActivity: Boolean        = false, // May select a Special Activity
+    addSpecialActivity: Boolean     = false, // May add a Special Activity
+    specialActivityOnly: Boolean    = false, // Used by Bot code when executing events
     maxSpaces: Option[Int]          = None,
     free: Boolean                   = false, // Events grant free commands
     onlyIn: Option[Set[String]]     = None,  // Limit command to the given spaces

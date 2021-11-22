@@ -41,6 +41,16 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Single Event Text
+// Military Assistance Command, Vietnam spurs coordination: 
+// Either US then ARVN or NVA then VC each executes any 1 free
+// Special Activity. Faction executing Event stays Eligible.
+//
+// Tips
+// Each Faction involved decides the details of its own Special Activity.
+// "1 free Special Activity" means within the usual maximum number of spaces
+// for that type of Special Activity.
+
 object Card_069 extends EventCard(69, "MACV",
   SingleEvent,
   List(ARVN, US, VC, NVA),
@@ -50,8 +60,35 @@ object Card_069 extends EventCard(69, "MACV",
           VC   -> (Performed   -> Unshaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = singleNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
+
+  def executeUnshaded(faction: Faction): Unit = {
+    val actors: List[Faction] = if (game.isHuman(faction)) {
+      val choices = List(
+        List(US, ARVN) -> "US then ARVN",
+        List(NVA, VC)  -> "NVA then VC"
+      )
+      askMenu(choices, "\nChoose factions to execute Special Activities").head
+    }
+    else if (faction == US)
+      US::ARVN::Nil
+    else
+      NVA::VC::Nil
+
+    val params = Params(event = true, free = true)
+    for (actor <- actors) {
+      if (game.isHuman(actor)) {
+        val activity = Human.chooseSpecialActivity(actor)
+        Human.initTurnVariables(false)
+        Human.eventSpecialActivity(actor, activity, params)
+      }
+      else {
+        Bot.eventSpecialActivity(actor, params)
+        pause()
+      }
+    }
+    remainEligibleNextTurn(faction)
+  }
 
   // Single event - These functions are not used
   def shadedEffective(faction: Faction): Boolean = false

@@ -107,7 +107,7 @@ object Card_025 extends EventCard(25, "TF-116 Riverines",
               Human.performAssault(assaulter, name, params)
               val addArvnAssault =
                 assaulter == US &&
-                assaultEffective(ARVN, false)(game.getSpace(name)) &&
+                assaultEffective(ARVN, false, false)(game.getSpace(name)) &&
                 askYorN(s"\nAdd a free ARVN assault in $name? (y/n) ")
               if (addArvnAssault) {
                 Human.initTurnVariables(false)

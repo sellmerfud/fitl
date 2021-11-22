@@ -988,7 +988,7 @@ object Human {
       askMenu(choices, "\nChoose Advise option:").head match {
         case "sweep" =>
           askCandidateOrBlank("ARVN Sweep in which space: ", sweepCandidates) foreach { name =>
-            activateGuerrillasForSweep(name, ARVN)
+            activateGuerrillasForSweep(name, ARVN, params.allCubesAsUS)
             checkShadedBoobyTraps(name, ARVN)
             doCobrasUnshaded(name)
             Special.selectedSpaces = Special.selectedSpaces + name
@@ -2701,6 +2701,10 @@ object Human {
     val boobyTraps      = capabilityInPlay(BoobyTraps_Shaded)
     val defaultMax      = if (platoonsShaded) 2 else NO_LIMIT
     val maxSpaces       = params.maxSpaces getOrElse defaultMax
+    val cubeTypes: List[PieceType] = if (params.allCubesAsUS) List(USTroops, ARVNTroops, ARVNPolice)
+                                else if (faction == US)       List(USTroops)
+                                else                          List(ARVNTroops)
+    val cubeDesc = andList(cubeTypes)
 
     def canSpecial = Special.allowed
 
@@ -2712,12 +2716,11 @@ object Human {
         case "finished" =>
 
         case srcName =>
-          val TroopType = if (faction == US) USTroops else ARVNTroops
-          val troops    = game.getSpace(srcName).pieces.only(TroopType) - alreadyMoved(srcName)
-          val num       = askInt(s"Move how many $TroopType", 0, troops.total)
+          val troops    = game.getSpace(srcName).pieces.only(cubeTypes) - alreadyMoved(srcName)
+          val num       = askInt(s"Move how many $cubeDesc", 0, troops.total)
 
           if (num > 0) {
-            val movers = Pieces().set(num, TroopType)
+            val movers = askPieces(troops, num)
             alreadyMoved.add(destName, movers)
             movePieces(movers, srcName, destName)
           }
@@ -2786,10 +2789,11 @@ object Human {
       }
     }
 
+    // `allCubesAsUS` is used for the ROKs event (Card #70)
     def activateGuerrillas(): Unit = {
       val canActivate = (name: String) => {
         val sp = game.getSpace(name)
-        sp.sweepActivations(faction) > 0
+        sp.sweepActivations(faction, params.allCubesAsUS) > 0
       }
       val candidates = ((sweepSpaces -- activatedSpaces) filter canActivate).toList.sorted
       val canAll  = candidates.size > 1 && activatedSpaces.isEmpty
@@ -2807,7 +2811,7 @@ object Human {
         askMenu(choices, "\nSweep activation:").head match {
           case "all" | "rest" =>
             for (name <- candidates) {
-              activateGuerrillasForSweep(name, faction)
+              activateGuerrillasForSweep(name, faction, params.allCubesAsUS)
               checkShadedBoobyTraps(name, faction)
               activatedSpaces = activatedSpaces + name
             }
@@ -2817,7 +2821,7 @@ object Human {
             activateGuerrillas()
 
           case name =>
-            activateGuerrillasForSweep(name, faction)
+            activateGuerrillasForSweep(name, faction, params.allCubesAsUS)
             checkShadedBoobyTraps(name, faction)
             activatedSpaces = activatedSpaces + name
             activateGuerrillas()
@@ -2855,8 +2859,9 @@ object Human {
 
   //  Perform an assault in the given space.
   def performAssault(faction: Faction, name: String, params: Params): Unit = {
-    val remove1BaseFirst   = faction == US && capabilityInPlay(Abrams_Unshaded)
-    val remove1Underground = faction == US && capabilityInPlay(SearchAndDestroy_Unshaded)
+    val asUS = faction == US || params.allCubesAsUS
+    val remove1BaseFirst   = asUS && capabilityInPlay(Abrams_Unshaded)
+    val remove1Underground = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
     def validEnemy(types: TraversableOnce[PieceType]): TraversableOnce[PieceType] =
       params.assaultParams.onlyTarget match {
         case Some(f) => types filter (t => owner(t) == f)
@@ -2872,7 +2877,8 @@ object Human {
     def pieces      = game.getSpace(name).pieces  // Always get fresh instance
     val baseFirst   = remove1BaseFirst && pieces.has(baseTargets) && !pieces.has(validEnemy(UndergroundGuerrillas))
     val underground = remove1Underground && pieces.has(validEnemy(UndergroundGuerrillas))
-    val totalLosses = sp.assaultFirepower(faction) + (if (params.assaultParams.removeTwoExtra) 2 else 0)
+    val totalLosses = sp.assaultFirepower(faction, params.allCubesAsUS) + 
+                      (if (params.assaultParams.removeTwoExtra) 2 else 0)
     var killedPieces = Pieces()
     def remaining   = totalLosses - killedPieces.total
 
@@ -2942,7 +2948,7 @@ object Human {
 
       // Cobras_Shaded
       //    Eash US assault space, 1 US Troop to Casualties on die roll of 1-3
-      if (faction == US && pieces.has(USTroops) && capabilityInPlay(Cobras_Shaded)) {
+      if (asUS && pieces.has(USTroops) && capabilityInPlay(Cobras_Shaded)) {
         val die = d6
         val success = die < 4
         log(s"\nCheck for loss of US Troop [$Cobras_Shaded]")
@@ -2985,18 +2991,27 @@ object Human {
       AirLift::AirStrike::Nil
     else
       Transport::Raid::Nil
+    val asUS                = faction == US || params.allCubesAsUS
     val bodyCount           = momentumInPlay(Mo_BodyCount)
-    val abramsUnshaded      = faction == US && capabilityInPlay(Abrams_Unshaded)
-    val abramsShaded        = faction == US && capabilityInPlay(Abrams_Shaded) && !params.limOpOnly
-    val m48Patton           = faction == US && capabilityInPlay(M48Patton_Unshaded)
-    val cobras              = faction == US && capabilityInPlay(Cobras_Shaded)
-    val sdUnshaded          = faction == US && capabilityInPlay(SearchAndDestroy_Unshaded)
-    val sdShaded            = faction == US && capabilityInPlay(SearchAndDestroy_Shaded)
+    val abramsUnshaded      = asUS && capabilityInPlay(Abrams_Unshaded)
+    val abramsShaded        = asUS && capabilityInPlay(Abrams_Shaded) && !params.limOpOnly
+    val m48Patton           = asUS && capabilityInPlay(M48Patton_Unshaded)
+    val cobras              = asUS && capabilityInPlay(Cobras_Shaded)
+    val sdUnshaded          = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
+    val sdShaded            = asUS && capabilityInPlay(SearchAndDestroy_Shaded)
     var assaultSpaces       = List.empty[String]
     var m48PattonSpaces     = List.empty[String]
     var addedARVNAssault    = false
+    
+    val cubeTypes: Set[PieceType] = if (params.allCubesAsUS) Set(USTroops, ARVNTroops, ARVNPolice)
+                                else if (faction == US)      Set(USTroops)
+                                else                         Set(ARVNTroops)
+
     val isCandidate = (sp: Space) => {
-      val cubes = if (faction == ARVN) ARVNCubes else List(USTroops)
+      val cubes = if (sp.isLoC || sp.isCity)
+        cubeTypes
+      else
+        cubeTypes - ARVNPolice
 
       params.spaceAllowed(sp.name) &&           // If event limits command to certain spaces
       !assaultSpaces.contains(sp.name) &&       // Not already selected
@@ -3020,6 +3035,7 @@ object Human {
       performAssault(faction, name, assaultParams)
 
       val canFollowup = faction == US &&
+                        !params.allCubesAsUS &&  // All cubes already participated!
                         addedARVNAssault == false &&
                         game.getSpace(name).pieces.hasExposedInsurgents &&
                         game.getSpace(name).pieces.has(ARVNCubes) &&

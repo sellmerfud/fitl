@@ -602,7 +602,8 @@ object FireInTheLake {
     }
   }
 
-  def activateGuerrillasForSweep(name: String, faction: Faction, logHeading: Boolean = true): Unit = {
+  // `allCubesAsUS` is used for the ROKs event (Card #70)
+  def activateGuerrillasForSweep(name: String, faction: Faction, allCubesAsUS: Boolean, logHeading: Boolean = true): Unit = {
     val sp = game.getSpace(name)
     val num = sp.sweepActivations(faction)
     if (num > 0) {
@@ -1012,8 +1013,8 @@ object FireInTheLake {
 
   //  Assault firepower of the space plus any modifiers for
   //  capabilities, momentum, etc.
-  def usFirepower(sp: Space) = {
-    val firepower = sp.assaultFirepower(US)
+  def usFirepower(allCubesAsUS: Boolean)(sp: Space) = {
+    val firepower = sp.assaultFirepower(US, allCubesAsUS)
     // Account for unshaded Search and Destroy when there would otherwise be zero firepower
     val canSearchDestroy = capabilityInPlay(SearchAndDestroy_Unshaded) &&
                            sp.pieces.has(USTroops) &&
@@ -1024,29 +1025,30 @@ object FireInTheLake {
       firepower
   }
 
-  def arvnFirepower(sp: Space) = sp.assaultFirepower(ARVN)
+  def arvnFirepower(allCubesAsUS: Boolean)(sp: Space) =
+    sp.assaultFirepower(ARVN, allCubesAsUS)
 
-  def coinFirepower(sp: Space) = usFirepower(sp) + arvnFirepower(sp)
+  def coinFirepower(allCubesAsUS: Boolean)(sp: Space) =
+    usFirepower(allCubesAsUS)(sp) + arvnFirepower(allCubesAsUS)(sp)
 
-  def assaultFirepower(faction: Faction)(sp: Space): Int = {
+  def assaultFirepower(faction: Faction, allCubesAsUS: Boolean)(sp: Space): Int = {
     faction match {
-      case US => usFirepower(sp)
-      case _  => arvnFirepower(sp)
+      case US => usFirepower(allCubesAsUS)(sp)
+      case _  => arvnFirepower(allCubesAsUS)(sp)
     }
   }
 
-  def assaultEffective(faction: Faction, vulnerableTunnels: Boolean, enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
-    val firepower = faction match {
-      case US => usFirepower(sp)
-      case _  => arvnFirepower(sp)
-    }
+  def assaultEffective(faction: Faction, allCubesAsUS: Boolean, vulnerableTunnels: Boolean, enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
     val enemyPieces = (sp: Space) =>
       enemies.foldLeft(Pieces()) { 
         case (pieces, NVA) => pieces + sp.pieces.only(NVAPieces)
         case (pieces, VC)  => pieces + sp.pieces.only(VCPieces)
         case (pieces, _)   => pieces
       }
-    (assaultFirepower(faction)(sp) min vulnerableInsurgents(enemyPieces(sp), vulnerableTunnels).total) > 0
+    val firepower  = assaultFirepower(faction, allCubesAsUS)(sp)
+    val vulnerable = vulnerableInsurgents(enemyPieces(sp), vulnerableTunnels).total
+
+    (firepower min vulnerable) > 0
   }
 
   // Used during a turn to keep track of pieces that have already moved
@@ -1208,15 +1210,24 @@ object FireInTheLake {
       case _                        => 0.0
     }
 
-    def assaultFirepower(faction: Faction): Int = (assaultCubes(faction) * assaultMultiplier(faction)).toInt
+    // `allCubesAsUS` is used for the ROKs event (Card #70)
+    def assaultFirepower(faction: Faction, allCubesAsUS: Boolean = false): Int = {
+      val totalCubes = if (allCubesAsUS)
+        pieces.totalOf(CoinCubes)
+      else
+        assaultCubes(faction)
+
+      val multiplier = assaultMultiplier(if (allCubesAsUS) US else faction)
+      (totalCubes * multiplier).toInt
+    }
 
     // The number of underground guerrillas that would
     // be activated by the given faction
-    def sweepActivations(faction: Faction): Int = {
-      val numActivate =if (isJungle)
-        sweepForces(faction) / 2
-      else
-        sweepForces(faction)
+    // `allCubesAsUS` is used for the ROKs event (Card #70)
+    def sweepActivations(faction: Faction, allCubesAsUS: Boolean = false): Int = {
+      val factions = if (allCubesAsUS) List(US, ARVN) else List(faction)
+      val numForces = factions.foldLeft(0) ((total, f) => total + sweepForces(f))
+      val numActivate = if (isJungle) numForces / 2 else numForces
 
       numActivate min pieces.totalOf(UndergroundGuerrillas)
     }
@@ -1669,7 +1680,8 @@ object FireInTheLake {
     airliftParams: AirLiftParams    = AirLiftParams(),
     assaultParams: AssaultParams    = AssaultParams(),
     marchParams:   MarchParams      = MarchParams(),
-    vulnerableTunnels: Boolean      = false  // Used by events assault/air strik
+    vulnerableTunnels: Boolean      = false,  // Used by events assault/air strike
+    allCubesAsUS: Boolean           = false  // ROCk event for sweep/assault
   ) {
     val limOpOnly = maxSpaces == Some(1)
 

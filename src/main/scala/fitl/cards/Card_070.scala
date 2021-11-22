@@ -41,6 +41,24 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Tough Koreans: US or ARVN free Sweep into/in then free Assault Phu Bon
+// and adjacent spaces as if US and as if all ARVN cubes are US Troops.
+//
+// Shaded Text
+// UN troops abuse locals: Shift Qui Nhon, Phu Bon, and Khanh Hoa each 1 level
+// toward Active Opposition.
+//
+// Tips
+// For the unshaded text, the executing Faction picks US or ARVN and that faction
+// decides the details of its Sweep and Assault. The Sweep could occur even during Monsoon.
+// “Phu Bon and ad- jacent spaces” include Phu Bon, Qui Nhon, Binh Dinh, Kontum, Pleiku,
+// Khanh Hoa, and—for Assault—the 3 LoCs touching PhuBon. “As if US and as if all ARVN
+// cubes are US Troops” means that whichever selected Faction—US or ARVN—would move and fight
+// with all US Troops, ARVN Troops, and Police as if all those cubes were US Troops, including
+// double enemy losses for any US Base in a space, the effects of the “Abrams” Capability if in
+// effect, and so on. Non-player ARVN will still use Non-player ARVN priorities (8.4.4).
+
 object Card_070 extends EventCard(70, "ROKs",
   DualEvent,
   List(ARVN, US, VC, NVA),
@@ -49,10 +67,68 @@ object Card_070 extends EventCard(70, "ROKs",
           NVA  -> (NotExecuted -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
+  val unshadedNames = getAdjacent(PhuBon_PhuYen) + PhuBon_PhuYen
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
+  def executeUnshaded(faction: Faction): Unit = {
+    val sweepDestinations = spaceNames(spaces(unshadedNames) filter (!_.isLoC)).toSet
+    val params = Params(
+      event        = true,
+      free         = true,
+      allCubesAsUS = true,
+      onlyIn = Some(sweepDestinations)
+    )
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+    val actor: Faction = if (game.isHuman(faction)) {
+      val choices: List[Faction] = List(US, ARVN)
+      askSimpleMenu(choices, "\nChoose a faction to Sweep/Assault:").head
+    }
+    else
+      US
+
+    log(s"\n$faction chooses $actor to carry out the Sweeps and Assaults")
+
+    if (game.isHuman(actor)) {
+      println()
+      Human.executeSweep(actor, params)
+
+      loggingControlChanges {
+        for {
+          name <- unshadedNames
+          sp   =  game.getSpace(name)
+               if assaultEffective(actor, allCubesAsUS = true, vulnerableTunnels = false)(sp)
+        } {
+          Human.performAssault(actor, name, params)
+          pause()
+        }
+      }
+    }
+    else {
+      US_Bot.sweepOp(params)
+      pause()
+      loggingControlChanges {
+        for {
+          name <- unshadedNames
+          sp   =  game.getSpace(name)
+               if assaultEffective(actor, allCubesAsUS = true, vulnerableTunnels = false)(sp)
+        } {
+          Bot.performAssault(actor, name, params)
+          pause()
+        }
+      }
+    }
+    
+  }
+
+  val ShadedNames = List(QuiNhon, PhuBon_PhuYen, KhanhHoa)
+  def shadedCandidates = spaces(ShadedNames) filter (_.support != ActiveOpposition)
+
+  def shadedEffective(faction: Faction): Boolean = shadedCandidates.nonEmpty
+
+  def executeShaded(faction: Faction): Unit = {
+    loggingPointsChanges {
+      for (sp <- shadedCandidates)
+        decreaseSupport(sp.name, 1)
+    }
+  }
 }

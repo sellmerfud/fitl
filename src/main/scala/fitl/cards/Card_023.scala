@@ -84,7 +84,7 @@ object Card_023 extends EventCard(23, "Operation Attleboro", DualEvent,
         log(separator(char = '='))
         Human.performAssault(US, name, params)
 
-        val arvnEffective = assaultEffective(ARVN, true)(game.getSpace(name))
+        val arvnEffective = assaultEffective(ARVN, false, true)(game.getSpace(name))
         if (arvnEffective && askYorN(s"\nFollow up with ARVN assault in $name? (y/n) ")) {
           log(s"\nUS adds a free follow up ARVN asault in $name")
           Human.performAssault(ARVN, name, params)

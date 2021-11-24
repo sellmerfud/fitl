@@ -3391,8 +3391,7 @@ object FireInTheLake {
       factions match {
         case Nil   => None
         case f::fs =>
-          val msg = pivotBot map (bot => s"\n$bot Bot plans to play its pivotal event") getOrElse "\n"
-          println(msg)
+          pivotBot foreach { bot => println(s"\n$bot Bot plans to play its pivotal event") }
           if (askYorN(s"Does $f wish to play their Pivotal Event? (y/n) "))
             Some(f)
           else

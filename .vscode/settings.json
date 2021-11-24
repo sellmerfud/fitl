@@ -2,5 +2,8 @@
   "files.defaultLanguage": "${activeEditorLanguage}",
   "files.watcherExclude": {
     "**/target": true
-  }
+  },
+  "gitlens.currentLine.enabled": false,
+  "gitlens.hovers.currentLine.over": "line",
+  "gitlens.codeLens.enabled": false
 }

@@ -86,9 +86,8 @@ object Card_049 extends EventCard(49, "Russian Arms",
       loggingControlChanges {
         for (name <- selectedSpaces) {
           val sp = game.getSpace(name)
-          val num = sp.pieces.totalOf(NVATroops)
-  
-          ensurePieceTypeAvailable(NVATroops, num)
+          val numInSpace = sp.pieces.totalOf(NVATroops)
+          val num        = Human.numToPlace(NVATroops, numInSpace)
           placePieces(name, Pieces(nvaTroops = num))
         }
       }

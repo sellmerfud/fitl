@@ -1661,7 +1661,8 @@ object FireInTheLake {
   )
 
   case class MarchParams(
-    onlyFrom: Set[String] = Set.empty  // If not empty, restricts where pieces can march from.
+    onlyFrom: Set[String] = Set.empty,  // If not empty, restricts where pieces can march from.
+    onlyTypes: Set[PieceType] = Set.empty // Some events specify marching only NVA Troops for example
   ) {
     def canMarchFrom(name: String) = onlyFrom.isEmpty || onlyFrom(name)
   }

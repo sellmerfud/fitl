@@ -126,6 +126,37 @@ object Human {
     }
   }
 
+  // This function is called by events that require the
+  // player to place a given number of a piece on the map.
+  // If there are sufficient pieces in the available box,
+  // then we simply return the number requested.
+  // If there are not enough pieces in the available box,
+  // and there are pieces on the map we ask how many pieces
+  // they wish to place and have them make up the difference
+  // by voluntarily removing pieces from the map.
+  // Returns the final number of piece to be placed.
+  // 
+  // This should not be called with US Troops/Bases
+  def numToPlace(pieceType: PieceType, num: Int): Int = {
+    val maxToPlace = game.piecesToPlace.totalOf(pieceType)
+    val numAvail   = game.availablePieces.totalOf(pieceType)
+    val desc       = pieceType.genericPlural
+    
+    if (numAvail >= num || maxToPlace == numAvail)
+      num min numAvail
+    else {
+      println(s"\nThere are not enough $desc in the Available box")
+      if (askYorN(s"Would you like to voluntarily remove $desc from the map? (y/n) ")) {
+        val delta = num - numAvail
+        val numRemove = askInt(s"\nRemove how many $desc", 0, delta)
+        voluntaryRemoval(numRemove, pieceType)
+        numAvail + numRemove
+      }
+      else
+        numAvail
+    }
+  }
+
   //  Kill exposed insurgent pieces up to the max allowd.
   //  NVA Troops first
   //  Then active guerrillas (prompt user for which to remove)
@@ -781,89 +812,88 @@ object Human {
     val troops     = if (faction == NVA) sp.pieces.only(NVATroops) else Pieces()
     val coinPieces = sp.pieces.only(CoinPieces)
 
-    if (faction == VC)
-      assert(guerrillas.nonEmpty, s"performAttack(): $faction has no guerrilla in $name")
-    else
-      assert(guerrillas.nonEmpty || troops.nonEmpty, s"performAttack(): $faction has no guerrillas or troops in $name")
-    assert(coinPieces.nonEmpty, s"performAttack(): There are no COIN pieces to attack in $name")
-
-    val guerrillaAttack = if (faction == NVA) {
-      if (guerrillas.nonEmpty && troops.nonEmpty) {
-        val choices = List("guerrillas" -> "Guerrillas", "troops" -> "Troops")
-        askMenu(choices, "Attack using which units:").head == "guerrillas"
+    if (faction == VC && guerrillas.isEmpty)
+      log(s"\nThere are no VC Guerrillas in $name to carry out the attack")
+    else if (guerrillas.isEmpty && troops.isEmpty)
+      log(s"\nThere are no NVA Guerrillas or Troops in $name to carry out the attack")
+    else {
+      val guerrillaAttack = if (faction == NVA) {
+        if (guerrillas.nonEmpty && troops.nonEmpty) {
+          val choices = List("guerrillas" -> "Guerrillas", "troops" -> "Troops")
+          askMenu(choices, "Attack using which units:").head == "guerrillas"
+        }
+        else
+          guerrillas.nonEmpty
       }
       else
-        guerrillas.nonEmpty
-    }
-    else
-      true
+        true
 
+      if (guerrillaAttack) {
+        val (underground, active) = if (faction == NVA)
+          (NVAGuerrillas_U, NVAGuerrillas_A)
+        else
+          (VCGuerrillas_U, VCGuerrillas_A)
+        val guerrilla_types = underground :: active :: Nil
+        val toActivate = sp.pieces.only(underground)
+        val maxNum     = 2 min coinPieces.total
+        val die        = d6
+        val success    = die <= guerrillas.total
 
-    if (guerrillaAttack) {
-      val (underground, active) = if (faction == NVA)
-        (NVAGuerrillas_U, NVAGuerrillas_A)
-      else
-        (VCGuerrillas_U, VCGuerrillas_A)
-      val guerrilla_types = underground :: active :: Nil
-      val toActivate = sp.pieces.only(underground)
-      val maxNum     = 2 min coinPieces.total
-      val die        = d6
-      val success    = die <= guerrillas.total
+        log(s"\n$faction Attacks in $name")
+        log(separator())
+        if (!free)
+          decreaseResources(faction, 1)
 
-      log(s"\n$faction Attacks in $name")
-      log(separator())
-      if (!free)
-        decreaseResources(faction, 1)
+        revealPieces(name, toActivate)
 
-      revealPieces(name, toActivate)
+        loggingControlChanges {
+          if (faction == NVA && capabilityInPlay(PT76_Unshaded) && troops.nonEmpty)
+            removeToAvailable(name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
+          log(s"\nDie roll: $die [${if (success) "Success!" else "Failure"}]")
+          if (success) {
+            val num        = askInt("\nRemove how many pieces", 1, maxNum, Some(maxNum))
+            val deadPieces = askEnemyCoin(coinPieces, num, prompt = Some(s"Attacking in $name"))
+            val attrition  = deadPieces.only(USTroops::USBase::Nil).total min sp.pieces.only(guerrilla_types).total
 
-      loggingControlChanges {
-        if (faction == NVA && capabilityInPlay(PT76_Unshaded) && troops.nonEmpty)
-          removeToAvailable(name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
-        log(s"\nDie roll: $die [${if (success) "Success!" else "Failure"}]")
-        if (success) {
-          val num        = askInt("\nRemove how many pieces", 1, maxNum, Some(maxNum))
-          val deadPieces = askEnemyCoin(coinPieces, num, prompt = Some(s"Attacking in $name"))
-          val attrition  = deadPieces.only(USTroops::USBase::Nil).total min sp.pieces.only(guerrilla_types).total
-
-          removePieces(name, deadPieces)
-          removeToAvailable(name, Pieces().set(attrition, active), Some("Attrition:"))  // All guerrillas are now active
+            removePieces(name, deadPieces)
+            removeToAvailable(name, Pieces().set(attrition, active), Some("Attrition:"))  // All guerrillas are now active
+          }
         }
       }
-    }
-    else {  // NVA Troops attack
-      val use_pt76_shaded = faction == NVA && capabilityInPlay(PT76_Shaded) && !pt76_shaded_used &&
-                            askYorN(s"Do you which to use [$PT76_Shaded] in this attack? (y/n) ")
-      val pt76_unshaded   = capabilityInPlay(PT76_Unshaded)
+      else {  // NVA Troops attack
+        val use_pt76_shaded = faction == NVA && capabilityInPlay(PT76_Shaded) && !pt76_shaded_used &&
+                              askYorN(s"Do you which to use [$PT76_Shaded] in this attack? (y/n) ")
+        val pt76_unshaded   = capabilityInPlay(PT76_Unshaded)
 
 
-      val ratio      = if (use_pt76_shaded) 1.0 else 0.5
-      val numTroops  = (if (pt76_unshaded) troops.total - 1 else troops.total) max 0
-      val num        = (numTroops * ratio).toInt min coinPieces.total
-      val deadPieces = if (num > 0)
-        askEnemyCoin(coinPieces, num, prompt = Some(s"Attacking in $name"))
-      else
-        Pieces()
-      val attrition  = deadPieces.only(USTroops::USBase::Nil).total min numTroops
+        val ratio      = if (use_pt76_shaded) 1.0 else 0.5
+        val numTroops  = (if (pt76_unshaded) troops.total - 1 else troops.total) max 0
+        val num        = (numTroops * ratio).toInt min coinPieces.total
+        val deadPieces = if (num > 0)
+          askEnemyCoin(coinPieces, num, prompt = Some(s"Attacking in $name"))
+        else
+          Pieces()
+        val attrition  = deadPieces.only(USTroops::USBase::Nil).total min numTroops
 
-      log(s"\n$faction Attacks in $name")
-      log(separator())
-      if (!free)
-        decreaseResources(faction, 1)
+        log(s"\n$faction Attacks in $name")
+        log(separator())
+        if (!free)
+          decreaseResources(faction, 1)
 
-      loggingControlChanges {
-        if (pt76_unshaded)
-          removeToAvailable(name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
-        if (num == 0)
-          log("No hits are inflicted")
+        loggingControlChanges {
+          if (pt76_unshaded)
+            removeToAvailable(name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
+          if (num == 0)
+            log("No hits are inflicted")
+          if (use_pt76_shaded)
+            log(s"NVA elects to use [$PT76_Shaded]")
+          removePieces(name, deadPieces)
+          removeToAvailable(name, Pieces(nvaTroops = attrition), Some("Attrition:"))
+        }
+
         if (use_pt76_shaded)
-          log(s"NVA elects to use [$PT76_Shaded]")
-        removePieces(name, deadPieces)
-        removeToAvailable(name, Pieces(nvaTroops = attrition), Some("Attrition:"))
+          pt76_shaded_used = true  // Can only be use once per attack operation
       }
-
-      if (use_pt76_shaded)
-        pt76_shaded_used = true  // Can only be use once per attack operation
     }
   }
 
@@ -3287,9 +3317,15 @@ object Human {
       Infiltrate::Bombard::Ambush::Nil
     else
       Tax::Subvert::Ambush::Nil
-    val moveableTypes   = if (faction == NVA) NVATroops::NVAGuerrillas else VCGuerrillas
+    val moveableTypes   = if (params.marchParams.onlyTypes.nonEmpty)
+      params.marchParams.onlyTypes
+    else if (faction == NVA)
+      NVATroops::NVAGuerrillas
+    else
+      VCGuerrillas
     val maxDestinations = params.maxSpaces getOrElse NO_LIMIT
-    var destinations    = params.onlyIn getOrElse Set.empty[String]
+    var destinations    = Set.empty[String]
+
     val mainForceBns    = capabilityInPlay(MainForceBns_Unshaded)
     val claymores       = momentumInPlay(Mo_Claymores)
     var paid            = Set.empty[String]
@@ -3338,7 +3374,7 @@ object Human {
               paid += destName
             }
 
-            val num         = askInt(s"Move how many pieces from $srcName", 1, moveable.total)
+            val num         = askInt(s"Move how many pieces from $srcName", 0, moveable.total)
             val movers      = askPieces(moveable, num)
 
             // If moving out of a trail space we must update the movedInto group
@@ -3388,7 +3424,7 @@ object Human {
 
     def ambushCandidates = if (Special.canAmbush && Special.selectedSpaces.size < maxAmbush) {
       val underground = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
-      destinations.toList.sorted filter { name =>
+      destinations.toList.sorted(SpaceNameOrdering) filter { name =>
         !(Special.selectedSpaces contains name) &&   // Can't ambush same space twice
         movedInto(name).has(underground) &&          // Must have underground guerrillas that move into the space
         ambushTargets(name).nonEmpty                 // Must have a COIN target to kill
@@ -3400,10 +3436,9 @@ object Human {
     def nextMarchAction(): Unit = {
       val AmbushOpt  = "ambush:(.*)".r
       val MoveOpt    = "move:(.*)".r
-      val candidates = if (params.onlyIn.isEmpty)
-        spaceNames(game.spaces filter (sp => !destinations.contains(sp.name)))
-      else
-        Nil
+      val candidates = spaceNames(game.spaces filter { sp => 
+        params.spaceAllowed(sp.name) && !destinations.contains(sp.name)
+      })
       val canSelect  = candidates.nonEmpty && destinations.size < maxDestinations
       val moveCandidates = destinations.toList.sorted(SpaceNameOrdering) filter { destName =>
         (getAdjacent(destName) exists (moveablePieces(_).total > 0))
@@ -3418,7 +3453,7 @@ object Human {
 
       println(s"\n${amountOf(destinations.size, "destination")} selected for March")
       println(separator())
-      wrap("", destinations.toList) foreach println
+      wrap("", destinations.toList.sorted(SpaceNameOrdering)) foreach println
 
       askMenu(topChoices:::ambushChoices:::moveChoices:::lastChoice, "\nMarch:").head match {
         case "select" =>

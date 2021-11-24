@@ -86,9 +86,10 @@ object Card_056 extends EventCard(56, "Vo Nguyen Giap",
           println()
           val pieces    = game.getSpace(name).pieces
           val toReplace = askPieces(pieces, 2, GTypes, Some(s"Select guerrillas to replace in $name"))
-          ensurePieceTypeAvailable(NVATroops, 1)
+          val numTroops = Human.numToPlace(NVATroops, 1)
+
           removeToAvailable(name, toReplace)
-          placePieces(name, Pieces(nvaTroops = 1))
+          placePieces(name, Pieces(nvaTroops = numTroops))
         }
     }
   }

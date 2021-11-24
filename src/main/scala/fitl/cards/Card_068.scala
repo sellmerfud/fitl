@@ -89,8 +89,8 @@ object Card_068 extends EventCard(68, "Green Berets",
         val name = askCandidate(s"\nPlace ${forceType.genericPlural} in which Province: ", spaceNames(candidates))
         println()
         loggingControlChanges {
-          ensurePieceTypeAvailable(forceType, 3)
-          val pieces = Pieces().set(game.availablePieces.totalOf(forceType) min 3, forceType)
+          val num = Human.numToPlace(forceType, 3)
+          val pieces = Pieces().set(num, forceType)
           placePieces(name, pieces)
           setSupport(name, ActiveSupport)
         }

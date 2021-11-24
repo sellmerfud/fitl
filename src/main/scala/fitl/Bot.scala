@@ -102,6 +102,9 @@ object Bot {
   // during March/Sweep/Patrol/Transport/Air Lift..
   private var movedPieces      = new MovingGroups()
 
+
+  def getMoveDestinations = moveDestinations
+
   // Used to implement the Eligibility Tables
   case class ActionEntry(val action: Action, desc: String, test: (Faction) => Boolean)
 
@@ -863,7 +866,7 @@ object Bot {
     "Adjacent to most NVA Troops yet to March",
     sp => {
         // Get all adjacent spaces that have not yet been selecte as march destinations
-        val adjacent = NVA_Bot.getNVAAdjacent(sp.name) filterNot moveDestinations.contains
+        val adjacent = NVA_Bot.getNVAAdjacent(sp.name, free = false) filterNot moveDestinations.contains
         adjacent.foldLeft(0) { (totalTroops, name) =>
           totalTroops + game.getSpace(name).pieces.totalOf(NVATroops)
         }
@@ -2133,7 +2136,7 @@ object Bot {
       case Patrol                   => getPatrolOrigins(destName)
       case Transport                => getTransportOrigins(destName)
       case AirLift                  => Set.empty // See selectAirLiftOrigin
-      case March if faction == NVA  => NVA_Bot.getNVAAdjacent(destName) filter params.marchParams.canMarchFrom
+      case March if faction == NVA  => NVA_Bot.getNVAAdjacent(destName, params.free) filter params.marchParams.canMarchFrom
       case March                    => getAdjacent(destName) filter params.marchParams.canMarchFrom
     }
 
@@ -5063,17 +5066,17 @@ object Bot {
       LOC_CanTho_ChauDoc
     )
 
-    // When the trail is at 4, NVA march considers all spaces that are
-    // in or adjacent to Laos/Cambodia to be adjacent.
-    def areNVAAdjacent(name1: String, name2: String) = if (game.trail == 4)
-      areAdjacent(name1, name2) || (inOrAdjacentToLaosCambodia(name1) && inOrAdjacentToLaosCambodia(name2))
-    else
-      areAdjacent(name1, name2)
+    // When the trail is at 4 or when the operation is free,
+    // NVA march considers all spaces that are in or adjacent
+    // to Laos/Cambodia to be adjacent.
 
-    def getNVAAdjacent(name: String): Set[String] = if (game.trail == 4 && inOrAdjacentToLaosCambodia(name))
-      getAdjacent(name) ++ inOrAdjacentToLaosCambodia - name
-    else
-      getAdjacent(name)
+    def getNVAAdjacent(name: String, free: Boolean): Set[String] = {
+
+      if ((game.trail == 4 || free) && inOrAdjacentToLaosCambodia(name))
+        getAdjacent(name) ++ inOrAdjacentToLaosCambodia - name
+      else
+        getAdjacent(name)
+    }
 
     def sixTroopsWithCOINTroopsOrBase: Boolean = {
       game.spaces exists { sp =>
@@ -5359,6 +5362,7 @@ object Bot {
         // Once we have marched to one LoC successfully we are done.
         val nextLoCCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
           val qualifies = (sp: Space) =>
+            params.spaceAllowed(sp.name)  &&
             !prohibited(sp.name)          &&
             !sp.pieces.has(NVAGuerrillas) &&
             numAdjacentPieces(sp, USForces) > 0
@@ -5381,11 +5385,12 @@ object Bot {
             )
           )
           val qualifies = (sp: Space) =>
+            params.spaceAllowed(sp.name) &&
             !prohibited(sp.name)      &&
             sp.totalBases < 2         &&
             !sp.pieces.has(NVABases)  &&
             isInLaosCambodia(sp.name) &&
-            (spaces(getNVAAdjacent(sp.name)) exists (_.pieces.has(NVAGuerrillas)))
+            (spaces(getNVAAdjacent(sp.name, params.free)) exists (_.pieces.has(NVAGuerrillas)))
           val candidates = game.locSpaces filter qualifies
           lazy val activationOK = checkActivation(NVA, needActivation, actNum)
 
@@ -5396,7 +5401,10 @@ object Bot {
         }
 
         val nextGenericCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
-          val candidates        = game.spaces filterNot (sp => prohibited.contains(sp.name))
+          val candidates = game.spaces filter { sp =>
+            params.spaceAllowed(sp.name)  &&
+            !prohibited.contains(sp.name)
+          }
           lazy val activationOK = checkActivation(NVA, needActivation, actNum)
 
           if (candidates.nonEmpty && activationOK)
@@ -5405,22 +5413,26 @@ object Bot {
             None
         }
 
+        val marchers: Set[PieceType] = if (params.marchParams.onlyTypes.nonEmpty)
+          params.marchParams.onlyTypes
+        else
+          NVAForces.toSet
 
         if (!params.event)
           logOpChoice(NVA, March)
         // Never first need activation for LoCs
         if (withLoC)
-          movePiecesToDestinations(NVA, March, NVAForces.toSet, false, params, maxDests = params.maxSpaces)(nextLoCCandidate)
+          movePiecesToDestinations(NVA, March, marchers, false, params, maxDests = params.maxSpaces)(nextLoCCandidate)
 
         // No need for first activation after LoCs
         // If we march to Laos/Cambodia then we will need first activate check
         // for the generic destinations
         val needActivate = if (withLaosCambodia)
-          movePiecesToDestinations(NVA, March, NVAForces.toSet, false, params, maxDests = params.maxSpaces)(nextLaosCambodiaCandidate)
+          movePiecesToDestinations(NVA, March, marchers, false, params, maxDests = params.maxSpaces)(nextLaosCambodiaCandidate)
         else
           false
 
-        movePiecesToDestinations(NVA, March, NVAForces.toSet, needActivate, params, maxDests = params.maxSpaces)(nextGenericCandidate)
+        movePiecesToDestinations(NVA, March, marchers, needActivate, params, maxDests = params.maxSpaces)(nextGenericCandidate)
 
         if (moveDestinations.nonEmpty)
           Some(March)
@@ -5527,7 +5539,9 @@ object Bot {
         logOpChoice(NVA, Attack)
       var keepAttacking   = true
       val troopCandidates = game.spaces filter { sp =>
-        sp.pieces.totalOf(NVATroops) > 1 && sp.pieces.has(CoinPieces)
+        params.spaceAllowed(sp.name)     &&
+        sp.pieces.totalOf(NVATroops) > 1 &&
+        sp.pieces.has(CoinPieces)
       }
 
       if (!params.specialActivityOnly) {
@@ -5538,6 +5552,7 @@ object Bot {
       val ambushed = if (addAmbush && keepAttacking && params.addSpecialActivity) {
         // Ambush in 1 or 2 spaces (if special activity allowed)
         lazy val ambushCandidates = spaceNames(game.spaces filter { sp =>
+          params.spaceAllowed(sp.name) &&
           !attackSpaces(sp.name) &&
           canAmbushFrom(NVA)(sp)
         })
@@ -5556,6 +5571,7 @@ object Bot {
         false
 
       lazy val guerrillaCandidates = game.spaces filter { sp =>
+        params.spaceAllowed(sp.name) &&
         !attackSpaces(sp.name) &&
         sp.pieces.totalOf(NVAGuerrillas) > 3 &&
         sp.pieces.has(CoinPieces)
@@ -6167,12 +6183,14 @@ object Bot {
               sp => numAdjacentPieces(sp, Set(VCGuerrillas_U))
             )
           )
-          val qualifies = (sp: Space) => !prohibited(sp.name) &&
-                                            numAdjacentPieces(sp, Set(VCGuerrillas_U)) > 0
+          val qualifies = (sp: Space) =>
+            params.spaceAllowed(sp.name) &&
+            !prohibited(sp.name) &&
+            numAdjacentPieces(sp, Set(VCGuerrillas_U)) > 0
+
           lazy val locCandidates = game.locSpaces filter qualifies
 
           // No need to check activation since these are LoCs
-          //
           if (moveDestinations.size < 2 && locCandidates.nonEmpty) {
             Some(bestCandidate(locCandidates, LocPriorities).name)
           }
@@ -6184,7 +6202,10 @@ object Bot {
         // prohibited contains all previous march destinations plus failed
         // destinations.
         val nextGenericCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
-          lazy val candidates    = game.spaces filterNot (sp => prohibited.contains(sp.name))
+          lazy val candidates = game.spaces filter {sp => 
+            params.spaceAllowed(sp.name) &&
+            prohibited.contains(sp.name)
+          }
 
           if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum))
             Some(VC_Bot.pickSpaceMarchDest(candidates).name)
@@ -6194,6 +6215,7 @@ object Bot {
 
         if (!params.event)
           logOpChoice(VC, March)
+        
         movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, params, maxDests = params.maxSpaces)(nextLoCCandidate)
         // First activation check is always false since previos 0-2 spaces were LoCs
         movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, params, maxDests = params.maxSpaces)(nextGenericCandidate)

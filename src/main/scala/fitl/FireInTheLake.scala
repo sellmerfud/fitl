@@ -2485,6 +2485,7 @@ object FireInTheLake {
     }
   }
 
+  def debug(msg: String) =  println(s"DEBUG - $msg")
 
     // Ask which saved game the user wants to load.
   // Return None if they wish to start a new game.

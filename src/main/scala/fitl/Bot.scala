@@ -2854,7 +2854,7 @@ object Bot {
       def checkARVNActivation(): Unit = { arvnOk = makeActivationRoll(ARVN, actNum) }
       def canPlaceARVN = arvnOk && (params.free || !game.trackResources(ARVN) || game.arvnResources >= 3)
       def canTrain(arvn: Boolean) = trainingSpaces.size < maxTrain && (!arvn || canPlaceARVN)
-      def prohibited(sp: Space) = trainingSpaces(sp.name) || adviseSpaces(sp.name)
+      def prohibited(sp: Space) = !params.spaceAllowed(sp.name) || trainingSpaces(sp.name) || adviseSpaces(sp.name)
       val irregCandidate = (sp: Space) => !(prohibited(sp) || sp.pieces.has(USPieces))
       val arvnCandidate  = (sp: Space) => !(prohibited(sp) || sp.pieces.has(USBase))
 
@@ -4299,7 +4299,7 @@ object Bot {
       def trained      = trainingSpaces.nonEmpty
       def canTrain     = trainingSpaces.size < maxTrain &&
                          checkARVNActivation(trained, actNum, params.free)
-      def prohibited(sp: Space) = trainingSpaces(sp.name)
+      def prohibited(sp: Space) = !params.spaceAllowed(sp.name) || trainingSpaces(sp.name)
       val canTrainRangers = (sp: Space) => !(prohibited(sp) || sp.nvaControlled)
       val canTrainCubes   = (sp: Space) =>
         !(prohibited(sp) || sp.nvaControlled) &&
@@ -6651,7 +6651,7 @@ object Bot {
         case  TrungComplete(true)  => ER_OpPlusSpecial
         case  TrungComplete(false) => ER_OpOnly
 
-        case  TrungDraw =>
+        case  TrungDraw | TrungNoOp =>
           val nextCard = drawTrungCard(faction)
           if (nextCard == firstCard)
             ER_NoOp
@@ -6659,9 +6659,6 @@ object Bot {
             logTrungDraw(nextCard)
             executeCard(nextCard)
           }
-
-        case  TrungNoOp =>
-          ER_NoOp
       }
     }
 

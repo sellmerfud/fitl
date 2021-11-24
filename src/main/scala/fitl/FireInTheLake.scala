@@ -2269,8 +2269,10 @@ object FireInTheLake {
         case null => getName
         case VALID_NAME(name) =>
           if ((gamesDir/name).exists) {
-            println(s"A game called '$name' already exists.")
-            if (askYorN(s"Do you want to overwrite the existing game (y/n)? ")) {
+            println(s"\nA game called '$name' already exists:")
+            println(separator())
+            println(loadGameDescription(name))
+            if (askYorN(s"\nDo you want to overwrite the existing game (y/n)? ")) {
               (gamesDir/name).rmtree()
               name
             }
@@ -3130,7 +3132,7 @@ object FireInTheLake {
       log(s"\nCommitment Phase")
       log(separator(char = '='))
       if (game.casualties.has(USTroops) && momentumInPlay(Mo_Medevac_Unshaded)) {
-        log(s"US Troops in the casualties box move to available: [Momentum: $Mo_Medevac_Unshaded]")
+        log(s"US Troops in the Casualties box move to available: [Momentum: $Mo_Medevac_Unshaded]")
         moveCasualtiesToAvailable(game.casualties.only(USTroops))
       }
 
@@ -3161,7 +3163,7 @@ object FireInTheLake {
       // Take 1 in 3 US Troop casualties and all US base casualties out of play.
       val numTroopsOutOfPlay = game.casualties.totalOf(USTroops) / 3
       val toOutOfPlay = game.casualties.only(USBase).add(numTroopsOutOfPlay, USTroops)
-      log("\nROTATION: Move US base casualites and 1/3 US Troop casualties to Out of Play")
+      log("\nROTATION: Move US base Casualties and 1/3 US Troop Casualties to Out of Play")
       log(separator())
       if (toOutOfPlay.nonEmpty)
         moveCasualtiesToOutOfPlay(toOutOfPlay)
@@ -3169,13 +3171,13 @@ object FireInTheLake {
         log("There are no US bases or Troops to move Out of Play")
 
       // Move US Irregular casualties to available
-      log("\nROTATION: Move US Irregular casualties to Available")
+      log("\nROTATION: Move US Irregular Casualties to Available")
       log(separator())
       val irregulars = game.casualties.only(Irregulars_U)
       if (irregulars.nonEmpty)
         moveCasualtiesToAvailable(game.casualties.only(Irregulars_U))
       else
-        log("There are no US Irregulars in the casualties box")
+        log("There are no US Irregulars in the Casualties box")
       pause()
 
       // Then US places all remaining US Troop casualties into any COIN controlled spaces,
@@ -3183,7 +3185,7 @@ object FireInTheLake {
       val numUSPlacedOnMap = game.casualties.totalOf(USTroops)
 
       if (numUSPlacedOnMap > 0) {
-        log("\nROTATION: Place the remaining US Troop casualties on the map")
+        log("\nROTATION: Place the remaining US Troop Casualties on the map")
         log(separator())
         if (game.isBot(US))
           Bot.US_Bot.placeUSCasualtyTroopsOnMap(coinControlledSpaces)

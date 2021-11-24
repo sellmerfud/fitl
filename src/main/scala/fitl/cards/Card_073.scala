@@ -41,6 +41,20 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// LBJ advances social agenda: Conduct a Commitment Phase.
+//
+// Shaded Text
+// War wrecks economy: US moves 3 pieces from Available to out of play.
+//
+// Tips
+// For the unshaded text, the US as usual decides the details of the
+// Commitment Phase. If unshaded "Great Society" occurs while unshaded
+// Event 15 "Medevac" is in effect, "Medevac" affects the immediate
+// Commitment Phase and then stays in effect to affect the coming Coup
+// Round’s Commitment Phase as well. For shaded "Great Society", the US
+// decides which pieces; "pieces" can include Bases.
+
 object Card_073 extends EventCard(73, "Great Society",
   DualEvent,
   List(ARVN, NVA, US, VC),
@@ -50,12 +64,26 @@ object Card_073 extends EventCard(73, "Great Society",
           VC   -> (Performed   -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
+  def unshadedEffective(faction: Faction): Boolean = false  // Bots do not execute this event.
   
   // Mo_Medevac_Unshaded    - In Commitment Phase (immediately move all US TROOPS in CASUALTIES to AVAILABLE,
   //                          no TROOPS go out of play.  See note: For effect when #73 Great Society is played.
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = coupCommitmentPhase()
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def shadedEffective(faction: Faction): Boolean = game.availablePieces.has(USPieces)
+
+  def executeShaded(faction: Faction): Unit = {
+    val availUS = game.availablePieces.only(USPieces)
+
+    if (availUS.isEmpty)
+      log("There are no available US Pieces")
+    else {
+      val toRemove =  if (game.isHuman(US))
+        askPieces(availUS, 3, prompt = Some("Remove US Pieces to Out Of Play"))
+      else
+        Bot.selectFriendlyRemoval(availUS, 3)
+
+      moveAvailableToOutOfPlay(toRemove)
+    }
+  }
 }

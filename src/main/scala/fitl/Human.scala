@@ -523,14 +523,14 @@ object Human {
 
     def nextAction(): Unit = {
       val canMoveNewTroops = maxTroops > 0 && numTroopsMoved < maxTroops
-      val canMoveOldTroops = numTroopsMoved > 0
+      val canMoveOldTroops = false // numTroopsMoved > 0
       val canMoveNewBases  = maxBases > 0 && numBasesMoved < maxBases
-      val canMoveOldBases  = numBasesMoved > 0
+      val canMoveOldBases  = false // numBasesMoved > 0
       val choices = List(
         choice(canMoveNewTroops, "new-troop", "Move troops"),
         choice(canMoveNewBases,  "new-base",  "Move a base"),
-        choice(canMoveOldTroops, "old-troop", "Re-move troops that have already moved"),
-        choice(canMoveOldBases,  "old-base",  "Re-move a base that has already moved"),
+        choice(canMoveOldTroops, "old-troop", "Move troops that have already moved"),
+        choice(canMoveOldBases,  "old-base",  "Move a base that has already moved"),
         choice(true,             "finished",  "Finished moving pieces")
       ).flatten
 

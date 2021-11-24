@@ -1,4 +1,5 @@
 {
+  "files.defaultLanguage": "${activeEditorLanguage}",
   "files.watcherExclude": {
     "**/target": true
   }

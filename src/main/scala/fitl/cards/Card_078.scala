@@ -41,6 +41,17 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Unconventional counterinsurgent: Set a space outside Saigon with US or ARVN
+// to Active Support. Add a Terror marker there. Patronage +1.
+//
+// Shaded Text
+// Bureaucratic infighter: Patronage +3. No US Assault until Coup. MOMENTUM
+//
+// Tips
+// A Province with 0 Population cannot be set to Support (1.6).
+// The Terror marker would be added even if one is already in the space.
+
 object Card_078 extends EventCard(78, "General Lansdale",
   DualEvent,
   List(ARVN, NVA, VC, US),
@@ -49,10 +60,44 @@ object Card_078 extends EventCard(78, "General Lansdale",
           NVA  -> (Performed -> Shaded),
           VC   -> (Performed -> Shaded))) {
 
+  val unshadedCandidate = (sp: Space) =>
+    sp.name != Saigon &&
+    sp.population > 0 &&
+    sp.pieces.has(CoinPieces)
+    
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  val unshadedBotCandidate = (sp: Space) => unshadedCandidate(sp) && sp.support != ActiveSupport
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    game.nonLocSpaces exists unshadedBotCandidate
+
+  def executeUnshaded(faction: Faction): Unit = {
+    if (!(game.nonLocSpaces exists unshadedCandidate))
+      log("There are no spaces that qualify for the event")
+    else {
+      val name = if (game.isHuman(faction)) {
+        val choices = spaceNames(game.nonLocSpaces filter unshadedCandidate)
+        askSimpleMenu(choices, "\nChoose a space to set to Active Support:").head
+      }
+      else {
+        val candidates = game.nonLocSpaces filter unshadedBotCandidate
+        US_Bot.pickSpaceTowardActiveSupport(candidates).name
+      }
+      
+      println()
+      loggingPointsChanges {
+        setSupport(name, ActiveSupport)
+        if (game.terrorMarkersAvailable > 0)
+          addTerror(name, 1)
+        increasePatronage(1)
+      }
+    }
+  }
+
+  def shadedEffective(faction: Faction): Boolean = true
+
+  def executeShaded(faction: Faction): Unit = {
+    increasePatronage(3)
+    playMomentum(Mo_GeneralLansdale)
+  }
 }

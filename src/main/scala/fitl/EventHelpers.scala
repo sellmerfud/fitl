@@ -170,16 +170,17 @@ object EventHelpers {
       }
     }
 
-    loggingControlChanges {
-      val totalPieces = spaces(validSpaces).foldLeft(0)((sum, sp) => sum + sp.pieces.totalOf(pieceTypes))
-  
-      if (totalPieces <= numToRemove)
-        removeAll()
-      else if (game.isHuman(faction))
-        humanRemoval()
-      else
-        nextBotRemoval(numToRemove)
-    }
+    if (numToRemove > 0)
+      loggingControlChanges {
+        val totalPieces = spaces(validSpaces).foldLeft(0)((sum, sp) => sum + sp.pieces.totalOf(pieceTypes))
+    
+        if (totalPieces <= numToRemove)
+          removeAll()
+        else if (game.isHuman(faction))
+          humanRemoval()
+        else
+          nextBotRemoval(numToRemove)
+      }
     spacesUsed
   }
 

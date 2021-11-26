@@ -41,6 +41,15 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Ambassador proposes US protectorate: Aid +20.
+//
+// Shaded Text
+// Internecine enabler: Remove up to 3 ARVN pieces. Patronage +2 for each. ARVN Ineligible through next card.
+//
+// Tips
+// "Pieces" can include Bases.
+
 object Card_079 extends EventCard(79, "Henry Cabot Lodge",
   DualEvent,
   List(ARVN, NVA, VC, US),
@@ -50,9 +59,28 @@ object Card_079 extends EventCard(79, "Henry Cabot Lodge",
           VC   -> (Performed   -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.usAid < EdgeTrackMax
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = increaseUsAid(20)
+
+  def shadedEffective(faction: Faction): Boolean = true
+
+  def executeShaded(faction: Faction): Unit = {
+    val maxRemove = game.totalOnMap(_.pieces.totalOf(ARVNPieces)) min 3
+    val num = if (game.isHuman(faction))
+      askInt("\nRemove how many ARVN pieces", 0, maxRemove)
+    else if (faction == ARVN)
+      maxRemove
+    else  // NVA and VC
+      (((49 - game.arvnPoints) / 2) max 0) min maxRemove
+
+    log(s"\n$faction chooses to remove ${amountOf(num, "ARVN piece")}")
+    log()
+    loggingControlChanges {
+      removePiecesFromMap(faction, num, ARVNPieces, friendly = faction == ARVN, spaceNames(game.spaces))
+      increasePatronage(num * 2)
+      makeIneligibleThroughNextTurn(ARVN)
+    }
+
+  }
 }

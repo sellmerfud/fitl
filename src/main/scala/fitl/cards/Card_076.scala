@@ -41,6 +41,18 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// North-South rivalry lingers: NVA and VC –1 Resource each per
+// space with both. Patronage +2.
+//
+// Shaded Text
+// Saigon regime seen as colonial retread: Remove Support from Hue,
+// Da Nang, and an adjacent Province.
+//
+// Tips
+// "Space with both" means a space with both NVA and VC pieces. "Remove Support" means
+// set either Active or Passive Support to Neutral (1.6.2).
+
 object Card_076 extends EventCard(76, "Annam",
   DualEvent,
   List(ARVN, NVA, VC, US),
@@ -49,10 +61,44 @@ object Card_076 extends EventCard(76, "Annam",
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
+  val unshadedCandidate = (sp: Space) =>
+    sp.pieces.has(NVAPieces) &&
+    sp.pieces.has(VCPieces)
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def canReduceRes(faction: Faction) = game.trackResources(faction) && game.resources(faction) < EdgeTrackMax
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    game.patronage < EdgeTrackMax ||
+    ((game.spaces exists unshadedCandidate) && (canReduceRes(NVA) || canReduceRes(VC)))
+
+  def executeUnshaded(faction: Faction): Unit = {
+    val num = game.spaces count unshadedCandidate
+    decreaseResources(NVA, num)
+    decreaseResources(VC, num)
+    increasePatronage(2)
+  }
+
+  val shadedNames = List(Hue, DaNang, QuangTri_ThuaThien, QuangNam, QuangTin_QuangNgai).sorted(SpaceNameOrdering)
+
+  val shadedCandididate = (sp: Space) => sp.support > Neutral
+
+  def shadedEffective(faction: Faction): Boolean = spaces(shadedNames) exists shadedCandididate
+
+  def executeShaded(faction: Faction): Unit = {
+    val provinceCandidates = spaces(shadedNames) filter { sp => sp.isProvince && shadedCandididate(sp) }
+
+    val province = if (provinceCandidates.isEmpty)
+      None
+    else if (game.isHuman(faction))
+      Some(askSimpleMenu(spaceNames(provinceCandidates), "\nSelect province adjacent to Hue/Da Nang:").head)
+    else
+      Some(VC_Bot.pickSpaceTowardActiveOpposition(provinceCandidates).name)
+
+    println()
+    loggingPointsChanges {
+      setSupport(Hue, Neutral)
+      setSupport(DaNang, Neutral)
+      province foreach { name => setSupport(name, Neutral) }
+    }
+  }
 }

@@ -129,7 +129,7 @@ object Card_025 extends EventCard(25, "TF-116 Riverines",
         for (name <- LowlandTouchingMekong if game.getSpace(name).pieces.has(InsurgentPieces)) {
           val params = Params(event = true, free = true, singleTarget = Some(name))
           Bot.initTurnVariables()  // Treat each space as a fresh turn
-          ARVN_Bot.sweepOp(params, 1)
+          ARVN_Bot.sweepOp(params, 3)
           Bot.initTurnVariables()  // Treat each space as a fresh turn
           Bot.performAssault(ARVN, name, params)
         }

@@ -96,11 +96,11 @@ object Card_071 extends EventCard(71, "An Loc",
 
   def botCandidate = (sp: Space) =>
     sp.isCity &&
-    (spaces(NVA_Bot.getNVAAdjacent(sp.name, free = true)) exists (_.pieces.has(NVATroops)))
+    (spaces(NVA_Bot.getNVAAdjacent(sp.name)) exists (_.pieces.has(NVATroops)))
 
   def botPickCity(candiates: List[Space]): String = {
     val sorted = candiates.sortBy { sp =>
-      (spaces(NVA_Bot.getNVAAdjacent(sp.name, free = true)) map (_.pieces.totalOf(NVATroops))).sum
+      (spaces(NVA_Bot.getNVAAdjacent(sp.name)) map (_.pieces.totalOf(NVATroops))).sum
     }
     sorted.last.name
   }
@@ -155,8 +155,8 @@ object Card_071 extends EventCard(71, "An Loc",
         maxSpaces   = Some(1)
       )
 
-      NVA_Bot.attackOp(attackParams, actNum = 6, addAmbush = false)
-      NVA_Bot.attackOp(attackParams, actNum = 6, addAmbush = false)
+      NVA_Bot.attackOp(attackParams, actNum = 2, addAmbush = false)
+      NVA_Bot.attackOp(attackParams, actNum = 2, addAmbush = false)
     }
   }
 }

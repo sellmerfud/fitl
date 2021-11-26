@@ -107,7 +107,7 @@ object Card_047 extends EventCard(47, "Chu Luc",
       if (game.isHuman(faction))
         Human.executeAssault(ARVN, params)
       else
-        ARVN_Bot.assaultOp(params, 0)
+        ARVN_Bot.assaultOp(params, 3)
     }
   }
 

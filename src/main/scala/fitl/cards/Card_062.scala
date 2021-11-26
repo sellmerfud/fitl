@@ -74,7 +74,7 @@ object Card_062 extends EventCard(62, "Cambodian Civil War",
   // Returns the Ranger Origins and Irregular Origins
   def getOrigins(dest: String): (List[Origin], List[Origin]) = {
     val (rangers, irregs) = (game.spaces flatMap { sp =>
-      val keep = Bot.selectPiecesToKeep(sp.name, dest, US, AirLift, SpecialForces.toSet)
+      val keep = Bot.selectPiecesToKeep(sp.name, dest, US, AirLift, SpecialForces.toSet, Params())
       val movers = if (isInCambodia(sp.name) && sp.pieces.has(NVATroops))
         Pieces()
       else

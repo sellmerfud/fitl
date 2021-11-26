@@ -1661,11 +1661,16 @@ object FireInTheLake {
   )
 
   case class MarchParams(
-    onlyFrom: Set[String] = Set.empty,  // If not empty, restricts where pieces can march from.
-    onlyTypes: Set[PieceType] = Set.empty // Some events specify marching only NVA Troops for example
+    onlyFrom: Set[String]     = Set.empty,  // If not empty, restricts where pieces can march from.
+    onlyTypes: Set[PieceType] = Set.empty,  // Some events specify marching only NVA Troops for example
+    amassForBase: Boolean     = true        // Normally the Bots will try to accumulate guerrillas for a
+                                            // base, but no with some events.
   ) {
     def canMarchFrom(name: String) = onlyFrom.isEmpty || onlyFrom(name)
   }
+
+  // For some events the Bot will only rally guerrillas (not bases)
+  case class RallyParams(guerrillasOnly: Boolean = false)
 
   // Parameters used when executing operations and special activities
   // This is used by both the Humand and Bot objects.
@@ -1681,6 +1686,7 @@ object FireInTheLake {
     airliftParams: AirLiftParams    = AirLiftParams(),
     assaultParams: AssaultParams    = AssaultParams(),
     marchParams:   MarchParams      = MarchParams(),
+    rallyParams:   RallyParams      = RallyParams(),
     vulnerableTunnels: Boolean      = false,  // Used by events assault/air strike
     allCubesAsUS: Boolean           = false  // ROCk event for sweep/assault
   ) {

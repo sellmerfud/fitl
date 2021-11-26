@@ -866,7 +866,7 @@ object Bot {
     "Adjacent to most NVA Troops yet to March",
     sp => {
         // Get all adjacent spaces that have not yet been selecte as march destinations
-        val adjacent = NVA_Bot.getNVAAdjacent(sp.name, free = false) filterNot moveDestinations.contains
+        val adjacent = NVA_Bot.getNVAAdjacent(sp.name) filterNot moveDestinations.contains
         adjacent.foldLeft(0) { (totalTroops, name) =>
           totalTroops + game.getSpace(name).pieces.totalOf(NVATroops)
         }
@@ -1555,6 +1555,7 @@ object Bot {
   }
 
   // Used by NVA and VC
+  // VC will ignore this in Laos/Cambodia
   val KP_3ActingGuerrillasWithRoomForAvailableBase = (params: MoveParams) => {
     import params._
     val desc = "Keep 3 acting faction Guerrillas in space with room for Available Base"
@@ -1988,12 +1989,14 @@ object Bot {
                          destName: String,
                          faction: Faction,
                          action: MoveAction,
-                         moveTypes: Set[PieceType]): Pieces = {
+                         moveTypes: Set[PieceType],
+                         opParams: Params): Pieces = {
     val us      = faction == US
     val arvn    = faction == ARVN
     val nva     = faction == NVA
     val vc      = faction == VC
     val usSweep = us && action == Sweep
+    val planBase = (vc || nva) && opParams.marchParams.amassForBase
 
     def nextKeepPriority(priorities: List[MovePriority], params: MoveParams): Pieces = {
       priorities match {
@@ -2014,7 +2017,7 @@ object Bot {
       movePriIf(us,         KP_1USTroopSaigonAnd2PopSpacesWithoutActiveSupport),
       movePriIf(us,         KP_USTroopsGreaterOrEqualArvnCubesAtSupport),
       movePriIf(nva || vc,  KP_1ActingGuerrillaWithActingBase),
-      movePriIf(nva || vc,  KP_3ActingGuerrillasWithRoomForAvailableBase),
+      movePriIf(planBase,   KP_3ActingGuerrillasWithRoomForAvailableBase),
       movePriIf(nva || vc,  KP_FriendlyGuerrillasGreaterThanEnemiesOnLoCs),
       movePriIf(vc,         KP_1UndergroundIn1PopNotAtActiveSupport)
     ).flatten
@@ -2036,7 +2039,8 @@ object Bot {
                          action: MoveAction,
                          moveTypes: Set[PieceType],
                          maxPieces: Int,
-                         mustKeep: Pieces): Pieces = {
+                         mustKeep: Pieces,
+                         opParms: Params): Pieces = {
     val us        = faction == US
     val arvn      = faction == ARVN
     val nva       = faction == NVA
@@ -2100,10 +2104,11 @@ object Bot {
                  faction: Faction,
                  action: MoveAction,
                  moveTypes: Set[PieceType],
-                 maxPieces: Int): Pieces = {
+                 maxPieces: Int,
+                 params: Params): Pieces = {
 
     // First we determine which pieces to keep in the origin space
-    val toKeep = selectPiecesToKeep(originName, destName, faction, action, moveTypes)
+    val toKeep = selectPiecesToKeep(originName, destName, faction, action, moveTypes, params)
     // If this is an Air Lift we must limit the number of non USTroops moved to 4
     // Higher priority others come first in the list.
     val airLiftKeep = if (action == AirLift) {
@@ -2114,7 +2119,7 @@ object Bot {
     }
     else
       Pieces()
-    selectPiecesToMove(originName, destName, faction, action, moveTypes, maxPieces, toKeep + airLiftKeep)
+    selectPiecesToMove(originName, destName, faction, action, moveTypes, maxPieces, toKeep + airLiftKeep, params)
   }
 
 
@@ -2136,7 +2141,7 @@ object Bot {
       case Patrol                   => getPatrolOrigins(destName)
       case Transport                => getTransportOrigins(destName)
       case AirLift                  => Set.empty // See selectAirLiftOrigin
-      case March if faction == NVA  => NVA_Bot.getNVAAdjacent(destName, params.free) filter params.marchParams.canMarchFrom
+      case March if faction == NVA  => NVA_Bot.getNVAAdjacent(destName) filter params.marchParams.canMarchFrom
       case March                    => getAdjacent(destName) filter params.marchParams.canMarchFrom
     }
 
@@ -2168,7 +2173,7 @@ object Bot {
       Bot.selectMoveOrigin(faction, destName, action, moveTypes, params, previousOrigins) match {
         case None => false  // We didn't find any origins with moveable pieces
         case Some(originName) =>
-          if (movePiecesFromOneOrigin(originName, destName, faction, action, moveTypes, 1).nonEmpty)
+          if (movePiecesFromOneOrigin(originName, destName, faction, action, moveTypes, 1, params).nonEmpty)
             true
           else
             nextOrigin(previousOrigins + originName)
@@ -2332,7 +2337,7 @@ object Bot {
         case None =>  // No more origin spaces, so we are finished
 
         case Some(originName) =>
-          val toMove = movePiecesFromOneOrigin(originName, destName, faction, action, moveTypes, maxPieces)
+          val toMove = movePiecesFromOneOrigin(originName, destName, faction, action, moveTypes, maxPieces, params)
           if (toMove.nonEmpty) {
             //  First time we move pieces to a dest log
             //  the selection of the destination space.
@@ -5066,13 +5071,13 @@ object Bot {
       LOC_CanTho_ChauDoc
     )
 
-    // When the trail is at 4 or when the operation is free,
+    // When the trail is at 4 
     // NVA march considers all spaces that are in or adjacent
     // to Laos/Cambodia to be adjacent.
 
-    def getNVAAdjacent(name: String, free: Boolean): Set[String] = {
+    def getNVAAdjacent(name: String): Set[String] = {
 
-      if ((game.trail == 4 || free) && inOrAdjacentToLaosCambodia(name))
+      if (game.trail == 4 && inOrAdjacentToLaosCambodia(name))
         getAdjacent(name) ++ inOrAdjacentToLaosCambodia - name
       else
         getAdjacent(name)
@@ -5260,13 +5265,18 @@ object Bot {
                     else NO_LIMIT
       def rallied      = rallySpaces.nonEmpty
       def canRally     = rallySpaces.size < maxRally && checkActivation(NVA, rallied, actNum)
-      val canRallyBase = (sp: Space) => {
+      val canRallyBase = (sp: Space) =>
         !rallySpaces(sp.name)       &&
+        params.spaceAllowed(sp.name) &&
+        !params.rallyParams.guerrillasOnly &&
         sp.support < PassiveSupport &&
         sp.totalBases < 2           &&
         sp.pieces.totalOf(NVAGuerrillas) > 2
-      }
-      val canRallyGuerrillas = (sp: Space) => { !rallySpaces(sp.name) && sp.support < PassiveSupport }
+
+      val canRallyGuerrillas = (sp: Space) =>
+        !rallySpaces(sp.name) &&
+        params.spaceAllowed(sp.name) &&
+        sp.support < PassiveSupport
 
       //  Return true if we can continue (no failed activation roll)
       def rallyToPlaceBase(candidates: List[Space]): Boolean = {
@@ -5390,7 +5400,7 @@ object Bot {
             sp.totalBases < 2         &&
             !sp.pieces.has(NVABases)  &&
             isInLaosCambodia(sp.name) &&
-            (spaces(getNVAAdjacent(sp.name, params.free)) exists (_.pieces.has(NVAGuerrillas)))
+            (spaces(getNVAAdjacent(sp.name)) exists (_.pieces.has(NVAGuerrillas)))
           val candidates = game.locSpaces filter qualifies
           lazy val activationOK = checkActivation(NVA, needActivation, actNum)
 
@@ -6059,20 +6069,26 @@ object Bot {
       val maxRally     = params.maxSpaces getOrElse NO_LIMIT
       def rallied      = rallySpaces.nonEmpty
       def canRally     = rallySpaces.size < maxRally && checkActivation(VC, rallied, actNum)
-      val canRallyBase = (sp: Space) => {
+      val canRallyBase = (sp: Space) =>
         !rallySpaces(sp.name)       &&
+        params.spaceAllowed(sp.name) &&
+        !params.rallyParams.guerrillasOnly &&
         sp.support < PassiveSupport &&
         sp.totalBases < 2           &&
         sp.pieces.totalOf(VCGuerrillas) > 2
-      }
-      val canRallyGuerrillas = (sp: Space) => { !rallySpaces(sp.name) && sp.support < PassiveSupport }
-      val canFlipGuerrillas = (sp: Space) => {
+
+      val canRallyGuerrillas = (sp: Space) =>
+        !rallySpaces(sp.name) &&
+        params.spaceAllowed(sp.name) &&
+        sp.support < PassiveSupport
+
+      val canFlipGuerrillas = (sp: Space) =>
         !rallySpaces(sp.name)         &&
+        params.spaceAllowed(sp.name)  &&
         sp.support < PassiveSupport   &&
         sp.pieces.has(VCBases)        &&
         sp.pieces.has(VCGuerrillas_A) &&
         !sp.pieces.has(VCGuerrillas_U)
-      }
 
       def tryCadresAgitate(sp: Space): Unit = {
         if (!agitated && cadres && sp.support > ActiveOpposition && game.agitateTotal > 0)
@@ -6204,7 +6220,7 @@ object Bot {
         val nextGenericCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
           lazy val candidates = game.spaces filter {sp => 
             params.spaceAllowed(sp.name) &&
-            prohibited.contains(sp.name)
+            !prohibited.contains(sp.name)
           }
 
           if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum))

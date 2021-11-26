@@ -425,7 +425,7 @@ object Bot {
       noteIf(capabilityInPlay(BoobyTraps_Unshaded), s"You may ambush in only one space [$BoobyTraps_Unshaded]")
     ).flatten
 
-    def activateOK() = {
+    def activateOK() = params.free || {
       val needActivation = op == Attack && (checkFirst || ambushSpaces.nonEmpty)
       checkActivation(faction, needActivation, actNum)
     }
@@ -4133,8 +4133,8 @@ object Bot {
     //  roll we must also make sure that there are sufficient ARVN resources
     //  to pay for the operation.
     def checkARVNActivation(needRoll: Boolean, actNum: Int, free: Boolean) =
-      checkActivation(ARVN, needRoll, actNum) &&
-      (free || !game.trackResources(ARVN) || game.arvnResources >= 3)
+      free ||
+      (checkActivation(ARVN, needRoll, actNum) && (!game.trackResources(ARVN) || game.arvnResources >= 3))
 
     val arvnAssaultWouldAddCoinControl = (sp: Space) =>
       !sp.coinControlled && assaultResult(ARVN, false, false)(sp).coinControlled
@@ -5264,7 +5264,7 @@ object Bot {
                     else if (aaa && game.trail <= 2) 1 // Nva priorites trail improvement if it is low
                     else NO_LIMIT
       def rallied      = rallySpaces.nonEmpty
-      def canRally     = rallySpaces.size < maxRally && checkActivation(NVA, rallied, actNum)
+      def canRally     = rallySpaces.size < maxRally && (params.free || checkActivation(NVA, rallied, actNum))
       val canRallyBase = (sp: Space) =>
         !rallySpaces(sp.name)       &&
         params.spaceAllowed(sp.name) &&
@@ -5402,7 +5402,7 @@ object Bot {
             isInLaosCambodia(sp.name) &&
             (spaces(getNVAAdjacent(sp.name)) exists (_.pieces.has(NVAGuerrillas)))
           val candidates = game.locSpaces filter qualifies
-          lazy val activationOK = checkActivation(NVA, needActivation, actNum)
+          lazy val activationOK = params.free || checkActivation(NVA, needActivation, actNum)
 
           if (!lastWasSuccess && candidates.nonEmpty && activationOK)
             Some(bestCandidate(candidates, LaosCambodiaPriorities).name)
@@ -5415,7 +5415,7 @@ object Bot {
             params.spaceAllowed(sp.name)  &&
             !prohibited.contains(sp.name)
           }
-          lazy val activationOK = checkActivation(NVA, needActivation, actNum)
+          lazy val activationOK = params.free || checkActivation(NVA, needActivation, actNum)
 
           if (candidates.nonEmpty && activationOK)
             Some(NVA_Bot.pickSpaceMarchDest(candidates).name)
@@ -5482,7 +5482,7 @@ object Bot {
       // Return true if we can continue attacking (ie. did not fail and activation roll)
       def nextAttack(candidates: List[Space], useTroops: Boolean, needActivation: Boolean): Boolean = {
         if (attackSpaces.size < maxAttacks && candidates.nonEmpty) {
-          if (checkActivation(NVA, needActivation, actNum)) {
+          if (params.free || checkActivation(NVA, needActivation, actNum)) {
             val sp         = pickSpaceRemoveReplace(candidates)
 
             val guerrillas = sp.pieces.only(NVAGuerrillas)
@@ -5634,7 +5634,8 @@ object Bot {
       }
 
       def nextTerror(numRemaining: Int, candidates: List[Space], needActivation: Boolean): Unit = {
-        if (numRemaining > 0 && candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
+        lazy val activateOK = params.free || checkActivation(VC, needActivation, actNum)
+        if (numRemaining > 0 && candidates.nonEmpty && activateOK) {
           val sp = pickSpacePlaceTerror(candidates)
 
             log(s"\n$NVA selects ${sp.name} for Terror")
@@ -6068,7 +6069,7 @@ object Bot {
       val cadres       = capabilityInPlay(Cadres_Shaded)
       val maxRally     = params.maxSpaces getOrElse NO_LIMIT
       def rallied      = rallySpaces.nonEmpty
-      def canRally     = rallySpaces.size < maxRally && checkActivation(VC, rallied, actNum)
+      def canRally     = rallySpaces.size < maxRally && (params.free || checkActivation(VC, rallied, actNum))
       val canRallyBase = (sp: Space) =>
         !rallySpaces(sp.name)       &&
         params.spaceAllowed(sp.name) &&
@@ -6223,7 +6224,7 @@ object Bot {
             !prohibited.contains(sp.name)
           }
 
-          if (candidates.nonEmpty && checkActivation(VC, needActivation, actNum))
+          if (candidates.nonEmpty && (params.free || checkActivation(VC, needActivation, actNum)))
             Some(VC_Bot.pickSpaceMarchDest(candidates).name)
           else
             None
@@ -6263,7 +6264,8 @@ object Bot {
       var attackSpaces = Set.empty[String]
 
       def nextAttack(candidates: List[Space], needActivation: Boolean): Unit = {
-        if (attackSpaces.size < maxAttacks && candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
+        lazy val activateOK = params.free || checkActivation(VC, needActivation, actNum)
+        if (attackSpaces.size < maxAttacks && candidates.nonEmpty && activateOK) {
           val sp         = pickSpaceRemoveReplace(candidates)
           val guerrillas = sp.pieces.only(VCGuerrillas)
           val coinPieces = sp.pieces.only(CoinPieces)
@@ -6336,7 +6338,8 @@ object Bot {
       }
 
       def nextTerror(numRemaining: Int, candidates: List[Space], needActivation: Boolean): Unit = {
-        if (numRemaining > 0 && candidates.nonEmpty && checkActivation(VC, needActivation, actNum)) {
+        lazy val activateOK = params.free || checkActivation(VC, needActivation, actNum)
+        if (numRemaining > 0 && candidates.nonEmpty && activateOK) {
           val sp = pickSpacePlaceTerror(candidates)
 
             log(s"\n$VC selects ${sp.name} for Terror")

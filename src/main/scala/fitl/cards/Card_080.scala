@@ -75,6 +75,24 @@ object Card_080 extends EventCard(80, "Light at the End of the Tunnel",
     }
   }
 
+  // ARVN Bot removes US pieces from the spaces with the most US Pieces
+  def arvnBotRemovePieces(numRemaining: Int): Unit = {
+    val candidates = game.spaces filter (_.pieces.has(USPieces))
+    if (numRemaining > 0 && candidates.nonEmpty) {
+      val sp = Bot.pickSpaceWithMostPieces(USPieces)(candidates)
+      val piece = Bot.selectFriendlyRemoval(sp.pieces.only(USPieces), 1)
+      removeToAvailable(sp.name, piece)
+      arvnBotRemovePieces(numRemaining - 1)
+    }
+  }
+  
+  val arvnShiftPriorities = List(
+    new Bot.BooleanPriority[Space]("1 Pop", _.population == 1),
+    new Bot.BooleanPriority[Space]("Active Support", _.support == ActiveSupport),
+    new Bot.BooleanPriority[Space]("Neutral", _.support == Neutral),
+    new Bot.BooleanPriority[Space]("Passive Opposition", _.support == PassiveOpposition)
+  )
+
   def shiftSpaces(faction: Faction, num: Int, shiftCandidates: List[Space]): Unit = {
     val selectedSpaces = if (shiftCandidates.isEmpty)
       Nil
@@ -86,7 +104,11 @@ object Card_080 extends EventCard(80, "Light at the End of the Tunnel",
     else {
       def nextSpace(remaining: Int, candidates: List[Space]): List[String] = {
         if (remaining > 0 && candidates.nonEmpty) {
-          val name = VC_Bot.pickSpaceTowardActiveOpposition(candidates).name
+          val name = faction match {
+            case VC  => VC_Bot.pickSpaceTowardActiveOpposition(candidates).name
+            case NVA => Bot.pickSpaceWithMostSupport(candidates).name
+            case _   => Bot.bestCandidate(candidates, arvnShiftPriorities).name
+          }
           name::nextSpace(remaining - 1, candidates filterNot (_.name == name))
         }
         else
@@ -111,14 +133,26 @@ object Card_080 extends EventCard(80, "Light at the End of the Tunnel",
       val num =  if (game.isHuman(faction))
         askInt("\nRemove how many US pieces from the map", 1, numUSOnMap min 4)
       else
-        numUSOnMap min 4
+        numUSOnMap min d3  // Bots roll d3 to determine number
 
       loggingControlChanges {
-        removePiecesFromMap(faction, num, USPieces, false, spaceNames(game.spaces), usToAvailable = true)
+        if (faction == ARVN && game.isBot(ARVN))
+          arvnBotRemovePieces(num)
+        else
+          removePiecesFromMap(faction, num, USPieces, false, spaceNames(game.spaces), usToAvailable = true)
         log()
         increasePatronage(num * 2)
+        log()
         shiftSpaces(faction, num, shiftCandidates)
-        placePiecesOnMap(faction, num * 4, Set(NVATroops), NorthVietnam::LaosCambodia)
+        log()
+        if (game.isHuman(faction) || faction == NVA)
+          placePiecesOnMap(faction, num * 4, Set(NVATroops), NorthVietnam::LaosCambodia)
+        else {
+          // ARVN and VC place all troop in North Vietnam
+          val numTroops = game.availablePieces.totalOf(NVATroops) min (num * 4)
+          val troops = Pieces().set(numTroops, NVATroops)
+          placePieces(NorthVietnam, troops)
+        }
       }
     }
   }

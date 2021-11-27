@@ -345,6 +345,20 @@ object Bot {
     assaultResult(faction, allCubesAsUS, vulnerableTunnels)(sp).pieces.totalOf(InsurgentForces) == 0
   }
 
+  def pickSpaces(num: Int, candidates: List[Space])(picker: (List[Space]) => Space): List[Space] = {
+    def nextSpace(numRemaining: Int, candidates: List[Space]): List[Space] = {
+      if (numRemaining > 0 && candidates.nonEmpty) {
+        val sp = picker(candidates)
+        sp::nextSpace(numRemaining - 1, candidates filterNot (_.name == sp.name))
+      }
+      else
+        Nil
+    }
+
+    nextSpace(num, candidates).reverse
+  }
+
+  
   def pickSpaceWithMostPieces(pieceTypes: TraversableOnce[PieceType])(candidates: List[Space]) = {
     val priorities = List(new Bot.HighestScore[Space](s"Most ${andList(pieceTypes)}", _.pieces.totalOf(pieceTypes)))
     bestCandidate(candidates, priorities)

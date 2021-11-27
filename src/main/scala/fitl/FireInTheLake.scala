@@ -1028,8 +1028,19 @@ object FireInTheLake {
   def arvnFirepower(allCubesAsUS: Boolean)(sp: Space) =
     sp.assaultFirepower(ARVN, allCubesAsUS)
 
-  def coinFirepower(allCubesAsUS: Boolean)(sp: Space) =
-    usFirepower(allCubesAsUS)(sp) + arvnFirepower(allCubesAsUS)(sp)
+  // If there are no US Troops present then COIN firepower
+  // is zero.  This is because COIN firepower is used to determine
+  // the number of pieces removed during a US Assault (with added ARVN asault)
+  // If no US Troops are present, then there can be no US Assault.
+  def coinFirepower(allCubesAsUS: Boolean)(sp: Space) = {
+    val usPower = usFirepower(allCubesAsUS)(sp)
+    if (allCubesAsUS)
+      usPower
+    else if (usPower > 0)
+      usPower + arvnFirepower(false)(sp)
+    else
+      0
+  }
 
   def assaultFirepower(faction: Faction, allCubesAsUS: Boolean)(sp: Space): Int = {
     faction match {

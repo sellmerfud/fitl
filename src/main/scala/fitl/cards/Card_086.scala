@@ -41,6 +41,22 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// ARVN CAPABILITY
+//
+// Unshaded Text
+// Anger at regime suppressed: 1 Govern space may transfer Aid
+// to Patronage without shifting Support.
+//
+// Shaded Text
+// Communism seen in harmony with Confucius: ARVN Govern and Pacify
+// maximum 1 space.
+//
+// Tips
+// With the unshaded Capability, ARVN gets to decide each Govern space transferring
+// to Patronage whether or not to shift. With shaded, Govern Special Activity will be
+// "max 1" rather than "max 2" (4.3.1) and ARVN will only be able to Pacify in at most
+// 1 of the possible US plus ARVN maximum of 4 spaces each Support Phase (6.3.1).
+
 object Card_086 extends EventCard(86, "Mandate of Heaven",
   DualEvent,
   List(ARVN, VC, NVA, US),
@@ -50,9 +66,11 @@ object Card_086 extends EventCard(86, "Mandate of Heaven",
           VC   -> (Critical    -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = playCapability(MandateOfHeaven_Unshaded)
+
+  def shadedEffective(faction: Faction): Boolean = true
+
+  def executeShaded(faction: Faction): Unit = playCapability(MandateOfHeaven_Shaded)
 }

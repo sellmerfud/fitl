@@ -41,6 +41,16 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Clean vote: 3 Passive Support spaces to Active Support. Aid +10.
+//
+// Shaded Text
+// Ballot stuffing defeats opposition candidate Druong Dinh Dzu:
+// Shift 2 Cities each 1 level toward Active Opposition. Aid –15.
+//
+// Tips
+// The spaces affected may include Saigon.
+
 object Card_083 extends EventCard(83, "Election",
   DualEvent,
   List(ARVN, VC, US, NVA),
@@ -49,10 +59,86 @@ object Card_083 extends EventCard(83, "Election",
           NVA  -> (NotExecuted -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
+  val unshadedCandidate = (sp: Space) =>
+    sp.population > 0 &&
+    sp.support == PassiveSupport
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.nonLocSpaces exists unshadedCandidate
+  def executeUnshaded(faction: Faction): Unit = {
+    val candidates = game.nonLocSpaces filter unshadedCandidate
+    val numSpaces  = candidates.size min 3
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+    val selectedSpaces = if (candidates.isEmpty)
+      Nil
+    else if (game.isHuman(faction)) {
+      val prompt = s"\nSelect ${amountOf(numSpaces, "space")}:"
+      askSimpleMenu(spaceNames(candidates), prompt, numChoices = numSpaces)
+    }
+    else {
+      def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
+        if (numRemaining > 0 && candidates.nonEmpty) {
+          val name = US_Bot.pickSpaceTowardActiveSupport(candidates).name
+          name::nextSpace(numRemaining - 1, candidates filterNot (_.name == name))
+        }
+        else
+          Nil
+      }
+
+      nextSpace(numSpaces, candidates).reverse
+    }
+
+    loggingPointsChanges {
+      if (selectedSpaces.isEmpty)
+        log("There are no spaces that qualify for the event")
+      else {
+        println()
+        for (name <- selectedSpaces)
+          setSupport(name, ActiveSupport)
+          log()
+          increaseUsAid(9)
+      }
+    }
+  }
+
+  val shadedCandidate = (sp: Space) =>
+    sp.isCity &&
+    sp.support > ActiveOpposition
+
+  def shadedEffective(faction: Faction): Boolean = game.nonLocSpaces exists shadedCandidate
+
+  def executeShaded(faction: Faction): Unit = {
+    val candidates = game.nonLocSpaces filter shadedCandidate
+    val numSpaces  = candidates.size min 2
+
+    val selectedSpaces = if (candidates.isEmpty)
+      Nil
+    else if (game.isHuman(faction)) {
+      val prompt = s"\nSelect ${amountOf(numSpaces, "city", Some("cities"))}:"
+      askSimpleMenu(spaceNames(candidates), prompt, numChoices = numSpaces)
+    }
+    else {
+      def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
+        if (numRemaining > 0 && candidates.nonEmpty) {
+          val name = VC_Bot.pickSpaceTowardActiveOpposition(candidates).name
+          name::nextSpace(numRemaining - 1, candidates filterNot (_.name == name))
+        }
+        else
+          Nil
+      }
+
+      nextSpace(numSpaces, candidates).reverse
+    }
+
+    loggingPointsChanges {
+      if (selectedSpaces.isEmpty)
+        log("There are no spaces that qualify for the event")
+      else {
+        println()
+        for (name <- selectedSpaces)
+          decreaseSupport(name, 1)
+          log()
+          decreaseUsAid(15)
+      }
+    }
+  }
 }

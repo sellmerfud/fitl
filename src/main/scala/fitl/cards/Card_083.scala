@@ -66,26 +66,17 @@ object Card_083 extends EventCard(83, "Election",
   def unshadedEffective(faction: Faction): Boolean = game.nonLocSpaces exists unshadedCandidate
   def executeUnshaded(faction: Faction): Unit = {
     val candidates = game.nonLocSpaces filter unshadedCandidate
-    val numSpaces  = candidates.size min 3
 
     val selectedSpaces = if (candidates.isEmpty)
       Nil
+    else if (candidates.size <= 3)
+      spaceNames(candidates)
     else if (game.isHuman(faction)) {
-      val prompt = s"\nSelect ${amountOf(numSpaces, "space")}:"
-      askSimpleMenu(spaceNames(candidates), prompt, numChoices = numSpaces)
+      val prompt = s"\nSelect 3 spaces to set to Active Support:"
+      askSimpleMenu(spaceNames(candidates), prompt, numChoices = 3)
     }
-    else {
-      def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
-        if (numRemaining > 0 && candidates.nonEmpty) {
-          val name = US_Bot.pickSpaceTowardActiveSupport(candidates).name
-          name::nextSpace(numRemaining - 1, candidates filterNot (_.name == name))
-        }
-        else
-          Nil
-      }
-
-      nextSpace(numSpaces, candidates).reverse
-    }
+    else
+      spaceNames(Bot.pickSpaces(3, candidates)(US_Bot.pickSpaceTowardActiveSupport))
 
     loggingPointsChanges {
       if (selectedSpaces.isEmpty)
@@ -94,8 +85,8 @@ object Card_083 extends EventCard(83, "Election",
         println()
         for (name <- selectedSpaces)
           setSupport(name, ActiveSupport)
-          log()
-          increaseUsAid(9)
+        log()
+        increaseUsAid(9)
       }
     }
   }
@@ -108,26 +99,16 @@ object Card_083 extends EventCard(83, "Election",
 
   def executeShaded(faction: Faction): Unit = {
     val candidates = game.nonLocSpaces filter shadedCandidate
-    val numSpaces  = candidates.size min 2
-
     val selectedSpaces = if (candidates.isEmpty)
       Nil
+    else if (candidates.size <= 2)
+      spaceNames(candidates)
     else if (game.isHuman(faction)) {
-      val prompt = s"\nSelect ${amountOf(numSpaces, "city", Some("cities"))}:"
-      askSimpleMenu(spaceNames(candidates), prompt, numChoices = numSpaces)
+      val prompt = "\nSelect 2 cities:"
+      askSimpleMenu(spaceNames(candidates), prompt, numChoices = 2)
     }
-    else {
-      def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
-        if (numRemaining > 0 && candidates.nonEmpty) {
-          val name = VC_Bot.pickSpaceTowardActiveOpposition(candidates).name
-          name::nextSpace(numRemaining - 1, candidates filterNot (_.name == name))
-        }
-        else
-          Nil
-      }
-
-      nextSpace(numSpaces, candidates).reverse
-    }
+    else
+      spaceNames(Bot.pickSpaces(2, candidates)(VC_Bot.pickSpaceTowardActiveOpposition))
 
     loggingPointsChanges {
       if (selectedSpaces.isEmpty)

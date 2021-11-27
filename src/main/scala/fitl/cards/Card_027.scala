@@ -109,17 +109,8 @@ object Card_027 extends EventCard(27, "Phoenix Program",
       val choices = spaceNames(validSpaces) map (n => n ->n )
       askMenu(choices, s"\nChoose 2 spaces to set to Active Opposition:", numChoices = 2)
     }
-    else {  // Bot
-      def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
-        if (numRemaining > 0 && candidates.nonEmpty) {
-          val sp = VC_Bot.pickSpaceTowardActiveOpposition(candidates)
-          sp.name :: nextSpace(numRemaining - 1, candidates filterNot (_.name == sp.name))
-        }
-        else
-          Nil
-      }
-      nextSpace(2, validSpaces).reverse
-    }
+    else  // Bot
+      spaceNames(Bot.pickSpaces(2, validSpaces)(VC_Bot.pickSpaceTowardActiveOpposition))
 
 
     loggingPointsChanges {

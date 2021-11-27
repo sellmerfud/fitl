@@ -138,17 +138,8 @@ object Card_030 extends EventCard(30, "USS New Jersey",
         val choices = candidates map (sp => sp.name -> sp.name)
         askMenu(choices, "Select coastal Provinces:", 2 min choices.size)
       }
-      else {
-        def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
-          if  (numRemaining >  0 && candidates.nonEmpty) {
-            val sp = VC_Bot.pickSpaceTowardActiveOpposition(candidates)
-            sp.name::nextSpace(numRemaining - 1, candidates filterNot (_.name == sp.name))
-          }
-          else
-            Nil
-        }
-        nextSpace(2, candidates)
-      }
+      else
+        spaceNames(Bot.pickSpaces(2, candidates)(VC_Bot.pickSpaceTowardActiveOpposition))
 
       loggingPointsChanges {
         for (name <- names) 

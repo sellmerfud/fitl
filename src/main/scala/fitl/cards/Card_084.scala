@@ -106,27 +106,17 @@ object Card_084 extends EventCard(84, "To Quoc",
   }
 
   def placeVCGuerrillas(faction: Faction, candidates: List[Space]): Unit = {
+    val numAvailVC = game.availablePieces.totalOf(VCGuerrillas_U)
     val selectedSpaces = if (candidates.size <= 3)
       spaceNames(candidates)
     else if (game.isHuman(faction)) {
       val prompt = "\nSelect 3 spaces to place a VC Guerrilla:"
       askSimpleMenu(spaceNames(candidates), prompt, numChoices = 3)
     }
-    else {
-      def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
-        if (numRemaining > 0 && candidates.nonEmpty) {
-          val name = if (faction == NVA)
-            Bot.pickSpaceWithMostSupport(candidates).name
-          else
-            VC_Bot.pickSpacePlaceGuerrillas(candidates).name
-          name::nextSpace(numRemaining - 1, candidates filterNot (_.name == name))
-        }
-        else
-          Nil
-      }
-
-      nextSpace(3 min game.availablePieces.totalOf(VCGuerrillas), candidates).reverse
-    }
+    else if (faction == NVA)
+      spaceNames(Bot.pickSpaces(3 min numAvailVC, candidates)(Bot.pickSpaceWithMostSupport))
+    else // VC
+      spaceNames(Bot.pickSpaces(3 min numAvailVC, candidates)(VC_Bot.pickSpacePlaceGuerrillas))
 
     for (name <- selectedSpaces) {
       val num = if (game.isHuman(faction))

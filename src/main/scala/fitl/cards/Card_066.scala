@@ -122,17 +122,8 @@ object Card_066 extends EventCard(66, "Ambassador Taylor",
       val choices = spaceNames(candidates) map (n => n -> n)
       askMenu(choices, "\nRemove Support from 3 spaces outside Saigon:", numChoices = 3)
     }
-    else {
-      def nextSpace(numRemaining: Int, candidates: List[Space]): List[String] = {
-        if (numRemaining > 0 && candidates.nonEmpty) {
-          val name = Bot.pickSpaceWithMostSupport(candidates).name
-          name::nextSpace(numRemaining - 1, candidates filterNot (_.name == name))
-        }
-        else
-          Nil
-      }
-      nextSpace(3, candidates)
-    }
+    else
+      spaceNames(Bot.pickSpaces(3, candidates)(Bot.pickSpaceWithMostSupport))
 
     println()
     loggingPointsChanges {

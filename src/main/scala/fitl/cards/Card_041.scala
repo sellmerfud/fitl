@@ -61,48 +61,33 @@ object Card_041 extends EventCard(41, "Bombing Pause",
 
   def unshadedEffective(faction: Faction): Boolean = true
 
-  def humanSelectTwo(numRemaining: Int, candidates: List[String]): List[String] = {
-    if (numRemaining > 0 && candidates.nonEmpty) {
-      val count = ordinal(3 - numRemaining)
-      val name = askCandidate(s"Select the $count space to set to Passive Support: ", candidates)
-      name::humanSelectTwo(numRemaining - 1, candidates filterNot (_ == name))
-    }
-    else
-      Nil
-  }
-
-  def botSelectTwo(faction: Faction, numRemaining: Int, candidates: List[Space]): List[Space] = {
-    if (numRemaining > 0 && candidates.nonEmpty) {
-
-      val sp = faction match {
-        case US => US_Bot.pickSpaceTowardActiveSupport(candidates)
-        case _  => ARVN_Bot.pickSpaceTowardPassiveSupport(candidates)
-      }
-      sp::botSelectTwo(faction, numRemaining - 1, candidates filterNot (_.name == sp.name))
-    }
-    else
-      Nil
-  }
-
   def executeUnshaded(faction: Faction): Unit = {
     val candidates = game.nonLocSpaces filter { sp =>
       sp.population > 0 && sp.support != PassiveSupport
     }
 
-    if (candidates.isEmpty)
-      log("There are no spaces to shift to Passive Support")
-    else {
-      val supportSpaces = if (game.isHuman(faction))
-        humanSelectTwo(2, spaceNames(candidates)).reverse
-      else
-        botSelectTwo(faction, 2, candidates).reverse map (_.name)
+    val supportSpaces = if (candidates.isEmpty)
+      Nil
+    else if (candidates.size <= 2)
+      spaceNames(candidates)
+    else if (game.isHuman(faction)) {
+      val prompt = s"Select 2 spaces to set to Passive Support:"
+      askSimpleMenu(spaceNames(candidates), prompt)
+    }
+    else if (faction == US)
+      spaceNames(Bot.pickSpaces(2, candidates)(US_Bot.pickSpaceTowardActiveSupport))
+    else
+      spaceNames(Bot.pickSpaces(2, candidates)(ARVN_Bot.pickSpaceTowardPassiveSupport))
 
-      log()
-      loggingPointsChanges {
+    loggingPointsChanges {
+      if (supportSpaces.isEmpty)
+        log("There are no spaces to shift to Passive Support")
+      else {
+        log()
         for (name <- supportSpaces)
           setSupport(name, PassiveSupport)
-        increasePatronage(2)
       }
+      increasePatronage(2)
       playMomentum(Mo_BombingPause)
     }
   }

@@ -141,14 +141,23 @@ object Human {
     val maxToPlace = game.piecesToPlace.totalOf(pieceType)
     val numAvail   = game.availablePieces.totalOf(pieceType)
     val desc       = pieceType.genericPlural
-    
+
     if (numAvail >= num || maxToPlace == numAvail)
       num min numAvail
     else {
-      println(s"\nThere are not enough $desc in the Available box")
-      if (askYorN(s"Would you like to voluntarily remove $desc from the map? (y/n) ")) {
-        val delta = num - numAvail
-        val numRemove = askInt(s"\nRemove how many $desc", 0, delta)
+      numAvail match {
+        case 0 => println(s"\nThere are no $desc in the Available box")
+        case 1 => println(s"\nThere is only 1 ${pieceType.genericSingular} in the Available box")
+        case n => println(s"\nThere are only $n $desc in the Available box")
+      }
+      val delta = num - numAvail
+      val prompt = if (delta == 1)
+        s"Would you like to voluntarily remove a ${pieceType.genericSingular} from the map? (y/n) "
+      else
+        s"Would you like to voluntarily remove $desc from the map? (y/n) "
+      if (askYorN(prompt)) {
+        val numRemove = if (delta == 1) 1
+                        else askInt(s"\nRemove how many $desc", 0, delta)
         voluntaryRemoval(numRemove, pieceType)
         numAvail + numRemove
       }

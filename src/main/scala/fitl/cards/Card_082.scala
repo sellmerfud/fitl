@@ -41,6 +41,16 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// US justifies its war: Up to 3 US or 6 ARVN out-of-play pieces to Available.
+// Or ARVN Resources and Aid each +9.
+//
+// Shaded Text
+// US public doubts war’s purpose: 3 Available US Troops out of play. Aid –9.
+//
+// Tips
+// "Pieces" can include Bases.
+
 object Card_082 extends EventCard(82, "Domino Theory",
   DualEvent,
   List(ARVN, VC, US, NVA),
@@ -50,9 +60,64 @@ object Card_082 extends EventCard(82, "Domino Theory",
           VC   -> (Performed   -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.outOfPlay.has(USPieces)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val oop = game.outOfPlay
+    val canRes = game.trackResources(ARVN) && (game.arvnResources < EdgeTrackMax || game.usAid < EdgeTrackMax)
+    if (game.isHuman(faction)) {
+      val choices = List(
+        choice(oop.has(USPieces),   "us-pieces",   "Move up to 3 Out Of Play US Pieces to Available"),
+        choice(oop.has(ARVNPieces), "arvn-pieces", "Move up to 6 Out Of Play ARVN Pieces to Available"),
+        choice(canRes,              "arvn-res",    "Add +9 ARVN resources and +9 US Aid")
+      ).flatten
+      val piecesPrompt = "\nMoving Out of Play pieces to Available"
+      if (choices.isEmpty)
+        log("The event has no effect")
+      else {
+        askMenu(choices, "\nChoose one:").head match {
+          case "us-pieces" =>
+            val num    = askInt("\nMove how many US Pieces", 0, oop.totalOf(USPieces) min 3)
+            val pieces = askPieces(oop.only(USPieces), num, prompt = Some(piecesPrompt))
+            println()
+            moveOutOfPlayToAvailable(pieces)
+
+          case "arvn-pieces" =>
+            val num    = askInt("\nMove how many ARVN Pieces", 0, oop.totalOf(ARVNPieces) min 6)
+            val pieces = askPieces(oop.only(ARVNPieces), num, prompt = Some(piecesPrompt))
+            println()
+            moveOutOfPlayToAvailable(pieces)
+
+          case _ =>
+            println()
+            increaseResources(ARVN, 9)
+            increaseUsAid(9)
+        }
+      }
+    }
+    else {
+      // US Bot
+      val pieces = Bot.selectFriendlyToPlaceOrMove(game.outOfPlay.only(USPieces), 3)
+      moveOutOfPlayToAvailable(pieces)
+    }
+  }
+
+  def shadedEffective(faction: Faction): Boolean =
+    game.outOfPlay.has(USTroops) ||
+    (game.trackResources(ARVN) && game.usAid > 0)
+
+  def executeShaded(faction: Faction): Unit = {
+    val oopTroops = game.outOfPlay.only(USTroops)
+    val pieces = if (oopTroops.isEmpty)
+      Pieces()
+    else if (game.isHuman(faction))
+      askPieces(oopTroops, 3)
+    else
+      Bot.selectEnemyRemovePlaceActivate(oopTroops, 3)
+
+    println()
+    moveAvailableToOutOfPlay(pieces)
+    log()
+    decreaseUsAid(9)
+  }
 }

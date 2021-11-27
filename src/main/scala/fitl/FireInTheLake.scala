@@ -1932,8 +1932,6 @@ object FireInTheLake {
       case other => isHuman(other)
     }
 
-    lazy val useEcon = trackResources(ARVN)
-
     // Return faction that is currently the next available or None
     def actingFaction: Option[Faction] = if (sequence.exhausted)
       None
@@ -2104,9 +2102,10 @@ object FireInTheLake {
     val agitate = if (game.isBot(VC)) " (Agitate Total)" else ""
     b += f"VC   resources : ${game.vcResources}%2d${agitate}"
     b += separator()
-    if (game.useEcon)
+    if (game.trackResources(ARVN)) {
       b += f"Econ           : ${game.econ}%2d"
-    b += f"US Aid         : ${game.usAid}%2d"
+      b += f"US Aid         : ${game.usAid}%2d"
+    }
     b += f"Patronage      : ${game.patronage}%2d"
     b += separator()
     b += f"Trail          : ${game.trail}%2d"
@@ -3651,17 +3650,17 @@ object FireInTheLake {
     }
   }
 
-  def increaseUsAid(amount: Int): Unit = if (amount > 0) {
+  def increaseUsAid(amount: Int): Unit = if (game.trackResources(ARVN) && amount > 0) {
     game = game.copy(usAid = (game.usAid + amount) min EdgeTrackMax)
     log(s"Increase US Aid by +$amount to ${game.usAid}")
   }
 
-  def decreaseUsAid(amount: Int): Unit = if (amount > 0) {
+  def decreaseUsAid(amount: Int): Unit = if (game.trackResources(ARVN) && amount > 0) {
     game = game.copy(usAid = (game.usAid - amount) max 0)
     log(s"Decrease US Aid by -$amount to ${game.usAid}")
   }
 
-  def setEconValue(amount: Int): Unit = if (game.useEcon) {
+  def setEconValue(amount: Int): Unit = if (game.trackResources(ARVN)) {
     game = game.copy(econ = amount)
     log(s"Set Econ marker to ${game.econ}")
   }

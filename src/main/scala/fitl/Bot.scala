@@ -3723,8 +3723,8 @@ object Bot {
       sp.support > Neutral &&
       sp.pieces.has(USTroops)
 
-    val locOrProvinceNoBase = (sp: Space) =>
-      sp.isLoC || (sp.isProvince && !sp.pieces.has(CoinBases))
+    def locOrProvinceNoBase(ignoreCoinBases: Boolean) = (sp: Space) =>
+      sp.isLoC || (sp.isProvince && (ignoreCoinBases || !sp.pieces.has(CoinBases)))
 
     val provinceWithCoinControlNoCoinBase = (sp: Space) =>
       sp.isProvince &&
@@ -3745,7 +3745,7 @@ object Bot {
     // AND:
     // o  Keep COIN Pieces > Enemies, first
     //    then keep COIN+VC pieces >= NVA pieces
-    def determineEligibleMovingCubes(cubeType: PieceType): MovingGroups = {
+    def determineEligibleMovingCubes(cubeType: PieceType, ignoreCoinBases: Boolean): MovingGroups = {
       val eligibleCubes = new MovingGroups()
       // Add the eligible cubes for each space
       for (sp <- game.spaces; if sp.pieces.has(cubeType)) {
@@ -3762,10 +3762,10 @@ object Bot {
 
         // If we are moving mandatory Troops out of LoCs or Provinces
         // without a base, then we don't keep any behind
-        val numToKeep = if (cubeType == ARVNTroops && locOrProvinceNoBase(sp))
+        val numToKeep = if (cubeType == ARVNTroops && locOrProvinceNoBase(ignoreCoinBases)(sp))
           0
         else {
-          val keepForSupport = if (cubeType == ARVNTroops && locOrProvinceNoBase(sp))
+          val keepForSupport = if (cubeType == ARVNTroops && locOrProvinceNoBase(ignoreCoinBases)(sp))
             0
           else if (sp.population == 2 && sp.support > Neutral && numARVNCubes > numUSTroops)
             (numUSTroops + 1 - numOtherARVN) min numCubeType
@@ -3802,10 +3802,10 @@ object Bot {
     // that function for a summary of the Trung Troop redeployment
     // instructions.
     // =========================================================================
-    private def redeployARVNTroops(troopDestinations: List[String]): Unit = {
+    private def redeployARVNTroops(troopDestinations: List[String], ignoreCoinBases: Boolean): Unit = {
       var destsUsed       = Set.empty[String]  // Dests that we moved troops to
       var destsConsidered = Set.empty[String]  // Dests that were selected but did not need troops
-      val eligibleTroops = determineEligibleMovingCubes(ARVNTroops)
+      val eligibleTroops = determineEligibleMovingCubes(ARVNTroops, ignoreCoinBases)
 
       // o  Move ARVN Troops from LoCs and Provinces without a COIN base first,
       //    then if the `mandatoryOnly` flag is not set from any spaces with
@@ -3813,7 +3813,7 @@ object Bot {
       def getTroopOrigin(mandatoryOnly: Boolean): Option[String] = {
         val candidates1 = game.spaces filter { sp =>
           !destsUsed(sp.name) &&
-          locOrProvinceNoBase(sp)  &&
+          locOrProvinceNoBase(ignoreCoinBases)(sp)  &&
           eligibleTroops(sp.name).nonEmpty
         }
 
@@ -3954,7 +3954,7 @@ object Bot {
     private def redeployARVNPolice(policeDestinations: List[String]): Unit = {
       var destsUsed       = Set.empty[String]  // Dests that we moved troops to
       var destsConsidered = Set.empty[String]  // Dests that were selected but did not need troops
-      val eligiblePolice = determineEligibleMovingCubes(ARVNPolice)
+      val eligiblePolice = determineEligibleMovingCubes(ARVNPolice, false)
 
       // o  Move Police from spaces with the most Police
       def getPoliceOrigin(): Option[String] = {
@@ -4128,22 +4128,26 @@ object Bot {
     //    both US Troops AND support.
     // 4. Get Police to equal Guerrillas on all LoCs, highest Econ first.
     // ===============================================================================
-    def redeployARVNForces(): Unit = {
+    def redeployARVNForces(troops: Boolean, police: Boolean, ignoreCoinBases: Boolean): Unit = {
       // Get the destinations up front because they should not be affected
       // by changes to control as pieces are moved.
       // Control is not adjusted until the end of the Redeploy phase.
-      val troopDestinations     = arvnRedeployTroopDestinations()
-      val policeDestinations    = arvnRedeployPoliceDestinations()
+      val troopDestinations  = arvnRedeployTroopDestinations(ignoreCoinBases)
+      val policeDestinations = arvnRedeployPoliceDestinations()
 
-      if (arvnCanRedeployTroops)
-        redeployARVNTroops(troopDestinations)
-      else
-        log("There are no ARVN Troops that can Redeploy")
+      if (troops) {
+        if (arvnCanRedeployTroops(ignoreCoinBases))
+          redeployARVNTroops(troopDestinations, ignoreCoinBases)
+        else
+          log("There are no ARVN Troops that can Redeploy")
+      }
 
-      if (arvnCanRedeployPolice)
-        redeployARVNPolice(policeDestinations)
-      else
-        log("There are no ARVN Police that can Redeploy")
+      if (police) {
+        if (arvnCanRedeployPolice)
+          redeployARVNPolice(policeDestinations)
+        else
+          log("There are no ARVN Police that can Redeploy")
+      }
     }
 
     //  Used during ARVN operations

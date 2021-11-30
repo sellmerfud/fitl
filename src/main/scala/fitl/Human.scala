@@ -138,19 +138,19 @@ object Human {
   // 
   // This should not be called with US Troops/Bases
   def numToPlace(pieceType: PieceType, num: Int): Int = {
-    val maxToPlace = game.piecesToPlace.totalOf(pieceType)
+    val numToPlace = game.piecesToPlace.totalOf(pieceType) min num
     val numAvail   = game.availablePieces.totalOf(pieceType)
     val desc       = pieceType.genericPlural
 
-    if (numAvail >= num || maxToPlace == numAvail)
-      num min numAvail
+    if (numAvail >= numToPlace)
+      numToPlace min numAvail
     else {
       numAvail match {
         case 0 => println(s"\nThere are no $desc in the Available box")
         case 1 => println(s"\nThere is only 1 ${pieceType.genericSingular} in the Available box")
         case n => println(s"\nThere are only $n $desc in the Available box")
       }
-      val delta = num - numAvail
+      val delta = numToPlace - numAvail
       val prompt = if (delta == 1)
         s"Would you like to voluntarily remove a ${pieceType.genericSingular} from the map? (y/n) "
       else
@@ -241,13 +241,13 @@ object Human {
   //  2.  Allow user to move any other Troops
   //      to either Cities without NVA control, spaces with a COIN base or Saigon.
   //  3.  Allow user to move Police to LoCs or COIN controlled spaces in South Vietnam.
-  def redeployARVNForces(): Unit = {
+  def redeployARVNForces(troops: Boolean, police: Boolean, ignoreCoinBases: Boolean): Unit = {
     // Get the destinations up front because the should not be affected
     // by changes to control as pieces are moved.
     // Control is not adjusted until the end of the Redeploy phase.
-    val troopDestinations     = arvnRedeployTroopDestinations()
+    val troopDestinations     = arvnRedeployTroopDestinations(ignoreCoinBases)
     val policeDestinations    = arvnRedeployPoliceDestinations()
-    val mandatoryTroopOrigins = arvnRedeployMandatoryTroopOrigins()
+    val mandatoryTroopOrigins = arvnRedeployMandatoryTroopOrigins(ignoreCoinBases)
 
     def numTroopsStr(name: String) = {
       val num = game.getSpace(name).pieces.totalOf(ARVNTroops)
@@ -347,24 +347,28 @@ object Human {
       }
     }
 
-    if (arvnCanRedeployTroops) {
-      doMandatoryTroopMoves(mandatoryTroopOrigins)
-      doVoluntaryTroopMoves()
+    if (troops) {
+      if (arvnCanRedeployTroops(ignoreCoinBases)) {
+        doMandatoryTroopMoves(mandatoryTroopOrigins)
+        doVoluntaryTroopMoves()
+      }
+      else
+        log("There are no ARVN Troops that can Redeploy")
     }
-    else
-      log("There are no ARVN Troops that can Redeploy")
 
-    if (arvnCanRedeployPolice)
-      doVoluntaryPoliceMoves()
-    else
-      log("There are no ARVN Police that can Redeploy")
+    if (police) {
+      if (arvnCanRedeployPolice)
+        doVoluntaryPoliceMoves()
+      else
+        log("There are no ARVN Police that can Redeploy")
+    }
   }
 
   //  Perform NVA redeployment during a Coup Round.
   //  1.  NVA may voluntarily move NVA Troops from anywhere to any space
   //      with an NVA base.
   def redeployNVATroops(): Unit = {
-    val troopDestinations = arvnRedeployTroopDestinations()
+    val troopDestinations = nvaRedeployTroopDestinations()
 
     def numTroopsStr(name: String) = {
       val num = game.getSpace(name).pieces.totalOf(NVATroops)

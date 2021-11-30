@@ -3067,10 +3067,10 @@ object FireInTheLake {
   }
 
   // Used by both Human/ARV_Bot
-  def arvnRedeployTroopDestinations(): List[String] = {
+  def arvnRedeployTroopDestinations(ignoreCoinBases: Boolean): List[String] = {
     val troopDest = (sp: Space) =>
       sp.name == Saigon        ||
-      sp.pieces.has(CoinBases) ||
+      (ignoreCoinBases == false && sp.pieces.has(CoinBases)) ||
       (sp.isCity && !sp.nvaControlled)
     spaceNames(game.spaces filter troopDest)
   }
@@ -3081,18 +3081,20 @@ object FireInTheLake {
     spaceNames(game.spaces filter policeDest)
   }
 
+
+
   // Used by both Human/ARV_Bot
   // Returns spaces with ARVN Troops that must redeploy
-  def arvnRedeployMandatoryTroopOrigins(): List[String] = {
+  def arvnRedeployMandatoryTroopOrigins(ignoreCoinBases: Boolean): List[String] = {
     val isOrigin = (sp: Space) =>
       sp.pieces.has(ARVNTroops) &&
-      (sp.isLoC || (sp.isProvince && !sp.pieces.has(CoinBases)))
+      (sp.isLoC || (sp.isProvince && (ignoreCoinBases || !sp.pieces.has(CoinBases))))
     spaceNames(game.spaces filter isOrigin)
   }
 
-  def arvnCanRedeployTroops: Boolean = {
+  def arvnCanRedeployTroops(ignoreCoinBases: Boolean): Boolean = {
     val arvnTroopsOnMap        = game.spaces exists (_.pieces.has(ARVNTroops))
-    val troopDestOutsideSaigon = arvnRedeployTroopDestinations() exists (_ != Saigon)
+    val troopDestOutsideSaigon = arvnRedeployTroopDestinations(ignoreCoinBases) exists (_ != Saigon)
     val troopsOutsideSaigon    = game.spaces exists (sp => sp.name != Saigon && sp.pieces.has(ARVNTroops))
 
     arvnTroopsOnMap &&
@@ -3149,9 +3151,9 @@ object FireInTheLake {
       log("\nARVN Redeploy")
       log(separator())
       if (game.isBot(ARVN))
-        Bot.ARVN_Bot.redeployARVNForces()
+        Bot.ARVN_Bot.redeployARVNForces(troops = true, police = true, ignoreCoinBases = false)
       else
-        Human.redeployARVNForces()
+        Human.redeployARVNForces(troops = true, police = true, ignoreCoinBases = false)
       pause()
 
       log("\nNVA Redeploy")
@@ -4688,6 +4690,7 @@ object FireInTheLake {
       val terrorName = if (fromSp.isLoC) "Sabotage markers" else "Terror markers"
       b.clear
       showMarker("Support", fromSp.support, toSp.support)
+      showMarker("Control",  fromSp.control, toSp.control)
       showMarker(terrorName, fromSp.terror, toSp.terror)
       showPieces("Pieces: ", fromSp.pieces, toSp.pieces)
 

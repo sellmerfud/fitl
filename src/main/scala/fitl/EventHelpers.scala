@@ -285,8 +285,11 @@ object EventHelpers {
         spaceNames(game.spaces filter canTakeBase)
 
       if (candidates.nonEmpty) {
-        println(s"\nNumber of $desc placed: ${numToPlace - numRemaining} of ${numToPlace}")
-        val name      = askCandidate(s"Place $desc in which space: ", candidates)
+        println(s"\nPlacing pieces from AVAILABLE")
+        println(separator())
+        println(s"Selecting among: $desc")
+        println(s"Number placed  : ${numToPlace - numRemaining} of ${numToPlace}")
+        val name      = askCandidate(s"\nPlace pieces in which space: ", candidates)
         val sp        = game.getSpace(name)
         val placeBase = bases.nonEmpty && canTakeBase(sp) &&
                         askYorN(s"Do you wish to place a base in $name? (y/n) ")
@@ -363,8 +366,12 @@ object EventHelpers {
         spaceNames(game.spaces filter canTakeBase)
 
       if (candidates.nonEmpty) {
-        println(s"\nNumber of $desc placed: ${actualNum - numRemaining} of ${actualNum}")
-        val name      = askCandidate(s"Place $desc in which space: ", candidates)
+        println(s"\nPlacing pieces from OUT OF PLAY")
+        println(separator())
+        println(s"Selecting among: $desc")
+        println(s"Number placed  : ${numToPlace - numRemaining} of ${numToPlace}")
+
+        val name      = askCandidate(s"\nPlace pieces in which space: ", candidates)
         val sp        = game.getSpace(name)
         val placeBase = bases.nonEmpty && canTakeBase(sp) &&
                         askYorN(s"Do you wish to place a base in $name? (y/n) ")

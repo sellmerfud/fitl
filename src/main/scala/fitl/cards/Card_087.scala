@@ -173,10 +173,6 @@ object Card_087 extends EventCard(87, "Nguyen Chanh Thi",
             askYorN("\nThere are no VC pieces in the Available box, do you wish to continue? (y/n) ")
           }
           val candidates = spaceNames(shadedSpaces filter shadedCandidate)
-          val pieceChoices = List(
-            VCGuerrillas_U -> "VC Guerrilla",
-            VCBase         -> "VC Base"
-          )
           if (candidates.nonEmpty && haveReplacement) {
             val name        = askSimpleMenu(candidates, "\nReplace ARVN piece in which space:").head
             val sp          = game.getSpace(name)
@@ -186,7 +182,7 @@ object Card_087 extends EventCard(87, "Nguyen Chanh Thi",
             val vcType     = if (ignoreBases)
               VCGuerrillas_U
             else
-              askMenu(pieceChoices, s"\nReplace $desc with what:").head
+              askPieceType(s"\nReplace $desc with what:", List(VCGuerrillas_U, VCBase))
             if (!game.availablePieces.has(vcType))
               voluntaryRemoval(1, vcType)
 

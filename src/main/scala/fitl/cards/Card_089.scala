@@ -41,6 +41,16 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Catholic backlash: Shift Saigon 1 level toward Passive Support.
+// Patronage +6.
+//
+// Shaded Text
+// Saigon Buddhists find leader: Place a VC piece in and shift Saigon 1 level
+// toward Passive Opposition. Patronage –6.
+//
+// Tip. A Base is a "piece".
+
 object Card_089 extends EventCard(89, "Tam Chau",
   DualEvent,
   List(ARVN, VC, NVA, US),
@@ -50,9 +60,43 @@ object Card_089 extends EventCard(89, "Tam Chau",
           VC   -> (Critical    -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.patronage < EdgeTrackMax
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val saigon_support = game.getSpace(Saigon).support
+
+    loggingControlChanges {
+      if (saigon_support < PassiveSupport)
+        increaseSupport(Saigon, 1)
+      else if (saigon_support > PassiveSupport)
+        decreaseSupport(Saigon, 1)
+      increasePatronage(6)
+    }
+  }
+
+  def shadedEffective(faction: Faction): Boolean = game.getSpace(Saigon).support > PassiveOpposition
+
+  def executeShaded(faction: Faction): Unit = {
+    val sp = game.getSpace(Saigon)
+    val saigon_support = sp.support
+    val piece = if (game.isHuman(faction)) {
+      val pieceType = if (sp.totalBases == 2)
+        VCGuerrillas_U
+      else
+        askPieceType(s"\nChoose piece to place in Saigon:", List(VCGuerrillas_U, VCBase))
+      val num = Human.numToPlace(pieceType, 1)  // Check for voluntary removal
+      Pieces().set(num, pieceType)
+    }
+    else
+      Bot.selectFriendlyToPlaceOrMove(game.availablePieces.only(VCPieces), 1)
+
+    loggingControlChanges {
+      placePieces(Saigon, piece)
+      if (saigon_support < PassiveOpposition)
+        increaseSupport(Saigon, 1)
+      else if (saigon_support > PassiveOpposition)
+        decreaseSupport(Saigon, 1)
+      decreasePatronage(6)
+    }
+  }
 }

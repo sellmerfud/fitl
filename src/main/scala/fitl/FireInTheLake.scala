@@ -2340,6 +2340,7 @@ object FireInTheLake {
   case object ExitGame    extends Exception
   case object AbortAction extends Exception
   case object Rollback    extends Exception
+  case object Adjustment  extends Exception
 
   def main(args: Array[String]): Unit = {
     try {
@@ -3443,7 +3444,7 @@ object FireInTheLake {
         case Nil   => None
         case f::fs =>
           pivotBot foreach { bot => println(s"\n$bot Bot plans to play its pivotal event") }
-          if (askYorN(s"Does $f wish to play their Pivotal Event? (y/n) "))
+          if (askYorN(s"\nDoes $f wish to play their Pivotal Event? (y/n) "))
             Some(f)
           else
             askHumanPivot(fs, pivotBot)
@@ -3531,6 +3532,11 @@ object FireInTheLake {
           println(separator(char = '='))
           displayGameStateDifferences(game, savedState)
           game = savedState
+
+        // After an adjustment we comback to the main loop
+        // so we can check to see if a pivotal event should
+        // now be played.
+        case Adjustment =>
       }
     }
     catch {
@@ -3753,7 +3759,7 @@ object FireInTheLake {
     loggingPointsChanges {
       val sp = game.getSpace(name)
       if (sp.canHaveSupport) {
-        val newValue = sp.support.value + num min ActiveSupport.value
+        val newValue = (sp.support.value + num) min ActiveSupport.value
         val updated = sp.copy(support = SupportType(newValue))
         game = game.updateSpace(updated)
         logSupportChange(sp, updated)
@@ -4183,6 +4189,14 @@ object FireInTheLake {
       sum + num
     }
   }
+
+  def askPieceType(prompt: String, pieceTypes: TraversableOnce[PieceType], generic: Boolean = true): PieceType = {
+    val choices = if (generic) pieceTypes map (t => t -> t.genericSingular)
+                  else         pieceTypes map (t => t -> t.singular)
+
+      askMenu(choices.toList, prompt).head
+    }
+
 
   // Ask the user to select a number of pieces.
   // The type of pieces allowed for selection may be limited by passing a list of those
@@ -5223,6 +5237,12 @@ object FireInTheLake {
       case "bot log"      => adjustBotDebug()
       case name           => adjustSpace(name)
     }
+
+    // We throw an Adjustment exception to return to 
+    // the mainLoop().
+    // This allows us to check if the adjustment allows a
+    // faction to play their pivotal event.
+    throw Adjustment
   }
 
 

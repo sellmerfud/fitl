@@ -64,7 +64,7 @@ object Card_085 extends EventCard(85, "USAID",
 
   val unshadedCandidate = (sp: Space) =>
     sp.coinControlled &&
-    sp.population > 0 &&
+    sp.canHaveSupport &&
     sp.support < ActiveSupport
 
   def unshadedEffective(faction: Faction): Boolean = game.nonLocSpaces exists unshadedCandidate

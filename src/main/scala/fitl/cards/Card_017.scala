@@ -89,8 +89,8 @@ object Card_017 extends EventCard(17, "Claymores",
         (askPieces(pieces.only(CoinBases), 1, prompt = Some("Remove which base")),
         askPieces(pieces.only(UndergroundGuerrillas), 1, prompt = Some("Remove which guerrilla")))
       else
-        (Bot.selectEnemyRemovePlaceActivate(pieces.only(CoinBases), 1),
-          Bot.selectEnemyRemovePlaceActivate(pieces.only(UndergroundGuerrillas), 1))
+        (Bot.selectEnemyRemoveReplaceActivate(pieces.only(CoinBases), 1),
+          Bot.selectEnemyRemoveReplaceActivate(pieces.only(UndergroundGuerrillas), 1))
       removePieces(name, base + guerrilla)
     }
   }

@@ -122,7 +122,7 @@ object Card_030 extends EventCard(30, "USS New Jersey",
     sp.isProvince &&
     sp.coastal    &&
     sp.pieces.has(USTroops) &&
-    sp.population > 0 &&
+    sp.canHaveSupport &&
     sp.support != ActiveOpposition
     
   def shadedEffective(faction: Faction): Boolean =

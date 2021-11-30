@@ -90,7 +90,7 @@ object Card_054 extends EventCard(54, "Son Tay",
       val pieces = if (game.isHuman(faction))
         askPieces(game.casualties, 2, prompt = Some("Select causualties to move Out of Play"))
       else
-        Bot.selectEnemyRemovePlaceActivate(game.casualties, 2)
+        Bot.selectEnemyRemoveReplaceActivate(game.casualties, 2)
 
       moveCasualtiesToOutOfPlay(pieces)
     }

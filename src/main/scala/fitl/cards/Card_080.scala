@@ -62,7 +62,7 @@ object Card_080 extends EventCard(80, "Light at the End of the Tunnel",
 
 
   val shiftCandidate = (sp: Space) =>
-    sp.population > 0 &&
+    sp.canHaveSupport &&
     sp.support > ActiveOpposition
 
   def unshadedEffective(faction: Faction): Boolean = {

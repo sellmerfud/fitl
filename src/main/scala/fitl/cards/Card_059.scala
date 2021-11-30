@@ -90,7 +90,7 @@ object Card_059 extends EventCard(59, "Plei Mei",
     else {  // Bots
       val priorities = List(new Bot.HighestScore[Space]("Most NVA pieces", _.pieces.totalOf(NVAPieces)))
       val sp = Bot.pickSpaceRemoveReplace(faction)(Bot.narrowCandidates(candidates, priorities))
-      val toRemove = Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(NVAPieces), 3)
+      val toRemove = Bot.selectEnemyRemoveReplaceActivate(sp.pieces.only(NVAPieces), 3)
       removePieces(sp.name, toRemove)
     }
   }

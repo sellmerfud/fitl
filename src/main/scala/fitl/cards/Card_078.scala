@@ -62,7 +62,7 @@ object Card_078 extends EventCard(78, "General Lansdale",
 
   val unshadedCandidate = (sp: Space) =>
     sp.name != Saigon &&
-    sp.population > 0 &&
+    sp.canHaveSupport &&
     sp.pieces.has(CoinPieces)
     
 

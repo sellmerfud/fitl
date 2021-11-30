@@ -113,7 +113,7 @@ object Card_082 extends EventCard(82, "Domino Theory",
     else if (game.isHuman(faction))
       askPieces(oopTroops, 3)
     else
-      Bot.selectEnemyRemovePlaceActivate(oopTroops, 3)
+      Bot.selectEnemyRemoveReplaceActivate(oopTroops, 3)
 
     println()
     moveAvailableToOutOfPlay(pieces)

@@ -116,7 +116,7 @@ object Card_068 extends EventCard(68, "Green Berets",
       val removedFrom = removePiecesFromMap(faction, 3, Irregulars, false, spaceNames(game.spaces), usToAvailable = true)
       val candidates = spaces(removedFrom) filter { sp =>
         sp.isProvince &&
-        sp.population > 0 &&
+        sp.canHaveSupport &&
         sp.support != ActiveOpposition
       }
   

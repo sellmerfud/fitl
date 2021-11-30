@@ -104,7 +104,7 @@ object Card_066 extends EventCard(66, "Ambassador Taylor",
 
   def shadedCandidate = (sp: Space) =>
     sp.name != Saigon &&
-    sp.population > 0 &&
+    sp.canHaveSupport &&
     sp.support > Neutral
 
   def shadedEffective(faction: Faction): Boolean =

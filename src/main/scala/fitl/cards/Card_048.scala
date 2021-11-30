@@ -91,7 +91,7 @@ object Card_048 extends EventCard(48, "Nam Dong",
         askPieces(sp.pieces.only(Guerrillas), num)
       }
       else
-        Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(Guerrillas), maxNum)
+        Bot.selectEnemyRemoveReplaceActivate(sp.pieces.only(Guerrillas), maxNum)
 
       log()
       loggingControlChanges {
@@ -122,7 +122,7 @@ object Card_048 extends EventCard(48, "Nam Dong",
       }
       else {
         val sp = VC_Bot.pickSpaceTowardActiveOpposition(candidates)
-        val base = Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(CoinBases), 1)
+        val base = Bot.selectEnemyRemoveReplaceActivate(sp.pieces.only(CoinBases), 1)
         (sp.name, base)
       }
 

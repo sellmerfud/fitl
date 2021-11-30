@@ -198,7 +198,7 @@ object Bot {
       //  If a space has both NVA and VC underground guerrillas
       //  then ask user to pick the ones to activate.
       val activations = for ((sp, num) <- numbers) {
-        val guerrillas = selectEnemyRemovePlaceActivate(sp.pieces.only(UndergroundGuerrillas), num)
+        val guerrillas = selectEnemyRemoveReplaceActivate(sp.pieces.only(UndergroundGuerrillas), num)
         revealPieces(sp.name, guerrillas)
       }
     }
@@ -465,7 +465,7 @@ object Bot {
             coinPieces.only(CoinForces)
           else
             coinPieces
-          val deadPieces = selectEnemyRemovePlaceActivate(targetPieces, num)
+          val deadPieces = selectEnemyRemoveReplaceActivate(targetPieces, num)
 
           if (!params.event && ambushSpaces.isEmpty)
             logSAChoice(faction, Ambush, notes)
@@ -564,7 +564,7 @@ object Bot {
       // Abrams unshaded
       if (remaining > 0 && baseFirst) {
         log(s"\nRemove a base first [$Abrams_Unshaded]")
-        val removed = selectEnemyRemovePlaceActivate(pieces.only(baseTargets), 1)
+        val removed = selectEnemyRemoveReplaceActivate(pieces.only(baseTargets), 1)
         removeToAvailable(name, removed)
         killedPieces = killedPieces + removed
       }
@@ -575,7 +575,7 @@ object Bot {
       // those hits.
       val killedUnderground = if (underground) {
         log(s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]")
-        val removed = selectEnemyRemovePlaceActivate(pieces.only(validEnemy(UndergroundGuerrillas)), 1)
+        val removed = selectEnemyRemoveReplaceActivate(pieces.only(validEnemy(UndergroundGuerrillas)), 1)
         removeToAvailable(name, removed)
         if (remaining > 0) {
           killedPieces = killedPieces + removed  // Counts against total hits
@@ -1134,6 +1134,10 @@ object Bot {
     Pieces.fromTypes((beforeArvnCubes:::arvnCubes:::afterArvnCubes).take(num))
   }
 
+  // When placing enemy pieces for an event.
+  def selectEnemyPlacement(pieces: Pieces, num: Int): Pieces = 
+    selectFriendlyRemoval(pieces: Pieces, num: Int)
+
   def humanPiecesFirst(list: List[PieceType]): List[PieceType] = {
     val human = list filter (t => game.isHuman(owner(t)))
     val bot   = list filter (t => game.isBot(owner(t)))
@@ -1143,7 +1147,7 @@ object Bot {
 
   //  After creating this list of pieces, split the list into (Human, Bot) owned
   //  the concatenate those lists so that all of the Human owned pieces are removed first.
-  def selectEnemyRemovePlaceActivate(pieces: Pieces, num: Int): Pieces = {
+  def selectEnemyRemoveReplaceActivate(pieces: Pieces, num: Int): Pieces = {
     // ARVN Police/Troops must be taken alternately.
     val beforeArvnCubes = pieces.explode(List(NVATunnel, VCTunnel, USBase, ARVNBase, NVABase, VCBase, USTroops, NVATroops))
     val arvnCubes       = alternate(pieces.explode(ARVNPolice::Nil), pieces.explode(ARVNTroops::Nil))
@@ -1156,9 +1160,9 @@ object Bot {
     val coinBases  = pieces.only(CoinBases)
     val coinForces = pieces.only(CoinForces)
     val numForces  = num min coinForces.total
-    val deadForces = selectEnemyRemovePlaceActivate(coinForces, numForces)
+    val deadForces = selectEnemyRemoveReplaceActivate(coinForces, numForces)
     val numBases   = ((num - deadForces.total) max 0) min coinBases.total
-    val deadBases  = selectEnemyRemovePlaceActivate(coinBases, numBases)
+    val deadBases  = selectEnemyRemoveReplaceActivate(coinBases, numBases)
 
     (deadForces + deadBases)
   }
@@ -1180,7 +1184,7 @@ object Bot {
     def removeForces(types: TraversableOnce[PieceType]): Unit = if (numRemaining > 0) {
       val candidates = pieces.only(types)
       val num = numRemaining min candidates.total
-      deadPieces = deadPieces + selectEnemyRemovePlaceActivate(candidates, num)
+      deadPieces = deadPieces + selectEnemyRemoveReplaceActivate(candidates, num)
     }
 
     removeForces(NVATroops::Nil)
@@ -1190,17 +1194,17 @@ object Bot {
     if (!pieces.has(UndergroundGuerrillas)) {
       if (numRemaining > 0 && insurgentBases.nonEmpty) {
         val numBases = numRemaining min insurgentBases.total
-        deadPieces = deadPieces + selectEnemyRemovePlaceActivate(insurgentBases, num)
+        deadPieces = deadPieces + selectEnemyRemoveReplaceActivate(insurgentBases, num)
       }
 
       if (numRemaining > 0 && !vulnerableTunnels && insurgentTunnels.nonEmpty)
-        affectedTunnel = selectEnemyRemovePlaceActivate(insurgentTunnels, 1)
+        affectedTunnel = selectEnemyRemoveReplaceActivate(insurgentTunnels, 1)
     }
 
     (deadPieces, affectedTunnel)
   }
   // Function to make code clearer to read
-  // just an alias for selectEnemyRemovePlaceActivate()
+  // just an alias for selectEnemyRemoveReplaceActivate()
   def selectFriendlyToPlaceOrMove(pieces: Pieces, num: Int): Pieces = {
         // ARVN Police/Troops must be taken alternately.
     val beforeArvnCubes = pieces.explode(List(NVATunnel, VCTunnel, USBase, ARVNBase, NVABase, VCBase, USTroops, NVATroops))
@@ -3308,8 +3312,8 @@ object Bot {
         val forceType    = if (sp.pieces.has(Rangers_U)) Rangers_U else Irregulars_U
         val specialForce = Pieces().set(1, forceType)
         revealPieces(sp.name, specialForce)
-        val deadForces = selectEnemyRemovePlaceActivate(sp.pieces.only(InsurgentForces), 2)
-        val deadBases  = selectEnemyRemovePlaceActivate(sp.pieces.only(InsurgentNonTunnels), (2 - deadForces.total) max 0)
+        val deadForces = selectEnemyRemoveReplaceActivate(sp.pieces.only(InsurgentForces), 2)
+        val deadBases  = selectEnemyRemoveReplaceActivate(sp.pieces.only(InsurgentNonTunnels), (2 - deadForces.total) max 0)
         removeToAvailable(sp.name, deadForces + deadBases)
       }
 
@@ -3592,7 +3596,7 @@ object Bot {
                     new BooleanPriority[Space]("NVA Guerrillas", _.pieces.has(NVAGuerrillas))
                   )
                   val sp = pickSpaceRemoveReplace(narrowCandidates(sa2Candidates, priorities))
-                  val toRemove = selectEnemyRemovePlaceActivate(sp.pieces.only(CanRemove), 1)
+                  val toRemove = selectEnemyRemoveReplaceActivate(sp.pieces.only(CanRemove), 1)
                   removeToAvailable(sp.name, toRemove)
                 }
               }
@@ -4895,8 +4899,8 @@ object Bot {
           val basesPresent  = sp.pieces.only(InsurgentNonTunnels)
           val numForces     = 2 min forcesPresent.total
           val numBases      = (2 - numForces) min basesPresent.total
-          val deadForces    = selectEnemyRemovePlaceActivate(forcesPresent, numForces)
-          val deadBases     = selectEnemyRemovePlaceActivate(basesPresent, numBases)
+          val deadForces    = selectEnemyRemoveReplaceActivate(forcesPresent, numForces)
+          val deadBases     = selectEnemyRemoveReplaceActivate(basesPresent, numBases)
           val uRanger       = Pieces(rangers_U = 1)
 
           if (!params.event && raidSpaces.isEmpty)
@@ -5743,7 +5747,7 @@ object Bot {
           // First try to replace a VC base if requested
           if (replaceVCBase && game.availablePieces.has(NVABase) && baseCandidates.nonEmpty) {
             val sp      = pickSpaceRemoveReplace(baseCandidates)
-            val vcPiece = selectEnemyRemovePlaceActivate(sp.pieces.only(VCBases), 1)
+            val vcPiece = selectEnemyRemoveReplaceActivate(sp.pieces.only(VCBases), 1)
             val nvaType = getInsurgentCounterPart(vcPiece.explode().head)
 
             if (!params.event)
@@ -5813,7 +5817,7 @@ object Bot {
           if (candidates.nonEmpty && numBombarded < maxBombard) {
             val sp       = pickSpaceRemoveReplace(candidates)
             val troops   = sp.pieces.only(CoinTroops)
-            val toRemove = selectEnemyRemovePlaceActivate(troops, troops.total min 1)
+            val toRemove = selectEnemyRemoveReplaceActivate(troops, troops.total min 1)
 
             if (!params.event && numBombarded == 0)
               logSAChoice(NVA, Bombard, notes)
@@ -6437,7 +6441,7 @@ object Bot {
         if (candidates.nonEmpty && numSubverted < maxSubvert) {
           val sp       = pickSpaceRemoveReplace(candidates)
           val cubes    = sp.pieces.only(ARVNCubes)
-          val toRemove = selectEnemyRemovePlaceActivate(cubes, cubes.total min 2)
+          val toRemove = selectEnemyRemoveReplaceActivate(cubes, cubes.total min 2)
 
           if (!params.event && numSubverted == 0)
             logSAChoice(VC, Subvert)

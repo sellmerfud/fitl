@@ -427,6 +427,39 @@ object FireInTheLake {
   def isOutsideSouth(name: String)   = OutsideSouth contains name
   def isInSouthVietnam(name: String) = !isOutsideSouth(name)
 
+  // Shortest distance between spaces
+  def distanceBetween(origin: String, target: String): Int = {
+    def measure(current: String, visited: Set[String]): Option[Int] = {
+      if (current == target)
+        Some(0)
+      else {
+        (getAdjacent(current) filterNot visited) match {
+          case x if x.isEmpty => None
+          case adjacents => 
+            val paths = adjacents.toList.map(a => measure(a, visited ++ adjacents)).flatten.sorted
+            paths match {
+              case Nil    => None
+              case x :: _ => Some(1 + x)
+            }
+        }
+      }
+    }
+    measure(origin, Set.empty).get
+  }
+
+  def spacesWithin(numSpaces: Int, origin: String): Set[String] = {
+
+    def adjacentSpaces(spacesLeft: Int, visited: Set[String]): Set[String] = {
+      if (spacesLeft > 0) {
+        val newVisited = visited.foldLeft(visited) { (v, name) => v ++ getAdjacent(name) }
+        adjacentSpaces(spacesLeft - 1, newVisited)
+      }
+      else
+        visited
+    }
+    adjacentSpaces(numSpaces, Set(origin))
+  }
+
   // Returns the list of spaces with or adjacent to
   // the given space that satisfy the given test.
   def withOrAdjacent(name: String)(test: (Space) => Boolean): List[Space] = {
@@ -1173,22 +1206,21 @@ object FireInTheLake {
                   else if (!isLoC && nvaControlled)  NvaControl
                   else                               Uncontrolled
 
-    def supportValue: Int = if (isLoC)
-      0
-    else
+    // Can have support/opposition
+    def canHaveSupport = !isLoC && population > 0
+
+    def supportValue: Int = 
       support match {
-        case PassiveSupport => population
-        case ActiveSupport  => 2 * population
-        case _              => 0
+        case PassiveSupport if canHaveSupport => population
+        case ActiveSupport  if canHaveSupport => 2 * population
+        case _                                => 0
       }
 
-    def oppositionValue: Int = if (isLoC)
-      0
-    else
+    def oppositionValue: Int =
       support match {
-        case PassiveOpposition => population
-        case ActiveOpposition  => 2 * population
-        case _                 => 0
+        case PassiveOpposition if canHaveSupport => population
+        case ActiveOpposition  if canHaveSupport => 2 * population
+        case _                                   => 0
       }
 
     def coinControlValue: Int = if (!isLoC && coinControlled) population else 0
@@ -3709,7 +3741,7 @@ object FireInTheLake {
   def setSupport(name: String, newSupport: SupportType): Unit = {
     loggingPointsChanges {
       val sp = game.getSpace(name)
-      if (!sp.isLoC && sp.population > 0 && sp.support != newSupport) {
+      if (sp.canHaveSupport && sp.support != newSupport) {
         val updated = sp.copy(support = newSupport)
         game = game.updateSpace(updated)
         logSupportChange(sp, updated)
@@ -3720,7 +3752,7 @@ object FireInTheLake {
   def increaseSupport(name: String, num: Int): Unit = if (num > 0) {
     loggingPointsChanges {
       val sp = game.getSpace(name)
-      if (!sp.isLoC && sp.population > 0) {
+      if (sp.canHaveSupport) {
         val newValue = sp.support.value + num min ActiveSupport.value
         val updated = sp.copy(support = SupportType(newValue))
         game = game.updateSpace(updated)
@@ -3732,7 +3764,7 @@ object FireInTheLake {
   def decreaseSupport(name: String, num: Int): Unit = if (num > 0) {
     loggingPointsChanges {
       val sp = game.getSpace(name)
-      if (!sp.isLoC && sp.population > 0) {
+      if (sp.canHaveSupport) {
         val newValue = (sp.support.value - num) max ActiveOpposition.value
         val updated = sp.copy(support = SupportType(newValue))
 
@@ -4123,7 +4155,7 @@ object FireInTheLake {
       else {
         val candidates = spaces(movedCubes.toList map (_._1))
         val sp         = Bot.NVA_Bot.pickSpaceRemoveReplace(candidates)
-        val toRemove   = Bot.selectEnemyRemovePlaceActivate(movedCubes(sp.name), 2)
+        val toRemove   = Bot.selectEnemyRemoveReplaceActivate(movedCubes(sp.name), 2)
         (sp.name, toRemove)
       }
       removePieces(name, toRemove, Some(s"NVA removes two cubes that moved [$M48Patton_Shaded]"))
@@ -4289,10 +4321,6 @@ object FireInTheLake {
       Pieces()
     }
     else {
-      // availTypes match {
-      //   case pieceType::Nil => println(s"\nPlace up to ${amountOf(maxPieces, pieceType.singular)} in $spaceName")
-      //   case _              => println(s"\nPlace up to ${amountOf(maxPieces, "piece")} in $spaceName (${andList(availTypes)})")
-      // }
 
       def nextType(placed: Pieces, remainingTypes: List[PieceType]): Pieces = {
         val maxRemaining = maxPieces - placed.total

@@ -122,7 +122,7 @@ object Card_021 extends EventCard(21, "Americal", DualEvent,
 
   val isAmericalShadedSpace = (sp: Space) =>
     sp.isProvince &&
-    sp.population > 0 &&
+    sp.canHaveSupport &&
     sp.pieces.has(USTroops) &&
     sp.pieces.has(VCBase::VCGuerrillas)  // Not Tunneled bases
 

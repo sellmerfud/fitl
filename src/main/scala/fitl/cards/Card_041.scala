@@ -63,7 +63,7 @@ object Card_041 extends EventCard(41, "Bombing Pause",
 
   def executeUnshaded(faction: Faction): Unit = {
     val candidates = game.nonLocSpaces filter { sp =>
-      sp.population > 0 && sp.support != PassiveSupport
+      sp.canHaveSupport && sp.support != PassiveSupport
     }
 
     val supportSpaces = if (candidates.isEmpty)

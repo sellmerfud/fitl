@@ -144,7 +144,7 @@ object EventHelpers {
         val toRemove = if (friendly)
           Bot.selectFriendlyRemoval(pieces, 1)
         else
-          Bot.selectEnemyRemovePlaceActivate(pieces, 1)
+          Bot.selectEnemyRemoveReplaceActivate(pieces, 1)
 
         if (usToAvailable)
           removeToAvailable(sp.name, toRemove)
@@ -234,7 +234,7 @@ object EventHelpers {
         val toRemove = if (friendly)
           Bot.selectFriendlyRemoval(pieces, 1)
         else
-          Bot.selectEnemyRemovePlaceActivate(pieces, 1)
+          Bot.selectEnemyRemoveReplaceActivate(pieces, 1)
         removeToOutOfPlay(sp.name, toRemove)
         spacesUsed += sp.name
         nextBotRemoval(numRemaining - 1)

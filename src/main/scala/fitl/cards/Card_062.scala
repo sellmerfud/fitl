@@ -219,7 +219,7 @@ object Card_062 extends EventCard(62, "Cambodian Civil War",
       else {
         def removeNextBase(numRemaining: Int): Unit = if (numRemaining > 0 && baseCandidates.nonEmpty) {
           val sp = Bot.pickSpaceRemoveReplace(faction)(baseCandidates)
-          val base = Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(InsurgentNonTunnels), 1)
+          val base = Bot.selectEnemyRemoveReplaceActivate(sp.pieces.only(InsurgentNonTunnels), 1)
           removePieces(sp.name, base)
           removeNextBase(numRemaining - 1)
         }

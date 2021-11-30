@@ -60,7 +60,7 @@ object Card_083 extends EventCard(83, "Election",
           VC   -> (Critical    -> Shaded))) {
 
   val unshadedCandidate = (sp: Space) =>
-    sp.population > 0 &&
+    sp.canHaveSupport &&
     sp.support == PassiveSupport
 
   def unshadedEffective(faction: Faction): Boolean = game.nonLocSpaces exists unshadedCandidate

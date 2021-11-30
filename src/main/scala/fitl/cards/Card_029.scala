@@ -83,7 +83,7 @@ object Card_029 extends EventCard(29, "Tribesmen",
   }
   
   val highlandCandidate = (sp: Space) =>
-    sp.population > 0 && sp.isHighland && sp.support == Neutral
+    sp.canHaveSupport && sp.isHighland && sp.support == Neutral
 
   def shadedEffective(faction: Faction): Boolean = {
     game.patronage > 0 ||
@@ -121,7 +121,7 @@ object Card_029 extends EventCard(29, "Tribesmen",
       val candidates = game.spaces filter (_.pieces.has(Irregulars))
       if (candidates.nonEmpty && game.availablePieces.has(VCGuerrillas_U)) {
         val sp = VC_Bot.pickSpaceRemoveReplace(candidates)
-        val irreg = Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(Irregulars), 1)
+        val irreg = Bot.selectEnemyRemoveReplaceActivate(sp.pieces.only(Irregulars), 1)
         removeToAvailable(sp.name, irreg)
         placePieces(sp.name, Pieces(vcGuerrillas_U = 1))
         botNextIrreg()

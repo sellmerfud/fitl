@@ -103,7 +103,7 @@ object Card_081 extends EventCard(81, "CIDG",
   def botReplacements(faction: Faction, numRemaining: Int): Unit = if (numRemaining > 0) {
     val candidates   = game.spaces filter (_.pieces.has(VCGuerrillas))
     val sp           = Bot.pickSpaceRemoveReplace(faction)(candidates)
-    val guerrilla    = Bot.selectEnemyRemovePlaceActivate(sp.pieces.only(VCGuerrillas), 1)
+    val guerrilla    = Bot.selectEnemyRemoveReplaceActivate(sp.pieces.only(VCGuerrillas), 1)
     val avail        = game.availablePieces.only(CoinTypes)
     val replacement  = Bot.selectFriendlyToPlaceOrMove(avail, 1)
 

@@ -41,6 +41,19 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Dissident becomes RVN minister: Shift Saigon 1 level toward
+// Active Support. Patronage +5.
+//
+// Shaded Text
+// Oppositionist Assemblyman: Shift Saigon 1 level toward Neutral. Patronage –5.
+// ARVN Ineligible through next card.
+//
+// Tips
+// Adjust the US victory marker (Support + Available) when changing Support and
+// the ARVN victory marker (COIN Control + Patronage) when increasing or decreasing
+// Patronage.
+
 object Card_088 extends EventCard(88, "Phan Quang Dan",
   DualEvent,
   List(ARVN, VC, NVA, US),
@@ -50,9 +63,32 @@ object Card_088 extends EventCard(88, "Phan Quang Dan",
           VC   -> (Performed -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = faction match {
+    case US => game.getSpace(Saigon).support != ActiveSupport
+    case _  => game.patronage < EdgeTrackMax
+  }
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    loggingPointsChanges {
+      increaseSupport(Saigon, 1)
+      increasePatronage(5)
+    }
+  }
+
+  def shadedEffective(faction: Faction): Boolean =
+    game.getSpace(Saigon).support != Neutral ||
+    game.patronage > 0 ||
+    game.sequence.willBeEligibeNextTurn(ARVN)
+
+  def executeShaded(faction: Faction): Unit = {
+    loggingPointsChanges {
+      if (game.getSpace(Saigon).support < Neutral)
+        increaseSupport(Saigon, 1)
+      else if (game.getSpace(Saigon).support > Neutral)
+        decreaseSupport(Saigon, 1)
+      decreasePatronage(5)
+    }
+    log()
+    makeIneligibleThroughNextTurn(ARVN)
+  }
 }

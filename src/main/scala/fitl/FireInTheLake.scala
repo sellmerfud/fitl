@@ -1601,7 +1601,9 @@ object FireInTheLake {
   // special activity.
   // `onlyFrom` can be used to limit the origins for
   // the moved pieces.
-  case class EventMove(onlyFrom: Option[Set[String]]) extends MoveAction
+  case class EventMove(onlyFrom: Option[Set[String]]) extends MoveAction {
+    override def toString() = "Event Move"
+  }
 
   case object  Train   extends CoinOp("Train")
   case object  Patrol  extends CoinOp("Patrol") with MoveAction

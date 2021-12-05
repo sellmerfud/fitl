@@ -41,6 +41,15 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Hearings stoke debate: US moves 4 US pieces from map to Available.
+//
+// Shaded Text
+// War skeptic: 1 Available US Base out of play. Aid –9.
+//
+// Tips
+// A Base is a "piece".
+
 object Card_093 extends EventCard(93, "Senator Fulbright",
   DualEvent,
   List(VC, US, NVA, ARVN),
@@ -50,9 +59,61 @@ object Card_093 extends EventCard(93, "Senator Fulbright",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = false  // Bots never execute
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+
+    def humanRemoval(numRemaining: Int): Unit = if (numRemaining > 0) {
+      val candidates = spaceNames(game.spaces filter (_.pieces.has(USPieces)))
+      println(s"\nNumber of US piece removed to available: ${4 - numRemaining} of 4")
+      println(separator())
+      val name     = askSimpleMenu(candidates, "\nSelect space to remove US pieces:").head
+      val usPieces = game.getSpace(name).pieces.only(USPieces)
+      val num      = askInt(s"\nRemove how many pieces from $name", 0, usPieces.total min numRemaining)
+      val pieces = askPieces(usPieces, num)
+
+      removeToAvailable(name, pieces)
+      humanRemoval(numRemaining - num)
+    }
+
+    // In the unlikely change that a Human player will select the unshaded
+    // event when the US is a Bot player.
+    def botRemoval(numRemaining: Int): Unit = {
+      val candidates = game.spaces filter (_.pieces.has(USPieces))
+      if (numRemaining > 0 && candidates.nonEmpty) {
+        val sp = Bot.pickSpaceRemoveFriendlyPieces(candidates, USPieces)
+        val piece = Bot.selectFriendlyRemoval(sp.pieces.only(USPieces), 1)
+        removeToAvailable(sp.name, piece)
+        botRemoval(numRemaining - 1)
+      }
+    }
+
+    val numOnMap   = game.totalOnMap(_.pieces.totalOf(USPieces))
+    
+    loggingControlChanges {
+      if (numOnMap == 0)
+        log("There are no US pieces on the map")
+      else if (numOnMap <= 4) {
+        for (sp <- (game.spaces filter (_.pieces.has(USPieces))))
+          removeToAvailable(sp.name, sp.pieces.only(USPieces))
+      }
+      else if (game.isHuman(US))
+        humanRemoval(4)
+      else
+        botRemoval(4)
+    }
+  }
+
+  def shadedEffective(faction: Faction): Boolean = game.availablePieces.has(USBase)
+
+  def executeShaded(faction: Faction): Unit = {
+
+    loggingPointsChanges {
+      if (game.availablePieces.has(USBase))
+        moveAvailableToOutOfPlay(Pieces(usBases = 1))
+      else
+        log("There are no available US Bases")
+      decreaseUsAid(9)
+    }
+  }
 }

@@ -491,21 +491,32 @@ object EventHelpers {
     pieces: Pieces,
     validDestinations: Set[String]): Unit = {
 
+    def canTakeBase(name: String) = game.getSpace(name).canTakeBase
+
     loggingControlChanges {
       if (game.isHuman(faction)) {
-        def nextMove(remainingPieces: Pieces): Unit = if (remainingPieces.nonEmpty) {
+        def nextMove(remainingPieces: Pieces): Unit = {
+          val baseDestinations = validDestinations filter canTakeBase
+          val canMove = remainingPieces.except(BasePieces).nonEmpty ||
+                        (remainingPieces.has(BasePieces) && baseDestinations.nonEmpty)
+          if (canMove) {
+            val dests = if (remainingPieces.except(BasePieces).nonEmpty)
+              validDestinations.toSeq.sorted(SpaceNameOrdering)
+            else
+              baseDestinations.toSeq.sorted(SpaceNameOrdering)
+            println()
+            wrap("Remaining pieces: ", remainingPieces.descriptions) foreach println
+            val destName = askCandidate("\nSelect a destination space: ", dests)
+            val num      = askInt(s"Move how many pieces to $destName", 0, remainingPieces.total)
+            val validPieces = if (canTakeBase(destName)) remainingPieces else remainingPieces.except(BasePieces)
+            val movers   = askPieces(validPieces, num)
+            movePieces(movers, originName, destName)
+            nextMove(remainingPieces - movers)
+          }
 
-          println()
-          wrap("Remaining pieces: ", remainingPieces.descriptions) foreach println
-          val destName = askCandidate("\nSelect a destination space: ", validDestinations.toSeq)
-          val num      = askInt(s"Move how many pieces to $destName", 0, remainingPieces.total)
-          val movers   = askPieces(remainingPieces, num)
-          movePieces(movers, originName, destName)
-          nextMove(remainingPieces - movers)
-        }
-
-        loggingControlChanges {
-          nextMove(pieces)
+          loggingControlChanges {
+            nextMove(pieces)
+          }
         }
       }
       else { // Bot

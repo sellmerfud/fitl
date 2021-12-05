@@ -1082,6 +1082,22 @@ object FireInTheLake {
     }
   }
 
+  // TRUE if any underground guerrillas and all active guerrillas and troops would be killed
+  // TRUE if no underground guerrillas and all active guerrillas, troops and bases would be killed
+  // FALSE if no active pieces or not all active pieces would be killed
+  def assaultKillsAllVulnerable(faction: Faction, allCubesAsUS: Boolean, vulnerableTunnels: Boolean, enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
+    val enemyPieces = (sp: Space) =>
+      enemies.foldLeft(Pieces()) { 
+        case (pieces, NVA) => pieces + sp.pieces.only(NVAPieces)
+        case (pieces, VC)  => pieces + sp.pieces.only(VCPieces)
+        case (pieces, _)   => pieces
+      }
+    val firepower  = assaultFirepower(faction, allCubesAsUS)(sp)
+
+    val vulnerable = vulnerableInsurgents(enemyPieces(sp), vulnerableTunnels).total
+    (vulnerable > 0) && (firepower >= vulnerable)
+  }
+
   def assaultEffective(faction: Faction, allCubesAsUS: Boolean, vulnerableTunnels: Boolean, enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
     val enemyPieces = (sp: Space) =>
       enemies.foldLeft(Pieces()) { 
@@ -1090,7 +1106,13 @@ object FireInTheLake {
         case (pieces, _)   => pieces
       }
     val firepower  = assaultFirepower(faction, allCubesAsUS)(sp)
-    val vulnerable = vulnerableInsurgents(enemyPieces(sp), vulnerableTunnels).total
+
+    val enemy = enemyPieces(sp)
+    val killUnderground = (capabilityInPlay(SearchAndDestroy_Unshaded) &&
+                           (faction == US || allCubesAsUS) && 
+                           enemy.has(UndergroundGuerrillas))
+    val numUnderground = if (killUnderground) 1 else 0
+    val vulnerable = vulnerableInsurgents(enemy, vulnerableTunnels).total + numUnderground
 
     (firepower min vulnerable) > 0
   }
@@ -1227,6 +1249,7 @@ object FireInTheLake {
     def nvaControlValue: Int  = if (!isLoC && nvaControlled)  population else 0
 
     def totalBases = pieces.totalOf(BasePieces)
+    def canTakeBase = !isLoC && totalBases < 2
     def addPieces(newPieces: Pieces): Space = copy(pieces = pieces + newPieces)
     def removePieces(removedPieces: Pieces): Space = copy(pieces = pieces - removedPieces)
     def setPieces(newPieces: Pieces): Space = copy(pieces = newPieces)

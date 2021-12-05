@@ -62,6 +62,7 @@ object FireInTheLake {
   val TrailMax     = 4
 
   val TerrorMarkerManifest = 15
+  val TunnelMarkerManifest = 6
 
   val USPolicy_JFK   = "JFK"
   val USPolicy_LBJ   = "LBJ"
@@ -2046,6 +2047,7 @@ object FireInTheLake {
     def nvaBasesOnMap               = totalOnMap(_.pieces.totalNVABases)
     def vcBasesOnMap                = totalOnMap(_.pieces.totalVCBases)
     def terrorMarkersAvailable      = TerrorMarkerManifest - totalOnMap(_.terror)
+    def tunnelMarkersAvailable      = TunnelMarkerManifest - totalOnMap(_.pieces.totalOf(InsurgentTunnels))
     def totalLOCEcon                = 15 - totalOnMap(_.currentEconValue)
 
     def usPoints   = totalSupport + availablelUSTroopsAndBases
@@ -4140,6 +4142,7 @@ object FireInTheLake {
   def addTunnelMarker(spaceName: String, bases: Pieces): Unit = {
     val sp = game.getSpace(spaceName)
     val onlyBases = bases.explode() forall InsurgentNonTunnels.contains
+    assert(game.tunnelMarkersAvailable > 0, "addTunnelMarker() called but no tunnel markers available")
     assert(onlyBases, s"addTunnelMarker() called with non insurgent bases")
     assert(sp.pieces.contains(bases), s"addTunnelMarker() $spaceName does not contain $bases")
 

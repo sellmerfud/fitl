@@ -120,18 +120,24 @@ object Card_036 extends EventCard(36, "Hamburger Hill",
     }
   }
 
-  def shadedEffective(faction: Faction): Boolean = game.nonLocSpaces exists hasHighlandUntunneledVCBase
+  def shadedEffective(faction: Faction): Boolean =
+    (game.nonLocSpaces exists hasHighlandUntunneledVCBase) &&
+    game.tunnelMarkersAvailable > 0
 
   def executeShaded(faction: Faction): Unit = {
     
     val (name, base) = if (game.isHuman(faction)) {
       val candidates = spaceNames(game.nonLocSpaces filter hasHighlandUntunneledBase)
       if (candidates.nonEmpty) {
-        val name = askCandidate("Place a Tunnel on a NVA or VC base in which space: ", candidates)
-        val bases = game.getSpace(name).pieces.only(InsurgentNonTunnels)
-        val base = askPieces(bases, 1, prompt = Some("Select base to receive tunnel marker"))
-        println()
-        (name, base)
+        val name = askCandidate("Select a Highland space with an Insurgent base: ", candidates)
+        if (game.tunnelMarkersAvailable > 0) {
+          val bases = game.getSpace(name).pieces.only(InsurgentNonTunnels)
+          val base = askPieces(bases, 1, prompt = Some("Select base to receive tunnel marker"))
+          println()
+          (name, base)
+        }
+        else
+          (name, Pieces())
       }
       else {
         log("There are no untunneled Highland bases")
@@ -141,14 +147,22 @@ object Card_036 extends EventCard(36, "Hamburger Hill",
     else {
       val candidates = game.nonLocSpaces filter hasHighlandUntunneledVCBase
       val sp = VC_Bot.pickSpacePlaceBases(candidates)
-      (sp.name, Pieces(vcBases = 1))
+      if (game.tunnelMarkersAvailable > 0)
+        (sp.name, Pieces(vcBases = 1))
+      else
+        (sp.name, Pieces())
     }
 
     if (name != "") {
       val sp = game.getSpace(name)
       val numTroops = sp.pieces.totalOf(USTroops) min 3
 
-      addTunnelMarker(name, base) 
+      println()
+      if (base.isEmpty)
+        log("There are no Tunnel markers available")
+      else
+        addTunnelMarker(name, base) 
+
       if (numTroops > 0)
         removeToCasualties(name, Pieces(usTroops = numTroops))
     }

@@ -127,7 +127,7 @@ object Card_062 extends EventCard(62, "Cambodian Civil War",
 
   def botSweepInPlace(faction: Faction, candidates: List[Space]): Unit = {
     for (sp <- candidates)
-      activateGuerrillasForSweep(sp.name, faction, false)
+      sweepInPlace(sp.name, faction)
   }
 
   def executeUnshaded(faction: Faction): Unit = {

@@ -91,14 +91,8 @@ object Card_092 extends EventCard(92, "SEALORDS",
     }
 
     askOp(actor, name) match {
-      case SweepOp =>
-        log()
-        log(s"$actor Sweeps in $name")
-        log(separator())
-        activateGuerrillasForSweep(name, actor, allCubesAsUS = false, logHeading = false)
-
-      case _ =>
-        Human.performAssault(actor, name, Params(event = true, free = true))
+      case SweepOp => sweepInPlace(name, actor)
+      case _       => Human.performAssault(actor, name, Params(event = true, free = true))
     }
   }
 
@@ -115,12 +109,8 @@ object Card_092 extends EventCard(92, "SEALORDS",
 
     if (willAssault(actor, name))
       Bot.performAssault(actor, name, Params(event = true, free = true))
-    else {
-      log()
-      log(s"$actor Sweeps in $name")
-      log(separator())
-      activateGuerrillasForSweep(name, actor, allCubesAsUS = false, logHeading = false)
-    }
+    else
+      sweepInPlace(name, actor)
   }
 
   def unshadedEffective(faction: Faction): Boolean =

@@ -650,6 +650,14 @@ object FireInTheLake {
     }
   }
 
+  // Used by events
+  def sweepInPlace(name: String, faction: Faction, allCubesAsUS: Boolean = false): Unit = {
+    log()
+    log(s"$faction Sweeps in $name")
+    log(separator())
+    activateGuerrillasForSweep(name, faction, allCubesAsUS = allCubesAsUS, logHeading = false)
+  }
+
   // During a sweep operation, if Shaded Booby Traps is in effect
   // VC removes one sweeping troop on a d6 roll of 1-3
   def checkShadedBoobyTraps(name: String, faction: Faction): Unit = {
@@ -1117,6 +1125,7 @@ object FireInTheLake {
 
     (firepower min vulnerable) > 0
   }
+
 
   // Used during a turn to keep track of pieces that have already moved
   // in each space.

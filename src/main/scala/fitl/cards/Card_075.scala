@@ -102,7 +102,7 @@ object Card_075 extends EventCard(75, "Sihanouk",
       }
       else {
         for (sp <- sweepCandidates)
-          activateGuerrillasForSweep(sp.name, coinFaction, allCubesAsUS = false)
+          sweepInPlace(sp.name, coinFaction)
       }
 
       // If for some reason (other event) the faction has cubes in Cambodia

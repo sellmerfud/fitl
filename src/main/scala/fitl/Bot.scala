@@ -364,6 +364,21 @@ object Bot {
     bestCandidate(candidates, priorities)
   }
 
+  def pickSpaceWithMostVulnerableInsurgents(candidates: List[Space]) = {
+    val priorities = List(new Bot.HighestScore[Space](
+      s"Most vulnerable Insurgents",
+      sp => vulnerableInsurgents(sp.pieces, vulnerableTunnels = false).total
+    ))
+    bestCandidate(candidates, priorities)
+  }
+
+  def pickSpaceWithMostSweepActivations(faction: Faction)(candidates: List[Space]) = {
+    val priorities = List(
+      new HighestScore[Space](s"$faction Activates most guerrillas", _.sweepActivations(faction))
+    )
+    bestCandidate(candidates, priorities)
+  }
+
   def pickSpaceWithMostSupport(candidates: List[Space]) = {
     val priorities = List(new Bot.HighestScore[Space]("Most support", _.supportValue))
     bestCandidate(candidates, priorities)
@@ -2118,12 +2133,12 @@ object Bot {
   // If no pieces can be found to move to the destination then an empty
   // Pieces instance is returned.
   def movePiecesFromOneOrigin(originName: String,
-                 destName: String,
-                 faction: Faction,
-                 action: MoveAction,
-                 moveTypes: Set[PieceType],
-                 maxPieces: Int,
-                 params: Params): Pieces = {
+                              destName: String,
+                              faction: Faction,
+                              action: MoveAction,
+                              moveTypes: Set[PieceType],
+                              maxPieces: Int,
+                              params: Params): Pieces = {
 
     // First we determine which pieces to keep in the origin space
     val toKeep = selectPiecesToKeep(originName, destName, faction, action, moveTypes, params)
@@ -3334,10 +3349,6 @@ object Bot {
         sp.support > Neutral &&
         sp.sweepActivations(ARVN) > 0
 
-      val arvnSweepPriorities = List(
-        new HighestScore[Space]("Activate most guerrillas", _.sweepActivations(ARVN))
-      )
-
       val canRemoveEnemies = (sp: Space) =>
         hasUndergroundForces(sp) &&
         sp.pieces.has(InsurgentForces:::InsurgentNonTunnels)
@@ -3364,7 +3375,7 @@ object Bot {
       def doArvnSweeps(): Unit = if (params.event || !game.inMonsoon) {
         val candidates = game.nonLocSpaces filter canArvnSweep
         if (canAdvise && candidates.nonEmpty) {
-          val sp = bestCandidate(candidates, arvnSweepPriorities)
+          val sp = pickSpaceWithMostSweepActivations(ARVN)(candidates)
 
           if (!params.event && adviseSpaces.isEmpty)
             logSAChoice(US, Advise)
@@ -3454,8 +3465,7 @@ object Bot {
             None
         }
         
-        if (!params.event)
-          logSAChoice(US, AirLift)
+        logSAChoice(US, AirLift)
         //  Since the air lift can be use during a sweep we must preserve the moveDestinations
         val savedMovedDestinations = moveDestinations
         val savedMovedPieces       = movedPieces
@@ -3542,8 +3552,7 @@ object Bot {
         var totalRemoved = 0
 
         def logSelectAirStrike(): Unit = if (hitsRemaining == maxHits) {
-          if (!params.event)
-            logSAChoice(US, AirStrike)
+          logSAChoice(US, AirStrike)
           if (params.strikeParams.maxHits.nonEmpty)
             log(s"Number of hits = $maxHits")
           else
@@ -3671,7 +3680,7 @@ object Bot {
           }
         }
 
-        // Start of Air Lift Special Activity
+        // Start of Air Strike Special Activity
         // ------------------------------------
         degradeTheTrail()
         loggingControlChanges {

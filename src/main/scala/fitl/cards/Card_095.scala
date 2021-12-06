@@ -41,6 +41,22 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Root 'em out: US free Air Lifts, then Sweeps (no moves) or Assaults
+// (no ARVN) in 2 spaces, then Air Strikes.
+//
+// Shaded Text
+// Big-unit war bypasses population: Shift 3 Provinces with no Police each
+// 2 levels toward Active Opposition.
+//
+// Tips
+// For the unshaded effect, US decides the details of the unshaded actions,
+// which follow the usual restrictions, except that the Sweep Op could occur
+// even during Monsoon, Sweep is in place only because of "no moves", and the US
+// Assault may not add and ARVN Assault (because of "no ARVN"). Air Strike can
+// include Degrading the Trail as usual (4.2.3).
+// For shaded, 0 Population Provinces cannot shift from Neutral.
+
 object Card_095 extends EventCard(95, "Westmoreland",
   DualEvent,
   List(VC, US, NVA, ARVN),
@@ -50,9 +66,133 @@ object Card_095 extends EventCard(95, "Westmoreland",
           VC   -> (Critical    -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  val canSweep = (sp: Space) =>
+    !sp.isLoC &&
+    sp.sweepActivations(US) > 0
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  val canAssault = (sp: Space) =>
+    assaultEffective(US, allCubesAsUS = false, vulnerableTunnels = false)(sp)
+
+  val canAssultOrSweep = (sp: Space) => canAssault(sp) || canSweep(sp)
+  
+  val assaultKillsAllActive = (sp: Space) =>
+      canAssault(sp) &&
+      assaultKillsAllVulnerable(US, false, false)(sp)
+
+  val botCanAssultOrSweep = (sp: Space) => assaultKillsAllActive(sp) || canSweep(sp)
+
+  def humanSweepAssault(): Unit = {
+    var spacesSelected = Set.empty[String]
+
+    def nextSpace(): Unit = {
+      val candidates = spaceNames(game.spaces filter (sp => !spacesSelected(sp.name) && canAssultOrSweep(sp)))
+
+      if (spacesSelected.size < 2 && candidates.nonEmpty) {
+        val count = spacesSelected.size + 1
+        val name = askSimpleMenu(candidates, s"\nChoose ${ordinal(count)} space to Sweep/Assault").head
+        val sp   = game.getSpace(name)
+        val choices = List(
+          choice(canAssault(sp), "assault", "Assault"),
+          choice(canSweep(sp),   "sweep",   "Sweep in place")
+        ).flatten
+        
+        askMenu(choices, s"\nChoose operation for $name").head match {
+          case "assault" => Human.performAssault(US, name, Params(event = true, free = true))
+          case _         => sweepInPlace(name, US)
+        }
+        spacesSelected += name
+        nextSpace()
+      }
+    }
+
+    nextSpace()
+  }
+
+  // Bot Instructions:
+  // In each space, Assault if it would remove all Active enemies; otherwise Sweep.
+  def botSweepAssault(): Unit = {
+    var spacesSelected = Set.empty[String]
+    def validSpaces = game.spaces filterNot (sp => spacesSelected(sp.name))
+
+    def nextAssault(): Unit = {
+      val candidates = validSpaces filter assaultKillsAllActive
+
+      if (spacesSelected.size < 2 && candidates.nonEmpty) {
+        val sp = Bot.pickSpaceWithMostVulnerableInsurgents(candidates)
+        Bot.performAssault(US, sp.name, Params(event = true, free = true))
+        spacesSelected += sp.name
+        nextAssault()
+      }
+    }
+
+    def nextSweep(): Unit = {
+      val candidates = validSpaces filter canSweep
+
+      if (spacesSelected.size < 2 && candidates.nonEmpty) {
+        val sp = Bot.pickSpaceWithMostSweepActivations(US)(candidates)
+        sweepInPlace(sp.name, US)
+        spacesSelected += sp.name
+        nextSweep()
+      }
+    }
+
+    nextAssault()
+    val numAssaulted = spacesSelected.size
+    if (numAssaulted > 0)
+      pause()
+
+    nextSweep()
+    if (spacesSelected.size > numAssaulted)
+      pause()
+  }
+
+  def unshadedEffective(faction: Faction): Boolean = game.spaces exists botCanAssultOrSweep
+
+  def executeUnshaded(faction: Faction): Unit = {
+    val human  = game.isHuman(US)
+    val params = Params(event = true, free = true)
+    if (human) {
+      Human.doAirLift(params)
+      humanSweepAssault() 
+      Human.doAirStrike(params)
+    }
+    else {
+      US_Bot.airLiftActivity(params)
+      pause()
+      botSweepAssault()
+      US_Bot.airStrikeActivity(params)
+      pause()
+    }
+  }
+
+  val shadedCandidate = (sp: Space) =>
+    sp.isProvince &&
+    sp.canHaveSupport &&
+    !sp.pieces.has(ARVNPolice) &&
+    sp.support != ActiveOpposition
+
+  def shadedEffective(faction: Faction): Boolean = game.nonLocSpaces exists shadedCandidate
+
+  def executeShaded(faction: Faction): Unit = {
+    val candidates = game.nonLocSpaces filter shadedCandidate
+    val human      = game.isHuman(faction)
+    val prompt     = "\nChoose three Provinces to shift toward Active Opposition:"
+    val provinces  = candidates.size match {
+      case 0          => Nil
+      case 1|2|3      => spaceNames(candidates)
+      case _ if human => askSimpleMenu(spaceNames(candidates), prompt, 3)
+      case _          => spaceNames(Bot.pickSpaces(3, candidates)(VC_Bot.pickSpaceTowardActiveOpposition))
+    }
+
+    println()
+    if (provinces.isEmpty)
+      log("There are no Provinces without Police that can be shifted toward Active Oppostion")
+    else
+      loggingPointsChanges {
+        for (name <- provinces; sp = game.getSpace(name)) {
+          val numLevels = (sp.support.value - ActiveOpposition.value) min 2
+          decreaseSupport(name, numLevels)
+        }
+      }
+  }
 }

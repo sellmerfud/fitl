@@ -605,27 +605,28 @@ object Human {
       nextShift(numPopShifts)
     }
   // Returns false if user decides not to pacify in space
-  def pacifySpace(name: String, faction: Faction, coupRound: Boolean): Boolean = {
+  def pacifySpace(name: String, faction: Faction, coupRound: Boolean, free: Boolean = false, maxLevels: Int = 2): Boolean = {
 
     val nguyenCaoKy = isRVNLeader(RVN_Leader_NguyenCaoKy)
     val blowtorch   = momentumInPlay(Mo_BlowtorchKomer)
     // In Coup Round The leader takes precedence over Blowtorch because it was played
     // more recently.  Otherwise the Blowtorch momentum was played more recently and take precedence.
-    val cost = if (coupRound)
+    val cost = if (free) 0
+    else if (coupRound)
         (if (nguyenCaoKy) 4 else if (blowtorch) 1 else 3)
     else
         (if (nguyenCaoKy) 4 else 3)
-    val maxLevel    = if (faction == US && capabilityInPlay(CORDS_Shaded)) PassiveSupport else ActiveSupport
+    val maxSupport  = if (faction == US && capabilityInPlay(CORDS_Shaded)) PassiveSupport else ActiveSupport
     val sp          = game.getSpace(name)
-    val maxShift    = ((maxLevel.value - sp.support.value) max 0) min 2
+    val maxShift    = ((maxSupport.value - sp.support.value) max 0) min maxLevels
     val maxInSpace  = maxShift + sp.terror
-    val maxPossible = maxInSpace min (game.arvnResources / cost)
+    val maxPossible = if (cost == 0) maxInSpace else maxInSpace min (game.arvnResources / cost)
 
     log(s"\nPacifying in $name")
     log(separator())
     if (momentumInPlay(Mo_BlowtorchKomer))
       log(s"Each terror/shift cost only 1 resource [Momentum: $Mo_BlowtorchKomer]")
-    if (maxLevel == PassiveSupport)
+    if (maxSupport == PassiveSupport)
       log(s"Cannot shift to Active Suport [$CORDS_Shaded]")
 
     if (maxPossible == 0) {
@@ -655,12 +656,12 @@ object Human {
   }
 
   // Returns false if user decides not to agitate in space
-  def agitateSpace(name: String, coupRound: Boolean): Boolean = {
+  def agitateSpace(name: String, coupRound: Boolean, free: Boolean = false, maxLevels: Int = 2): Boolean = {
     val sp          = game.getSpace(name)
-    val maxShift    = ((sp.support.value - ActiveOpposition.value) max 0) min 2
+    val maxShift    = ((sp.support.value - ActiveOpposition.value) max 0) min maxLevels
     val maxInSpace  = maxShift + sp.terror
     val cadres      = capabilityInPlay(Cadres_Unshaded)
-    val maxPossible = maxInSpace min game.arvnResources
+    val maxPossible = if (free) maxInSpace else maxInSpace min game.arvnResources
     val cadres_msg = if (coupRound) "" else s" [$Cadres_Shaded]"
 
     log(s"\nVC Agitates in ${name}$cadres_msg")
@@ -694,7 +695,8 @@ object Human {
           val toRemove = askPieces(sp.pieces, 2, VCGuerrillas, Some(s"Remove guerrillas for [$Cadres_Unshaded]"))
           removeToAvailable(name, toRemove)
         }
-        decreaseResources(VC, num)
+        if (!free)
+          decreaseResources(VC, num)
         removeTerror(name, num min sp.terror)
         decreaseSupport(name, shift)
         true

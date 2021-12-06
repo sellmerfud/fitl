@@ -283,12 +283,12 @@ object Bot {
 
   // Perform Bot pacification in the given space.
   // Returns the number of terror removed + level shifted
-  def pacifySpace(name: String, faction: Faction, coupRound: Boolean, coupPoints: Int = 0): Int = {
+  def pacifySpace(name: String, faction: Faction, coupRound: Boolean, coupPoints: Int = 0, free: Boolean = false, maxLevels: Int = 2): Int = {
     val nguyenCaoKy = isRVNLeader(RVN_Leader_NguyenCaoKy)
     val blowtorch   = momentumInPlay(Mo_BlowtorchKomer)
     // In Coup Round The leader takes precedence over Blowtorch because it was played
     // more recently.  Otherwise the Blowtorch momentum was played more recently and take precedence.
-    val useResources = game.trackResources(ARVN)
+    val useResources = game.trackResources(ARVN) && !free
     val cost = if (useResources) {
       if (coupRound) (if (nguyenCaoKy) 4 else if (blowtorch) 1 else 3)
       else           (if (nguyenCaoKy) 4 else 3)  // blowtorch only applies in coup round
@@ -296,12 +296,12 @@ object Bot {
     else 0
 
     // ARVN Bot will only pacify to Passive Support
-    val maxLevel    = if (faction == ARVN || capabilityInPlay(CORDS_Shaded))
+    val maxSupport    = if (faction == ARVN || capabilityInPlay(CORDS_Shaded))
       PassiveSupport
     else
       ActiveSupport
     val sp          = game.getSpace(name)
-    val maxShift    = ((maxLevel.value - sp.support.value) max 0) min 2
+    val maxShift    = ((maxSupport.value - sp.support.value) max 0) min maxLevels
     val maxInSpace  = maxShift + sp.terror
     val d3Limit     = if (coupRound) NO_LIMIT else d3
     val maxAfford   = (coupRound, useResources) match {
@@ -6061,7 +6061,7 @@ object Bot {
 
     // Cadres_Unshaded - VC must remove two guerrillas in the space
     // Cadres_Shaded   - Allows VC to agitate in a rally space.
-    def agitateSpace(name: String, coupRound: Boolean): Unit = {
+    def agitateSpace(name: String, coupRound: Boolean, maxLevels: Int = 2): Unit = {
       val cadres_unshaded = capabilityInPlay(Cadres_Unshaded)
       val sp = game.getSpace(name)
       val cadres_check = !cadres_unshaded || sp.pieces.totalOf(VCGuerrillas) >= 2
@@ -6071,7 +6071,7 @@ object Bot {
         log(s"\nVC Agitates in ${name}$cadres_msg")
         log(separator())
         val numTerror = sp.terror min game.agitateTotal
-        val numShift  = (sp.support.value - ActiveOpposition.value) min (game.agitateTotal - numTerror) min 2
+        val numShift  = (sp.support.value - ActiveOpposition.value) min (game.agitateTotal - numTerror) min maxLevels
         removeTerror(sp.name, numTerror)
         decreaseSupport(sp.name, numShift)
         decreaseAgitateTotal(numTerror + numShift)

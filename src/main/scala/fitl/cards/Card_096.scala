@@ -41,6 +41,21 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Accelerated Pacification Campaign: US and ARVN immediately Pacify
+// as if Support Phase, but cost is 0. Shift at most 1 level per space.
+//
+// Shaded Text
+// False progress: If Tet Offensive played, return it to VC. If not,
+// VC execute "General uprising" as on the card (without using it).
+//
+// Tips
+// For the unshaded text, the Pacification also removes Terror markers for cost 0.
+// For the shaded text, if Event #124 "Tet Offensive" has not been executed
+// (including because it is not used in this scenario), execute the "Tet Offensive"
+// Event text that follows the flavor text "General uprising".
+// The disposition of the "Tet Offensive" card is not affected.
+
 object Card_096 extends EventCard(96, "APC",
   DualEvent,
   List(VC, US, ARVN, NVA),
@@ -50,9 +65,36 @@ object Card_096 extends EventCard(96, "APC",
           VC   -> (Critical    -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = {
+    game.nonLocSpaces exists { sp =>
+      pacifyCandidate(US)(sp) ||
+      pacifyCandidate(ARVN)(sp)
+    }
+  }
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val params = SupportParams(
+    forEvent = true,
+    free     = true,
+    maxLevels = 1,
+    factions = Set(US, ARVN))
+
+    coupSupportPhase(params)
+  }
+
+  def shadedEffective(faction: Faction): Boolean = true
+
+  def executeShaded(faction: Faction): Unit = {
+
+    if (game.pivotCardsAvailable(VC)) {
+      // Tet Offensive has not been played, to execute the event
+      log("VC executes the Tet Offensive event")
+      log(separator(char = '='))
+      Card_124.executeUnshaded(VC)
+    }
+    else {
+      log("Return the Tet Offensive pivotal event card to VC")
+      game = game.copy(pivotCardsAvailable = game.pivotCardsAvailable + VC)
+    }
+  }
 }

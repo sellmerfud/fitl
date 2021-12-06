@@ -91,7 +91,7 @@ object Card_064 extends EventCard(64, "Honolulu Conference",
       decreasePatronage(5)
 
     if (isCoin(faction))
-      coupSupportPhase(forEvent = true, factions = Set(faction))
+      coupSupportPhase(SupportParams().copy(forEvent = true, factions = Set(faction)))
     else
       remainEligibleNextTurn(faction)
   }

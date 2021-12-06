@@ -2943,12 +2943,18 @@ object FireInTheLake {
   }
   else 0
 
+  case class SupportParams(
+    forEvent: Boolean      = false,
+    free: Boolean          = false,
+    maxLevels: Int         = 2,
+    factions: Set[Faction] = Set(US, ARVN, VC)
+  )
   // Support Phase of Coup Round
   // RVN_Leader_NguyenCaoKy - US/ARVN pacification costs 4 resources per Terror/Level
   // Mo_BlowtorchKomer      - Pacify costs 1 resource per step/terror, during Support phase
   // MandateOfHeaven_Shaded - ARVN Pacify is maximum 1 space (instead of 4)
   // Cadres_Unshaded        - VC to Agigate must remove 2 VC guerrillas per space (or not possible there)
-  def coupSupportPhase(forEvent: Boolean = false, factions: Set[Faction] = Set(US, ARVN, VC)): Unit = {
+  def coupSupportPhase(params: SupportParams = SupportParams()): Unit = {
     // The leader would have just been played and thus take precedence
     val nguyenCaoKy = game.trackResources(ARVN) && isRVNLeader(RVN_Leader_NguyenCaoKy)
     val blowtorch   = game.trackResources(ARVN) && momentumInPlay(Mo_BlowtorchKomer) && !nguyenCaoKy
@@ -2963,7 +2969,7 @@ object FireInTheLake {
       noteIf(cadres, "VC to Agigate must remove 2 VC guerrillas per space")
     ).flatten
 
-    val agitateCost    = 1
+    val agitateCost    = if (params.free) 0 else 1
     var botPoints      = rollDice(2)  // When both US and ARVN are Bots
     var agitateSpaces  = Set.empty[String]
     val cadresUnshaded = capabilityInPlay(Cadres_Unshaded)
@@ -2993,7 +2999,7 @@ object FireInTheLake {
             Bot.US_Bot.pickSpaceTowardActiveSupport(candidates)
           else
             Bot.ARVN_Bot.pickSpaceTowardPassiveSupport(candidates)
-          botPoints -= Bot.pacifySpace(sp.name, faction, coupRound = true, coupPoints = botPoints)
+          botPoints -= Bot.pacifySpace(sp.name, faction, coupRound = true, coupPoints = botPoints, params.free, params.maxLevels)
           recordSpace(faction, sp.name)
           pacify(faction)
         }
@@ -3007,7 +3013,7 @@ object FireInTheLake {
           askMenu(choices, "Choose space to pacify:").head match {
             case "finished" =>
             case name       =>
-              Human.pacifySpace(name, faction, coupRound = true)
+              Human.pacifySpace(name, faction, coupRound = true, params.free, params.maxLevels)
               recordSpace(faction, name)
               pacify(faction)
           }
@@ -3024,7 +3030,7 @@ object FireInTheLake {
     }
     def canAgitate =
       agitateSpaces.size < 4 &&
-      (if (game.trackResources(VC)) game.vcResources > 0 else game.agitateTotal > 0)
+      (if (game.trackResources(VC)) game.vcResources > agitateCost else game.agitateTotal > 0)
 
     def agitate(): Unit = {
       val candidates = game.nonLocSpaces filter agitateCandidate
@@ -3032,7 +3038,7 @@ object FireInTheLake {
       if (canAgitate && candidates.nonEmpty) {
         if (game.isBot(VC)) {
           val sp = Bot.VC_Bot.pickSpaceTowardActiveOpposition(candidates)
-          Bot.VC_Bot.agitateSpace(sp.name, coupRound = true)
+          Bot.VC_Bot.agitateSpace(sp.name, coupRound = true, params.maxLevels)
           agitateSpaces += sp.name
           agitate()
         }
@@ -3046,7 +3052,7 @@ object FireInTheLake {
           askMenu(choices, "Choose space to agitate:").head match {
             case "finished" =>
             case name       =>
-              Human.agitateSpace(name, coupRound = true)
+              Human.agitateSpace(name, coupRound = true, params.free, params.maxLevels)
               agitateSpaces += name
               agitate()
           }
@@ -3055,13 +3061,13 @@ object FireInTheLake {
 
     }
 
-    if (!forEvent) {
+    if (!params.forEvent) {
       log(s"\nSupport Phase")
       log(separator(char = '='))
     }
 
     loggingPointsChanges {
-      if (factions(US) || factions(ARVN)) {
+      if (params.factions(US) || params.factions(ARVN)) {
         log("\nPacification")
         log(separator())
         for (note <- pacifyNotes)
@@ -3071,23 +3077,23 @@ object FireInTheLake {
       if (!game.trackResources(ARVN))
         log(s"Rolling 2d6 to determine max pacification: $botPoints")
 
-      if (factions(US)) {
+      if (params.factions(US)) {
         pacify(US)
         if (usSpaces.isEmpty)
-          log("\nUS did not pacify any spaces")
+          log("\nUS does not pacify any spaces")
         if (game.isBot(US) || usSpaces.isEmpty)
           pause()
       }
 
-      if (factions(ARVN)) {
+      if (params.factions(ARVN)) {
         pacify(ARVN)
         if (arvnSpaces.isEmpty)
-          log("\nARVN did not pacify any spaces")
+          log("\nARVN does not pacify any spaces")
         if (game.isBot(ARVN) || arvnSpaces.isEmpty)
           pause()        
       }
 
-      if (factions(VC)) {
+      if (params.factions(VC)) {
         log("\nAgitation")
         log(separator())
         for (note <- agitateNotes)
@@ -3095,7 +3101,7 @@ object FireInTheLake {
 
         agitate()
         if (agitateSpaces.isEmpty)
-          log("\nVC did not agitate any spaces")
+          log("\nVC does not agitate any spaces")
         if (game.isBot(VC) || agitateSpaces.isEmpty)
           pause()
       }
@@ -3526,7 +3532,7 @@ object FireInTheLake {
       log(s"Replace the current event card with ${eventDeck(faction.pivotCard)}")
 
       // Replace the current card with the faction's Pivotal event
-      game = game.copy(currentCard = faction.pivotCard)
+      game = game.copy(currentCard = faction.pivotCard, pivotCardsAvailable = game.pivotCardsAvailable - faction)
     }
 
     try {

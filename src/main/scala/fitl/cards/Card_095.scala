@@ -189,10 +189,8 @@ object Card_095 extends EventCard(95, "Westmoreland",
       log("There are no Provinces without Police that can be shifted toward Active Oppostion")
     else
       loggingPointsChanges {
-        for (name <- provinces; sp = game.getSpace(name)) {
-          val numLevels = (sp.support.value - ActiveOpposition.value) min 2
-          decreaseSupport(name, numLevels)
-        }
+        for (name <- provinces)
+          decreaseSupport(name, 2)
       }
   }
 }

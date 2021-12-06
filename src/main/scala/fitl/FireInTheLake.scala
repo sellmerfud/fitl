@@ -1946,6 +1946,7 @@ object FireInTheLake {
     capabilities: List[Capability]    = Nil,
     ongoingEvents: List[String]       = Nil,  // Used to determine which capability/momentum was play most recently
     rvnLeaders: List[String]          = List(RVN_Leader_DuongVanMinh),  // Head of list is current leader
+    rvnLeaderFlipped: Boolean         = false,  // Can happen by event #97 Brinks Hotel
     trungDeck: List[TrungCard]        = Nil,  // The head of the list is the top of the deck
     momentum: List[String]            = Nil,
     sequence: SequenceOfPlay          = SequenceOfPlay(),
@@ -2193,7 +2194,8 @@ object FireInTheLake {
       b += s"US Policy      : ${game.usPolicy}"
 
     b += separator()
-    b += s"RVN Leader     : ${game.currentRvnLeader}"
+    val leaderFlip = if (game.rvnLeaderFlipped) " (flipped face down)" else ""
+    b += s"RVN Leader     : ${game.currentRvnLeader}$leaderFlip"
     if (game.cardsDrawn > 0) {
       b += s"Current card   : ${eventDeck(game.currentCard).fullString}"
       if (game.onDeckCard > 0) {
@@ -2487,6 +2489,7 @@ object FireInTheLake {
       capabilities,
       ongoingEvents,
       scenario.rvnLeadersInPlay,
+      false,
       trungDeck
     )
   }
@@ -2750,16 +2753,17 @@ object FireInTheLake {
     def placeLeader(): Unit = {
       if (game.rvnLeaders.size == 1) {
         log(s"\nPlace $coupCard in the RVN Leader Box")
-        game = game.copy(rvnLeaders = newLeader::game.rvnLeaders)
+        game = game.copy(rvnLeaders = newLeader::game.rvnLeaders, rvnLeaderFlipped = false)
       }
       else if (isFailedCoup) {
         log(s"\nPlace $coupCard beneath the other cards in the RVN Leader Box")
         // Place above RVN_Leader_DuongVanMinh which is printed on the map
-        game = game.copy(rvnLeaders = game.rvnLeaders.init:::List(newLeader, game.rvnLeaders.last))
+        val newLeaders = game.rvnLeaders.init:::List(newLeader, game.rvnLeaders.last)
+        game = game.copy(rvnLeaders = newLeaders, rvnLeaderFlipped = false)
       }
       else {
         log(s"\nPlace $coupCard in the RVN Leader Box on top of the stack")
-        game = game.copy(rvnLeaders = newLeader::game.rvnLeaders)
+        game = game.copy(rvnLeaders = newLeader::game.rvnLeaders, rvnLeaderFlipped = false)
       }
     }
 
@@ -3824,7 +3828,7 @@ object FireInTheLake {
     }
   }
 
-  def isRVNLeader(name: String) = game.currentRvnLeader == name
+  def isRVNLeader(name: String) = game.currentRvnLeader == name && !game.rvnLeaderFlipped
 
   def capabilityInPlay(cap: Capability) = game.capabilities contains cap
 
@@ -4766,6 +4770,13 @@ object FireInTheLake {
     showList("Capabilities: ", from.capabilities, to.capabilities)
     showList("Momentum: ", from.momentum, to.momentum)
     showList("RVN Leaders: ", from.rvnLeaders, to.rvnLeaders)
+    if (from.rvnLeaderFlipped != to.rvnLeaderFlipped) {
+      if (to.rvnLeaderFlipped)
+        println(s"Flip RVN Leader face down [${to.currentRvnLeader}]")
+      else
+        println(s"Flip RVN Leader face up [${to.currentRvnLeader}]")
+    }
+
 
     if (from.sequence != to.sequence) {
       b += ""

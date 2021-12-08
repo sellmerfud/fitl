@@ -41,6 +41,19 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// VC CAPABILITY
+//
+// Unshaded Text
+// Preparations tip off enemy: VC and NVA Ambush is max 1 space.
+//
+// Shaded Text
+// Mines and punji: Each Sweep space, VC afterward removes 1 Sweeping Troop
+// on roll of 1-3 (US to Casualties).
+//
+// Tips
+// "US to Casualties" means that any US pieces removed go to the Casualties box,
+// while ARVN pieces removed go to ARVN Available Forces as usual (1.4.1).
+
 object Card_101 extends EventCard(101, "Booby Traps",
   DualEvent,
   List(VC, NVA, US, ARVN),
@@ -50,9 +63,11 @@ object Card_101 extends EventCard(101, "Booby Traps",
           VC   -> (Critical  -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = playCapability(BoobyTraps_Unshaded)
+
+  def shadedEffective(faction: Faction): Boolean = true
+
+  def executeShaded(faction: Faction): Unit = playCapability(BoobyTraps_Shaded)
 }

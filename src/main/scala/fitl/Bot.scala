@@ -229,23 +229,21 @@ object Bot {
 
   // Determine if the given faction can effectively Ambush
   // from the given space
-  def canAmbushFrom(faction: Faction)(sp: Space): Boolean = {
-    val GType = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
-
-    sp.pieces.has(GType) &&
-    (sp.pieces.has(CoinPieces) ||
-     sp.isLoC && numAdjacentPieces(sp: Space, CoinPieces) > 0)
+  def canAmbushFrom(faction: Faction, needUnderground: Boolean)(sp: Space): Boolean = {
+    val GTypes = ambushGuerrillaTypes(faction, needUnderground)
+    sp.pieces.has(GTypes) &&
+    (sp.pieces.has(CoinPieces) || sp.isLoC && numAdjacentPieces(sp: Space, CoinPieces) > 0)
   }
 
   // When an ambush Special Activity follows a March Operation
   // The Bot may ambush only in spaces that were selected as
   // March destination.  And the Underground guerrilla used to
   // perform the Ambush must have marched into the space this turn.
-  def marchAmbushCandidates(faction: Faction): List[String] = {
-    val GType = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
+  def marchAmbushCandidates(faction: Faction, needUnderground: Boolean): List[String] = {
+    val GTypes = ambushGuerrillaTypes(faction, needUnderground)
     spaceNames(spaces(moveDestinations) filter { sp =>
-      movedPieces(sp.name).has(GType) &&
-      canAmbushFrom(faction)(sp)
+      movedPieces(sp.name).has(GTypes) &&
+      canAmbushFrom(faction, needUnderground)(sp)
     })
   }
 
@@ -451,7 +449,7 @@ object Bot {
     var ambushSpaces     = Set.empty[String]
     var mainForceBnsUsed = false
     val limited          = momentumInPlay(Mo_TyphoonKate) || capabilityInPlay(BoobyTraps_Unshaded)
-    val maxAmbush = params.maxSpaces getOrElse { if (limited) 1 else 2 }
+    val maxAmbush = params.ambush.maxAmbush getOrElse { if (limited) 1 else 2 }
     val notes = List(
       noteIf(momentumInPlay(Mo_TyphoonKate),s"All special activities are max 1 space [Momentum: $Mo_TyphoonKate]"),
       noteIf(capabilityInPlay(BoobyTraps_Unshaded), s"You may ambush in only one space [$BoobyTraps_Unshaded]")
@@ -466,7 +464,7 @@ object Bot {
     def nextAmbush(candidates: List[String]): Boolean = {
       // Re-verify that we can ambush in the spaces because
       // a previous ambush may have removed a target piece
-      val validSpaces = spaces(candidates) filter canAmbushFrom(faction)
+      val validSpaces = spaces(candidates) filter canAmbushFrom(faction, params.ambush.needUnderground)
 
       if (validSpaces.nonEmpty && ambushSpaces.size < maxAmbush) {
 
@@ -502,7 +500,10 @@ object Bot {
           if (faction == NVA && op == Attack && capabilityInPlay(PT76_Unshaded) && sp.pieces.has(NVATroops))
             removeToAvailable(sp.name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
 
-          revealPieces(sp.name, Pieces(vcGuerrillas_U = 1))
+          val underground = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
+          // Some events do not require an underground guerrilla
+          if (sp.pieces.has(underground))
+          revealPieces(sp.name, Pieces().set(1, underground))
           removePieces(target.name, deadPieces)
           ambushSpaces = ambushSpaces + sp.name
           nextAmbush(validSpaces map (_.name) filterNot (_ == sp.name))
@@ -536,13 +537,13 @@ object Bot {
 
   def performAssault(faction: Faction, name: String, params: Params): Unit = {
     def validEnemy(types: TraversableOnce[PieceType]): TraversableOnce[PieceType] =
-      params.assaultParams.onlyTarget match {
+      params.assault.onlyTarget match {
         case Some(f) => types filter (t => owner(t) == f)
         case None    => types
       }
 
     def validPieces(pieces: Pieces): Pieces =
-      params.assaultParams.onlyTarget match {
+      params.assault.onlyTarget match {
         case Some(NVA) => pieces.only(NVAPieces)
         case Some(VC)  => pieces.only(VCPieces)
         case _         => pieces
@@ -2032,7 +2033,7 @@ object Bot {
     val nva     = faction == NVA
     val vc      = faction == VC
     val usSweep = us && action == Sweep
-    val planBase = (vc || nva) && opParams.marchParams.amassForBase
+    val planBase = (vc || nva) && opParams.march.amassForBase
 
     def nextKeepPriority(priorities: List[MovePriority], params: MoveParams): Pieces = {
       priorities match {
@@ -2177,8 +2178,8 @@ object Bot {
       case Patrol                   => getPatrolOrigins(destName)
       case Transport                => getTransportOrigins(destName)
       case AirLift                  => Set.empty // See selectAirLiftOrigin
-      case March if faction == NVA  => NVA_Bot.getNVAAdjacent(destName) filter params.marchParams.canMarchFrom
-      case March                    => getAdjacent(destName) filter params.marchParams.canMarchFrom
+      case March if faction == NVA  => NVA_Bot.getNVAAdjacent(destName) filter params.march.canMarchFrom
+      case March                    => getAdjacent(destName) filter params.march.canMarchFrom
     }
 
     val isOrigin = (sp: Space) =>
@@ -2263,7 +2264,7 @@ object Bot {
   }
 
   def selectAirLiftOrigin(currentOrigins: Set[String], addNewOrigin: Boolean, params: Params): Option[String] = {
-    import params.airliftParams.allowedType
+    import params.airlift.allowedType
     // Can only move up to 4 ARVNTroop, Irregulars, Rangers
     val otherTypes = (ARVNTroops::Irregulars:::Rangers).toSet filter allowedType
     val usTroops  = Set(USTroops) filter allowedType
@@ -3475,7 +3476,7 @@ object Bot {
         val nextAirLiftCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
           val candidates = game.spaces filter { sp =>
             params.spaceAllowed(sp.name) &&
-            params.airliftParams.canLiftTo(sp.name) &&
+            params.airlift.canLiftTo(sp.name) &&
             !sp.isNorthVietnam &&
             !prohibited(sp.name)
           }
@@ -3550,7 +3551,7 @@ object Bot {
         val aaa_shaded = capabilityInPlay(AAA_Shaded)
         val arclight_unshaded = capabilityInPlay(ArcLight_Unshaded)
         val minTrail   = if (aaa_shaded) 2 else 1
-        val maxHits       = params.strikeParams.maxHits getOrElse d6
+        val maxHits       = params.airstrike.maxHits getOrElse d6
         var hitsRemaining = maxHits
         val wildWeasels = momentumInPlay(Mo_WildWeasels) &&
                         (!capabilityInPlay(LaserGuidedBombs_Shaded) ||
@@ -3572,14 +3573,14 @@ object Bot {
 
         def logSelectAirStrike(): Unit = if (hitsRemaining == maxHits) {
           logSAChoice(US, AirStrike)
-          if (params.strikeParams.maxHits.nonEmpty)
+          if (params.airstrike.maxHits.nonEmpty)
             log(s"Number of hits = $maxHits")
           else
             log(s"Die roll to determine the number of hits = $maxHits")
         }
         // Degrade the trail if possible
         def degradeTheTrail(): Unit = {
-          val canDegrade = params.strikeParams.canDegradeTrail &&
+          val canDegrade = params.airstrike.canDegradeTrail &&
                            !oriskany &&
                            hitsRemaining > 1 &&
                            game.trail > minTrail
@@ -3635,10 +3636,10 @@ object Bot {
         def strikeASpace(): Unit = {
           val isCandidate = (sp: Space) => {
             val canTarget = (sp.pieces.has(CoinPieces) ||
-                            params.strikeParams.noCoin ||
+                            params.airstrike.noCoin ||
                             (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
             params.spaceAllowed(sp.name)   &&
-            params.strikeParams.spaceAllowed(sp.name) &&
+            params.airstrike.spaceAllowed(sp.name) &&
             !strikeSpaces(sp.name)         &&
             sp.pieces.hasExposedInsurgents &&
             canTarget
@@ -3648,8 +3649,8 @@ object Bot {
 
           if (hitsRemaining > 0 && strikeSpaces.size < maxSpaces && totalRemoved < maxPieces && candidates.nonEmpty) {
             val sp  = pickSpaceAirStrike(candidates)
-            val num = if (params.strikeParams.maxHitsPerSpace.nonEmpty)
-                        params.strikeParams.maxHitsPerSpace.get min hitsRemaining
+            val num = if (params.airstrike.maxHitsPerSpace.nonEmpty)
+                        params.airstrike.maxHitsPerSpace.get min hitsRemaining
                  else if (laserUnshaded && sp.support != ActiveOpposition)  1
                  else if (arcLightShaded && sp.support > PassiveOpposition) 1
                  else hitsRemaining
@@ -4693,8 +4694,8 @@ object Bot {
 
         // Some events dictate assaulting only
         // in specific spaces.
-        if (params.assaultParams.specificSpaces.nonEmpty) {
-          for (name <- params.assaultParams.specificSpaces)
+        if (params.assault.specificSpaces.nonEmpty) {
+          for (name <- params.assault.specificSpaces)
             assaultIn(name)
         }
         else
@@ -5306,7 +5307,7 @@ object Bot {
       val canRallyBase = (sp: Space) =>
         !rallySpaces(sp.name)       &&
         params.spaceAllowed(sp.name) &&
-        !params.rallyParams.guerrillasOnly &&
+        !params.rally.guerrillasOnly &&
         sp.support < PassiveSupport &&
         sp.totalBases < 2           &&
         sp.pieces.totalOf(NVAGuerrillas) > 2
@@ -5461,8 +5462,8 @@ object Bot {
             None
         }
 
-        val marchers: Set[PieceType] = if (params.marchParams.onlyTypes.nonEmpty)
-          params.marchParams.onlyTypes
+        val marchers: Set[PieceType] = if (params.march.onlyTypes.nonEmpty)
+          params.march.onlyTypes
         else
           NVAForces.toSet
 
@@ -5602,7 +5603,7 @@ object Bot {
         lazy val ambushCandidates = spaceNames(game.spaces filter { sp =>
           params.spaceAllowed(sp.name) &&
           !attackSpaces(sp.name) &&
-          canAmbushFrom(NVA)(sp)
+          canAmbushFrom(NVA, params.ambush.needUnderground)(sp)
         })
         val (ambushSpaces: Set[String], canContinue) = {
           if (ambushCandidates.nonEmpty)
@@ -6111,7 +6112,7 @@ object Bot {
       val canRallyBase = (sp: Space) =>
         !rallySpaces(sp.name)       &&
         params.spaceAllowed(sp.name) &&
-        !params.rallyParams.guerrillasOnly &&
+        !params.rally.guerrillasOnly &&
         sp.support < PassiveSupport &&
         sp.totalBases < 2           &&
         sp.pieces.totalOf(VCGuerrillas) > 2
@@ -6334,7 +6335,7 @@ object Bot {
 
       if (!params.event)
         logOpChoice(VC, Attack)
-      val ambushCandidates = spaceNames(game.spaces filter canAmbushFrom(VC))
+      val ambushCandidates = spaceNames(game.spaces filter canAmbushFrom(VC, params.ambush.needUnderground))
       val (ambushSpaces: Set[String], canContinue) = if (params.addSpecialActivity && ambushCandidates.nonEmpty)
         ambushActivity(VC, ambushCandidates, Attack, actNum, params, checkFirst = false)
       else
@@ -7728,7 +7729,7 @@ object Bot {
         }
         else {
           def doSpecialActivity(): Boolean = {
-            val ambushCandidates = marchAmbushCandidates(NVA)
+            val ambushCandidates = marchAmbushCandidates(NVA, needUnderground = true)
             val canAmbush        = ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
   
             if (canAmbush)
@@ -7799,7 +7800,7 @@ object Bot {
       }
       else {
         def doSpecialActivity(op: InsurgentOp): Boolean = {
-          val ambushCandidates = marchAmbushCandidates(NVA)
+          val ambushCandidates = marchAmbushCandidates(NVA, needUnderground = true)
           val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
   
           if (canAmbush)
@@ -7939,7 +7940,7 @@ object Bot {
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
 
       def doSpecialActivity(op: InsurgentOp): Boolean = {
-        val ambushCandidates = marchAmbushCandidates(VC)
+        val ambushCandidates = marchAmbushCandidates(VC, needUnderground = true)
         val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
         val agitateRoll      = rollDice(2)
         val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
@@ -8139,7 +8140,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        val ambushCandidates = marchAmbushCandidates(VC)
+        val ambushCandidates = marchAmbushCandidates(VC, needUnderground = true)
         val canAmbush        = ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
         val canSubvert       = game.patronage >= 17
 

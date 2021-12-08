@@ -131,7 +131,7 @@ object Card_075 extends EventCard(75, "Sihanouk",
       val marchParams = Params(
         event = true,
         free  = true,
-        marchParams = MarchParams(onlyFrom = rallySpaces))
+        march = MarchParams(onlyFrom = rallySpaces))
       Human.executeMarch(faction, marchParams)
     }
   }
@@ -144,7 +144,7 @@ object Card_075 extends EventCard(75, "Sihanouk",
         event = true,
         free  = true,
         onlyIn = Some(Cambodia.toSet),
-        rallyParams = RallyParams(guerrillasOnly = faction == VC))
+        rally  = RallyParams(guerrillasOnly = faction == VC))
   
       if (faction == VC)
         VC_Bot.rallyOp(rallyParams, actNum = 2)
@@ -155,10 +155,10 @@ object Card_075 extends EventCard(75, "Sihanouk",
       if (rallySpaces.nonEmpty) {
         
         val marchParams = Params(
-          event = true,
-          free  = true,
+          event  = true,
+          free   = true,
           onlyIn = if (faction == VC) Some(SouthVietnam.toSet) else None, // Force VC guerrillas to leave Cambodia
-          marchParams = MarchParams(onlyFrom = rallySpaces,
+          march  = MarchParams(onlyFrom = rallySpaces,
                                     amassForBase = faction == NVA)) // Force VC guerrillas to leave Cambodia
         val nvaActNum = if (game.trail == TrailMax) 1 else 2
         if (faction == VC)

@@ -75,7 +75,7 @@ object Card_044 extends EventCard(44, "la Drang",
       log("There are no spaces that qualify for the event")
     else if (game.isHuman(faction)) {
       val name = askCandidate("Select a space with NVA pieces: ", spaceNames(candidates))
-      val params = Params(event = true, free = true, airliftParams = AirLiftParams(onlyTo = Set(name)))
+      val params = Params(event = true, free = true, airlift = AirLiftParams(onlyTo = Set(name)))
 
       loggingControlChanges {
         log(s"\nUS performs free Air Lift into $name")
@@ -97,7 +97,7 @@ object Card_044 extends EventCard(44, "la Drang",
     }
     else {  // Bot
       val sp = US_Bot.pickSpaceRemoveReplace(candidates)
-      val params = Params(event = true, free = true, airliftParams = AirLiftParams(onlyTo = Set(name)))
+      val params = Params(event = true, free = true, airlift = AirLiftParams(onlyTo = Set(name)))
 
       loggingControlChanges {
         log(s"US performs free Air Lift into ${sp.name}")

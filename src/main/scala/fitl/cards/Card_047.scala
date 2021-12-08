@@ -97,9 +97,9 @@ object Card_047 extends EventCard(47, "Chu Luc",
       log("There are no spaces where an ARVN Assault on NVA would be effective")
     else {
       val params = Params(
-        event = true,
-        free  = true,
-        assaultParams = AssaultParams(
+        event   = true,
+        free    = true,
+        assault = AssaultParams(
              specificSpaces = spaceNames(assaultSpaces).toSet,
              onlyTarget     = Some(NVA))
       )

@@ -769,14 +769,18 @@ object Human {
   // Carry out an ambush in the given space
   // MainForceBns_Shaded   - 1 VC Ambush space may remove 2 enemy pieces
   // PT76_Unshaded - Each NVA attack space, first remove 1 NVA troop cube (also ambush)
-  def performAmbush(name: String, faction: Faction, op: Operation, free: Boolean): Boolean = {
+  def performAmbush(name: String, faction: Faction, op: Operation, free: Boolean, needUnderground: Boolean = true): Boolean = {
     val sp = game.getSpace(name)
-    val ambusher = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
+    val ambushTypes = ambushGuerrillaTypes(faction, needUnderground)
     val candidates = ambushTargets(name)
-    assert(sp.pieces.has(ambusher), s"performAmbush(): $faction has no underground guerrilla in $name")
+    assert(sp.pieces.has(ambushTypes), s"performAmbush(): $faction has no underground guerrilla in $name")
 
     if (candidates.nonEmpty) {
-      askCandidateOrBlank("Kill target piece in which space: ", candidates) match {
+      val candidate = if (candidates.size == 1)
+        candidates.headOption
+      else
+        askCandidateOrBlank("Kill target piece in which space: ", candidates)
+      candidate match {
         case Some(targetName) =>
           val target = game.getSpace(targetName)
           val coinPieces = target.pieces.only(CoinPieces)
@@ -802,9 +806,10 @@ object Human {
             if (faction == NVA && op == Attack && capabilityInPlay(PT76_Unshaded) && sp.pieces.has(NVATroops))
               removeToAvailable(name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
 
-            // Some events allow ambush without requiring and underground guerrilla
-            if (target.pieces.has(ambusher))
-              revealPieces(name, Pieces().set(1, ambusher))
+            // Some events allow ambush without requiring an underground guerrilla
+            val underground = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
+            if (target.pieces.has(underground))
+              revealPieces(name, Pieces().set(1, underground))
             removePieces(targetName, deadPieces)
           }
           Special.selectedSpaces = Special.selectedSpaces + name
@@ -1070,13 +1075,12 @@ object Human {
   // Any US Troops plus up to 4 (Irregulars, Rangers, ARVN Troops)
   // among 4 selected spaces (2 in Monsoon, Never N. Vietnam)
   def doAirLift(params: Params): Unit = {
-    val airliftParams = params.airliftParams
     val Others: List[PieceType] = ARVNTroops::Rangers:::Irregulars
     val maxAirLiftSpaces = if (params.maxSpaces.nonEmpty)
       params.maxSpaces.get
     else if (game.inMonsoon) 2 else 4
-    var airLiftSpaces    = if (params.airliftParams.onlyTo.size == 1)
-      params.airliftParams.onlyTo.toList
+    var airLiftSpaces    = if (params.airlift.onlyTo.size == 1)
+      params.airlift.onlyTo.toList
     else
       Nil
     val liftedOthers     = new MovingGroups()  // ARVN troops, Rangers, Irregulars (max 4)
@@ -1086,8 +1090,8 @@ object Human {
     // All US Troops and Others that have moved are always included.
     // Others that have not moved only if total others < 4
     def moveablePieces(sp: Space) = {
-      val usTroopsAndLiftedOthers = airliftParams.allowedPieces(sp.pieces.only(USTroops) + liftedOthers(sp.name))
-      val unmovedOthers = airliftParams.allowedPieces(sp.pieces.only(Others) - liftedOthers(sp.name))
+      val usTroopsAndLiftedOthers = params.airlift.allowedPieces(sp.pieces.only(USTroops) + liftedOthers(sp.name))
+      val unmovedOthers = params.airlift.allowedPieces(sp.pieces.only(Others) - liftedOthers(sp.name))
 
       if (totalLiftedOthers < 4)
         usTroopsAndLiftedOthers + unmovedOthers
@@ -1101,15 +1105,15 @@ object Human {
       !airLiftSpaces.contains(sp.name)
     })
 
-    def isOnlyDest(name: String) = params.airliftParams.onlyTo.size match {
-      case 1 => params.airliftParams.onlyTo(name)
+    def isOnlyDest(name: String) = params.airlift.onlyTo.size match {
+      case 1 => params.airlift.onlyTo(name)
       case _ => false
     }
 
     def liftOutCandidates = if (airLiftSpaces.size > 1)
       airLiftSpaces.filter{ name =>
         !isOnlyDest(name) &&
-        params.airliftParams.canLiftTo(name) &&
+        params.airlift.canLiftTo(name) &&
         moveablePieces(game.getSpace(name)).nonEmpty
       }
     else
@@ -1120,7 +1124,7 @@ object Human {
     def liftForcesOutOf(srcName: String): Unit = {
       val ForceTypes = List(USTroops, Irregulars_U, Irregulars_A, ARVNTroops, Rangers_U, Rangers_A)
       val destCandidates = airLiftSpaces filter { name =>
-        name != srcName && params.airliftParams.canLiftTo(name)
+        name != srcName && params.airlift.canLiftTo(name)
       }
       val choices = (destCandidates map (name => name -> name)) :+ ("none" -> "Do not move forces now")
 
@@ -1231,7 +1235,7 @@ object Human {
     val migs_shaded = capabilityInPlay(MiGs_Shaded) && !capabilityInPlay(TopGun_Unshaded)
     val aaa_shaded = capabilityInPlay(AAA_Shaded)
     val arclight_unshaded = capabilityInPlay(ArcLight_Unshaded)
-    val maxHits     = params.strikeParams.maxHits getOrElse d6
+    val maxHits     = params.airstrike.maxHits getOrElse d6
     val maxSpaces = if      (params.maxSpaces.nonEmpty) params.maxSpaces.get
                     else if (momentumInPlay(Mo_TyphoonKate)) 1
                     else if (game.inMonsoon) 2
@@ -1243,14 +1247,14 @@ object Human {
                       (!momentumInPlay(Mo_WildWeasels) ||
                       isEventMoreRecentThan(LaserGuidedBombs_Shaded.name, Mo_WildWeasels))
     val maxPieces = if (wildWeasels) 1 else if (laserShaded) 2 else maxHits
-    var strikeSpaces = params.strikeParams.designated getOrElse Set.empty[String]
+    var strikeSpaces = params.airstrike.designated getOrElse Set.empty[String]
     // Keeps track of number of kill per space
     var spaceKills: Map[String, Int] = Map.empty.withDefaultValue(0)
     var totalRemoved = 0
     var arclight_unshaded_used = false
     def isCandidate(sp: Space) = {
       val canTarget = (sp.pieces.has(CoinPieces) ||
-                      params.strikeParams.noCoin ||
+                      params.airstrike.noCoin ||
                       (sp.isProvince && arclight_unshaded && !arclight_unshaded_used))
       params.spaceAllowed(sp.name)   &&   // Event may limit to certain spaces
       !strikeSpaces(sp.name)         &&
@@ -1258,7 +1262,7 @@ object Human {
       canTarget
     }
 
-    def isOverQuota(name: String) = params.strikeParams.maxHitsPerSpace match {
+    def isOverQuota(name: String) = params.airstrike.maxHitsPerSpace match {
       case Some(n) => spaceKills(name) >= n
       case None    => false
     }
@@ -1275,12 +1279,12 @@ object Human {
         val StrikeOpt  = "strike:(.*)".r
         val selectCandidates = spaceNames(game.spaces filter isCandidate)
         val strikeCandidates = strikeSpaces.toList filter isStrikeCandidate
-        val canSelect  = params.strikeParams.designated.isEmpty &&
+        val canSelect  = params.airstrike.designated.isEmpty &&
                          hitsRemaining > 0 &&
                          strikeSpaces.size < maxSpaces &&
                          selectCandidates.nonEmpty
         val minTrail   = if (aaa_shaded) 2 else 1
-        val canDegrade = params.strikeParams.canDegradeTrail &&
+        val canDegrade = params.airstrike.canDegradeTrail &&
                          !oriskany &&
                          !hasDegraded &&
                          game.trail > minTrail &&
@@ -1335,7 +1339,7 @@ object Human {
         def performStrike(name: String): Int = {
           val pieces       = game.getSpace(name).pieces
           val hasCoin      = pieces.has(CoinPieces)
-          val paramMax     = params.strikeParams.maxHitsPerSpace match {
+          val paramMax     = params.airstrike.maxHitsPerSpace match {
             case Some(n) =>  n - spaceKills(name)
             case None    =>  NO_LIMIT
           }
@@ -1345,7 +1349,7 @@ object Human {
           log(s"\nUS Air Strikes $name")
           log(separator())
           killExposedInsurgents(name, num, canRevealTunnel = false, params.vulnerableTunnels)
-          if (!params.strikeParams.noCoin && !hasCoin && arclight_unshaded)
+          if (!params.airstrike.noCoin && !hasCoin && arclight_unshaded)
             arclight_unshaded_used = true
 
           spaceKills += name -> (spaceKills(name) + num)
@@ -1360,13 +1364,13 @@ object Human {
 
         val choices = (topChoices:::strikeChoices) :+ ("finished" -> "Finished with Air Strike activity")
 
-        if (params.strikeParams.designated.isEmpty) {
+        if (params.airstrike.designated.isEmpty) {
           println(s"\n${amountOf(strikeSpaces.size, "space")} of $maxSpaces selected for Air Strike")
           println(separator())
           wrap("", strikeSpaces.toList, showNone = false) foreach println
         }
 
-        if (params.strikeParams.canDegradeTrail && !oriskany) {
+        if (params.airstrike.canDegradeTrail && !oriskany) {
           if (hasDegraded)
             println("\nYou have already degraded the trail")
           else
@@ -1452,7 +1456,7 @@ object Human {
     // ------------------------------------
     if (!params.event)
       logSAChoice(US, AirStrike, notes)
-    if (params.strikeParams.maxHits.nonEmpty)
+    if (params.airstrike.maxHits.nonEmpty)
       log(s"Number of hits = $maxHits")
     else
       log(s"Die roll to determine the number of hits = $maxHits")
@@ -2677,8 +2681,8 @@ object Human {
         askMenu(choices, "\nChoose one:").head match {
           case "assault" =>
             val assaultParams = Params(
-              free          = true,
-              assaultParams = AssaultParams(removeTwoExtra = pattonUshaded))
+              free    = true,
+              assault = AssaultParams(removeTwoExtra = pattonUshaded))
             val name = askSimpleMenu(candidates, "\nAssault in which LOC:").head
             performAssault(faction, name, assaultParams)
 
@@ -2911,7 +2915,7 @@ object Human {
     val remove1BaseFirst   = asUS && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
     def validEnemy(types: TraversableOnce[PieceType]): TraversableOnce[PieceType] =
-      params.assaultParams.onlyTarget match {
+      params.assault.onlyTarget match {
         case Some(f) => types filter (t => owner(t) == f)
         case None    => types
       }
@@ -2926,7 +2930,7 @@ object Human {
     val baseFirst   = remove1BaseFirst && pieces.has(baseTargets) && !pieces.has(validEnemy(UndergroundGuerrillas))
     val underground = remove1Underground && pieces.has(validEnemy(UndergroundGuerrillas))
     val totalLosses = sp.assaultFirepower(faction, params.cubeTreatment) + 
-                      (if (params.assaultParams.removeTwoExtra) 2 else 0)
+                      (if (params.assault.removeTwoExtra) 2 else 0)
     var killedPieces = Pieces()
     def remaining   = totalLosses - killedPieces.total
 
@@ -2974,7 +2978,7 @@ object Human {
       killedPieces = killedPieces + killExposedInsurgents(name, remaining,
                                          canRevealTunnel = true,
                                          params.vulnerableTunnels,
-                                         params.assaultParams.onlyTarget)
+                                         params.assault.onlyTarget)
       // Add any removed underground guerrilla that did NOT count toward remaining hits above
       killedPieces = killedPieces + killedUnderground
 
@@ -3066,7 +3070,7 @@ object Human {
                               askYorN(s"Remove 2 extra pieces in this Assault [$M48Patton_Unshaded]? (y/n) ")) {
         log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
         m48PattonSpaces = name :: m48PattonSpaces
-        params.copy(assaultParams = params.assaultParams.copy(removeTwoExtra = true))
+        params.copy(assault = params.assault.copy(removeTwoExtra = true))
       }
       else
         params
@@ -3146,8 +3150,8 @@ object Human {
 
     // Some events dictate assaulting only
     // in specific spaces.
-    if (params.assaultParams.specificSpaces.nonEmpty) {
-      for (name <- params.assaultParams.specificSpaces)
+    if (params.assault.specificSpaces.nonEmpty) {
+      for (name <- params.assault.specificSpaces)
         assaultIn(name)
     }
     else
@@ -3320,13 +3324,14 @@ object Human {
 
   // MainForceBns_Unshaded - March into LOC/Support activate on moving+COIN > 1 (vice >3)
   // Mo_Claymores - Remove 1 guerrillas in each marching groop that activates
-  def executeMarch(faction: Faction, params: Params): Unit = {
+  // Returns the set of march destinations
+  def executeMarch(faction: Faction, params: Params): Set[String] = {
     val specialActivities = if (faction == NVA)
       Infiltrate::Bombard::Ambush::Nil
     else
       Tax::Subvert::Ambush::Nil
-    val moveableTypes   = if (params.marchParams.onlyTypes.nonEmpty)
-      params.marchParams.onlyTypes
+    val moveableTypes   = if (params.march.onlyTypes.nonEmpty)
+      params.march.onlyTypes
     else if (faction == NVA)
       NVATroops::NVAGuerrillas
     else
@@ -3351,7 +3356,7 @@ object Human {
     }
 
     def getMarchSources(destName: String): List[String] = {
-      val adjacent = getAdjacent(destName) filter params.marchParams.canMarchFrom
+      val adjacent = getAdjacent(destName) filter params.march.canMarchFrom
 
       (adjacent filter (moveablePieces(_).nonEmpty)).toList.sorted(SpaceNameOrdering)
     }
@@ -3361,7 +3366,7 @@ object Human {
       if (srcCandidates.isEmpty)
         println(s"\nThere are no pieces that can reach $destName")
       else {
-        val choices = (srcCandidates map (name => name -> name)) :+ ("none" -> "Finished moving pieces")
+        val choices = (srcCandidates map (name => name -> name)) :+ ("none" -> s"Finished moving pieces to $destName")
 
         val srcName = askMenu(choices, s"\nMove pieces into $destName from:").head
         if (srcName != "none") {
@@ -3428,13 +3433,13 @@ object Human {
 
     def canSpecial = Special.allowed
 
-    val maxAmbush = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
+    val maxAmbush = params.ambush.maxAmbush getOrElse { if (momentumInPlay(Mo_TyphoonKate)) 1 else 2 }
 
     def ambushCandidates = if (Special.canAmbush && Special.selectedSpaces.size < maxAmbush) {
-      val underground = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
+      val GTypes = ambushGuerrillaTypes(faction, params.ambush.needUnderground)
       destinations.toList.sorted(SpaceNameOrdering) filter { name =>
         !(Special.selectedSpaces contains name) &&   // Can't ambush same space twice
-        movedInto(name).has(underground) &&          // Must have underground guerrillas that move into the space
+        movedInto(name).has(GTypes) &&               // Must have underground guerrillas that move into the space
         ambushTargets(name).nonEmpty                 // Must have a COIN target to kill
       }
     }
@@ -3478,7 +3483,7 @@ object Human {
 
 
         case AmbushOpt(name) =>
-          if (performAmbush(name, faction, March, free = true)) {
+          if (performAmbush(name, faction, March, free = true, params.ambush.needUnderground)) {
             // An uderground member of the the movedInto group was just flipped
             // to active.  We must update the movedInto group to reflect that.
             val (underground, active) = if (faction == NVA)
@@ -3512,6 +3517,8 @@ object Human {
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
       executeSpecialActivity(faction, params, specialActivities)
+
+    destinations
   }
 
   // PT76_Unshaded - Each NVA attack space, first remove 1 NVA troop cube (also ambush)
@@ -3527,6 +3534,8 @@ object Human {
     val maxAttacks   = params.maxSpaces getOrElse NO_LIMIT
     var attackSpaces = Set.empty[String]
     val guerrillas   = if (faction == NVA) NVAGuerrillas else VCGuerrillas
+    val ambushGs     = ambushGuerrillaTypes(faction, params.ambush.needUnderground)
+
     def canSpecial   = Special.allowed
 
     val isAttackSpace = (sp: Space) => {
@@ -3539,11 +3548,11 @@ object Human {
     val isAmbushSpace = (sp: Space) => {
       params.spaceAllowed(sp.name) &&
       !attackSpaces.contains(sp.name) &&
-      sp.pieces.has(guerrillas)       &&
+      sp.pieces.has(ambushGs)         &&
       ambushTargets(sp.name).nonEmpty
     }
 
-    val maxAmbush = if (momentumInPlay(Mo_TyphoonKate)) 1 else 2
+    val maxAmbush = params.ambush.maxAmbush getOrElse { if (momentumInPlay(Mo_TyphoonKate)) 1 else 2 }
 
     def nextAttackAction(): Unit = {
       val hasTheCash       = params.free || game.resources(faction) > 0
@@ -3573,7 +3582,7 @@ object Human {
 
         case "ambush" =>
           askCandidateOrBlank("\nAmbush which space: ", ambushCandidates) foreach { name =>
-            performAmbush(name, faction, Attack, free = params.free)
+            performAmbush(name, faction, Attack, free = params.free, params.ambush.needUnderground)
             attackSpaces = attackSpaces + name
           }
           nextAttackAction()

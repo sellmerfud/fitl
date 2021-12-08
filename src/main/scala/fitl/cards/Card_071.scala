@@ -130,10 +130,10 @@ object Card_071 extends EventCard(71, "An Loc",
       else
         Set(name)
       val params = Params(
-        event       = true,
-        free        = true,
-        onlyIn      = Some(dests),
-        marchParams = MarchParams(onlyTypes = Set(NVATroops))
+        event  = true,
+        free   = true,
+        onlyIn = Some(dests),
+        march  = MarchParams(onlyTypes = Set(NVATroops))
       )
 
       Human.executeMarch(NVA, params)

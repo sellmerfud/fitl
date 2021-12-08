@@ -134,7 +134,7 @@ object Card_059 extends EventCard(59, "Plei Mei",
     val params = Params(
       event = true,
       free  = true,
-      marchParams = MarchParams(onlyFrom = (NorthVietnam::LaosCambodia).toSet)
+      march = MarchParams(onlyFrom = (NorthVietnam::LaosCambodia).toSet)
     )
     val choices = List(
       "attack" -> "Attack any one space",

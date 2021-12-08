@@ -138,7 +138,7 @@ object Card_062 extends EventCard(62, "Cambodian Civil War",
     loggingControlChanges {
       if (game.isHuman(US)) {
         val params = Params(event = true, free  = true,
-          airliftParams = AirLiftParams(onlyTo = Cambodia.toSet))
+          airlift = AirLiftParams(onlyTo = Cambodia.toSet))
   
         Human.doAirLift(params)
       }

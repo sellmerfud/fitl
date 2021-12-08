@@ -71,10 +71,10 @@ object Card_006 extends EventCard(6, "Aces",
   def executeUnshaded(faction: Faction): Unit = {
     val validNames = NorthVietnam::LaosCambodia
     val params = Params(
-      event        = true,
-      maxSpaces    = Some(1),
-      strikeParams = AirStrikeParams(maxHits = Some(6), noCoin = true),
-      onlyIn       = Some(validNames.toSet)
+      event     = true,
+      maxSpaces = Some(1),
+      airstrike = AirStrikeParams(maxHits = Some(6), noCoin = true),
+      onlyIn    = Some(validNames.toSet)
     )
 
     loggingControlChanges {

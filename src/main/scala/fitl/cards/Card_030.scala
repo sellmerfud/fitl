@@ -81,9 +81,9 @@ object Card_030 extends EventCard(30, "USS New Jersey",
       val choices = candidates map (sp => sp.name -> sp.name)
       val names = askMenu(choices, "Select coastal spaces to air strike: ", num).toSet
       val params = Params(
-        event        = true,
-        free         = true,
-        strikeParams = AirStrikeParams(
+        event     = true,
+        free      = true,
+        airstrike = AirStrikeParams(
           canDegradeTrail = false,
           noCoin          = true,
           designated      = Some(names),
@@ -104,9 +104,9 @@ object Card_030 extends EventCard(30, "USS New Jersey",
       }
       val names = nextSpace(3, candidates).toSet
       val params = Params(
-        event        = true,
-        free         = true,
-        strikeParams = AirStrikeParams(
+        event     = true,
+        free      = true,
+        airstrike = AirStrikeParams(
           canDegradeTrail = false,
           noCoin          = true,
           designated      = Some(names),

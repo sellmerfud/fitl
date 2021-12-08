@@ -72,7 +72,7 @@ object Card_023 extends EventCard(23, "Operation Attleboro", DualEvent,
       val params = Params(event = true,
                           free  = true,
                           vulnerableTunnels = true,
-                          airliftParams = AirLiftParams(onlyTo = Set(name)))
+                          airlift = AirLiftParams(onlyTo = Set(name)))
       loggingControlChanges {
         log(s"\nUS performs free Air Lift into $name")
         log(separator(char = '='))

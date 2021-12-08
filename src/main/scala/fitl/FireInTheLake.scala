@@ -1751,6 +1751,11 @@ object FireInTheLake {
   // For some events the Bot will only rally guerrillas (not bases)
   case class RallyParams(guerrillasOnly: Boolean = false)
 
+  case class AmbushParams(
+    needUnderground: Boolean = true,
+    maxAmbush: Option[Int ]  = None
+  )
+
   // Some events treat all cubes as US Troops
   // Some event treat all troops as US Troops
   sealed trait CubeTreatment
@@ -1776,23 +1781,23 @@ object FireInTheLake {
     }
   }
 
-
   // Parameters used when executing operations and special activities
   // This is used by both the Humand and Bot objects.
   case class Params(
-    addSpecialActivity: Boolean     = false, // May add a Special Activity
-    specialActivityOnly: Boolean    = false, // Used by Bot code when executing events
-    maxSpaces: Option[Int]          = None,
-    free: Boolean                   = false, // Events grant free commands
-    onlyIn: Option[Set[String]]     = None,  // Limit command to the given spaces
-    event: Boolean                  = false,
-    strikeParams: AirStrikeParams   = AirStrikeParams(),
-    airliftParams: AirLiftParams    = AirLiftParams(),
-    assaultParams: AssaultParams    = AssaultParams(),
-    marchParams:   MarchParams      = MarchParams(),
-    rallyParams:   RallyParams      = RallyParams(),
-    vulnerableTunnels: Boolean      = false,  // Used by events assault/air strike
-    cubeTreatment: CubeTreatment     = NormalTroops 
+    addSpecialActivity: Boolean  = false, // May add a Special Activity
+    specialActivityOnly: Boolean = false, // Used by Bot code when executing events
+    maxSpaces: Option[Int]       = None,
+    free: Boolean                = false, // Events grant free commands
+    onlyIn: Option[Set[String]]  = None,  // Limit command to the given spaces
+    event: Boolean               = false,
+    airstrike: AirStrikeParams   = AirStrikeParams(),
+    airlift: AirLiftParams       = AirLiftParams(),
+    assault: AssaultParams       = AssaultParams(),
+    march:   MarchParams         = MarchParams(),
+    rally:   RallyParams         = RallyParams(),
+    ambush:  AmbushParams        = AmbushParams(),
+    vulnerableTunnels: Boolean   = false,  // Used by events assault/air strike
+    cubeTreatment: CubeTreatment = NormalTroops 
   ) {
     val limOpOnly = maxSpaces == Some(1)
 
@@ -4241,6 +4246,13 @@ object FireInTheLake {
       }
       removePieces(name, toRemove, Some(s"NVA removes two cubes that moved [$M48Patton_Shaded]"))
     }
+  }
+
+  def ambushGuerrillaTypes(faction: Faction, needUnderground: Boolean) = (faction, needUnderground) match {
+    case (NVA, true)  => Set(NVAGuerrillas_U)
+    case (NVA, false) => Set(NVAGuerrillas_U, NVAGuerrillas_A)
+    case (_,   true)  => Set(VCGuerrillas_U)
+    case (_,   false) => Set(VCGuerrillas_U, VCGuerrillas_A)
   }
 
   // Return list of spaces that have COIN pieces that can be reached

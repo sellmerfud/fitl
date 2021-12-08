@@ -636,10 +636,10 @@ object FireInTheLake {
     }
   }
 
-  // `allCubesAsUS` is used for the ROKs event (Card #70)
-  def activateGuerrillasForSweep(name: String, faction: Faction, allCubesAsUS: Boolean, logHeading: Boolean = true): Unit = {
+  // `cubeTreatment` is used by events
+  def activateGuerrillasForSweep(name: String, faction: Faction, cubeTreatment: CubeTreatment, logHeading: Boolean = true): Unit = {
     val sp = game.getSpace(name)
-    val num = sp.sweepActivations(faction)
+    val num = sp.sweepActivations(faction, cubeTreatment)
     if (num > 0) {
       if (logHeading) {
         log(s"\nActivating guerrillas in $name")
@@ -651,11 +651,11 @@ object FireInTheLake {
   }
 
   // Used by events
-  def sweepInPlace(name: String, faction: Faction, allCubesAsUS: Boolean = false): Unit = {
+  def sweepInPlace(name: String, faction: Faction, cubeTreatment: CubeTreatment): Unit = {
     log()
     log(s"$faction Sweeps in $name")
     log(separator())
-    activateGuerrillasForSweep(name, faction, allCubesAsUS = allCubesAsUS, logHeading = false)
+    activateGuerrillasForSweep(name, faction, cubeTreatment, logHeading = false)
   }
 
   // During a sweep operation, if Shaded Booby Traps is in effect
@@ -1055,8 +1055,8 @@ object FireInTheLake {
 
   //  Assault firepower of the space plus any modifiers for
   //  capabilities, momentum, etc.
-  def usFirepower(allCubesAsUS: Boolean)(sp: Space) = {
-    val firepower = sp.assaultFirepower(US, allCubesAsUS)
+  def usFirepower(cubeTreatment: CubeTreatment)(sp: Space) = {
+    val firepower = sp.assaultFirepower(US, cubeTreatment)
     // Account for unshaded Search and Destroy when there would otherwise be zero firepower
     val canSearchDestroy = capabilityInPlay(SearchAndDestroy_Unshaded) &&
                            sp.pieces.has(USTroops) &&
@@ -1067,61 +1067,63 @@ object FireInTheLake {
       firepower
   }
 
-  def arvnFirepower(allCubesAsUS: Boolean)(sp: Space) =
-    sp.assaultFirepower(ARVN, allCubesAsUS)
+  def arvnFirepower(cubeTreatment: CubeTreatment)(sp: Space) =
+    sp.assaultFirepower(ARVN, cubeTreatment)
 
   // If there are no US Troops present then COIN firepower
   // is zero.  This is because COIN firepower is used to determine
   // the number of pieces removed during a US Assault (with added ARVN asault)
   // If no US Troops are present, then there can be no US Assault.
-  def coinFirepower(allCubesAsUS: Boolean)(sp: Space) = {
-    val usPower = usFirepower(allCubesAsUS)(sp)
-    if (allCubesAsUS)
+  def coinFirepower(cubeTreatment: CubeTreatment)(sp: Space) = {
+    val usPower = usFirepower(cubeTreatment)(sp)
+    if (cubeTreatment == AllCubesAsUS || cubeTreatment == AllTroopsAsUS)
       usPower
     else if (usPower > 0)
-      usPower + arvnFirepower(false)(sp)
+      usPower + arvnFirepower(NormalTroops)(sp)
     else
       0
   }
 
-  def assaultFirepower(faction: Faction, allCubesAsUS: Boolean)(sp: Space): Int = {
+  def assaultFirepower(faction: Faction, cubeTreatment: CubeTreatment)(sp: Space): Int = {
     faction match {
-      case US => usFirepower(allCubesAsUS)(sp)
-      case _  => arvnFirepower(allCubesAsUS)(sp)
+      case US => usFirepower(cubeTreatment)(sp)
+      case _  => arvnFirepower(cubeTreatment)(sp)
     }
   }
+
+  // Only if US is doing the Assault!
+  def canUseM48PattonUnshaded(name: String): Boolean = 
+    capabilityInPlay(M48Patton_Unshaded) && !game.getSpace(name).isLowland
 
   // TRUE if any underground guerrillas and all active guerrillas and troops would be killed
   // TRUE if no underground guerrillas and all active guerrillas, troops and bases would be killed
   // FALSE if no active pieces or not all active pieces would be killed
-  def assaultKillsAllVulnerable(faction: Faction, allCubesAsUS: Boolean, vulnerableTunnels: Boolean, enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
+  def assaultKillsAllVulnerable(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean, enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
     val enemyPieces = (sp: Space) =>
       enemies.foldLeft(Pieces()) { 
         case (pieces, NVA) => pieces + sp.pieces.only(NVAPieces)
         case (pieces, VC)  => pieces + sp.pieces.only(VCPieces)
         case (pieces, _)   => pieces
       }
-    val firepower  = assaultFirepower(faction, allCubesAsUS)(sp)
+    val firepower  = assaultFirepower(faction, cubeTreatment)(sp)
 
     val vulnerable = vulnerableInsurgents(enemyPieces(sp), vulnerableTunnels).total
     (vulnerable > 0) && (firepower >= vulnerable)
   }
 
-  def assaultEffective(faction: Faction, allCubesAsUS: Boolean, vulnerableTunnels: Boolean, enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
+  def assaultEffective(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean, enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
     val enemyPieces = (sp: Space) =>
       enemies.foldLeft(Pieces()) { 
         case (pieces, NVA) => pieces + sp.pieces.only(NVAPieces)
         case (pieces, VC)  => pieces + sp.pieces.only(VCPieces)
         case (pieces, _)   => pieces
       }
-    val firepower  = assaultFirepower(faction, allCubesAsUS)(sp)
-
-    val enemy = enemyPieces(sp)
-    val killUnderground = (capabilityInPlay(SearchAndDestroy_Unshaded) &&
-                           (faction == US || allCubesAsUS) && 
-                           enemy.has(UndergroundGuerrillas))
-    val numUnderground = if (killUnderground) 1 else 0
-    val vulnerable = vulnerableInsurgents(enemy, vulnerableTunnels).total + numUnderground
+    val firepower       = assaultFirepower(faction, cubeTreatment)(sp)
+    val enemy           = enemyPieces(sp)
+    val asUSAssault     = faction == US || cubeTreatment == AllCubesAsUS || cubeTreatment == AllTroopsAsUS
+    val killUnderground = asUSAssault && capabilityInPlay(SearchAndDestroy_Unshaded) && enemy.has(UndergroundGuerrillas)
+    val numUnderground  = if (killUnderground) 1 else 0
+    val vulnerable      = vulnerableInsurgents(enemy, vulnerableTunnels).total + numUnderground
 
     (firepower min vulnerable) > 0
   }
@@ -1264,18 +1266,23 @@ object FireInTheLake {
     def removePieces(removedPieces: Pieces): Space = copy(pieces = pieces - removedPieces)
     def setPieces(newPieces: Pieces): Space = copy(pieces = newPieces)
 
-    def assaultCubes(faction: Faction): Int = faction match {
-      case US                      => pieces.totalOf(USTroops)
-      case ARVN if isCity || isLoC => pieces.totalOf(ARVNCubes)
-      case ARVN                    => pieces.totalOf(ARVNTroops)
-      case _                       => 0
+    def assaultCubes(faction: Faction, cubeTreatment: CubeTreatment): Int = {
+      cubeTreatment match {
+        case AllCubesAsUS                     => pieces.totalOf(CoinCubes)
+        case AllTroopsAsUS if isCity || isLoC => pieces.totalOf(CoinCubes)
+        case AllTroopsAsUS                    => pieces.totalOf(CoinTroops)
+        case NormalTroops =>
+          faction match {
+            case US                      => pieces.totalOf(USTroops)
+            case ARVN if isCity || isLoC => pieces.totalOf(ARVNCubes)
+            case ARVN                    => pieces.totalOf(ARVNTroops)
+            case _                       => 0
+         }
+      }
     }
 
-    def sweepForces(faction: Faction): Int = faction match {
-      case US   => pieces.totalOf(USTroops::Irregulars_U::Irregulars_A::Nil)
-      case ARVN => pieces.totalOf(ARVNTroops::ARVNPolice::Rangers_U::Rangers_A::Nil)
-      case _    => 0
-    }
+    def sweepForces(faction: Faction, cubeTreatment: CubeTreatment): Pieces =
+      pieces.only(sweepForceTypes(faction, cubeTreatment))
 
     def assaultMultiplier(faction: Faction): Double = faction match {
       case US if pieces.has(USBase) => 2.0
@@ -1286,23 +1293,17 @@ object FireInTheLake {
       case _                        => 0.0
     }
 
-    // `allCubesAsUS` is used for the ROKs event (Card #70)
-    def assaultFirepower(faction: Faction, allCubesAsUS: Boolean = false): Int = {
-      val totalCubes = if (allCubesAsUS)
-        pieces.totalOf(CoinCubes)
-      else
-        assaultCubes(faction)
-
-      val multiplier = assaultMultiplier(if (allCubesAsUS) US else faction)
+    def assaultFirepower(faction: Faction, cubeTreatment: CubeTreatment): Int = {
+      val totalCubes = assaultCubes(faction, cubeTreatment)
+      val allUS      = cubeTreatment == AllCubesAsUS || cubeTreatment == AllTroopsAsUS
+      val multiplier = assaultMultiplier(if (allUS) US else faction)
       (totalCubes * multiplier).toInt
     }
 
     // The number of underground guerrillas that would
     // be activated by the given faction
-    // `allCubesAsUS` is used for the ROKs event (Card #70)
-    def sweepActivations(faction: Faction, allCubesAsUS: Boolean = false): Int = {
-      val factions = if (allCubesAsUS) List(US, ARVN) else List(faction)
-      val numForces = factions.foldLeft(0) ((total, f) => total + sweepForces(f))
+    def sweepActivations(faction: Faction, cubeTreatment: CubeTreatment): Int = {
+      val numForces   = sweepForces(faction, cubeTreatment).total
       val numActivate = if (isJungle) numForces / 2 else numForces
 
       numActivate min pieces.totalOf(UndergroundGuerrillas)
@@ -1750,6 +1751,32 @@ object FireInTheLake {
   // For some events the Bot will only rally guerrillas (not bases)
   case class RallyParams(guerrillasOnly: Boolean = false)
 
+  // Some events treat all cubes as US Troops
+  // Some event treat all troops as US Troops
+  sealed trait CubeTreatment
+  case object AllCubesAsUS  extends CubeTreatment
+  case object AllTroopsAsUS extends CubeTreatment
+  case object NormalTroops  extends CubeTreatment
+
+  def sweepCubeTypes(faction: Faction, cubeTreatment: CubeTreatment): Set[PieceType] = {
+    cubeTreatment match {
+      case NormalTroops if faction == US => Set(USTroops)
+      case NormalTroops                  => Set(ARVNTroops)
+      case AllTroopsAsUS                 => Set(USTroops, ARVNTroops)
+      case AllCubesAsUS                  => Set(USTroops, ARVNTroops, ARVNPolice)
+    }
+  }
+  
+  def sweepForceTypes(faction: Faction, cubeTreatment: CubeTreatment): Set[PieceType] = {
+    val cubeTypes = sweepCubeTypes(faction, cubeTreatment)
+    faction match {
+        case US   => cubeTypes ++ Irregulars.toSet
+        case ARVN => cubeTypes ++ Rangers.toSet
+        case _    => Set.empty
+    }
+  }
+
+
   // Parameters used when executing operations and special activities
   // This is used by both the Humand and Bot objects.
   case class Params(
@@ -1759,14 +1786,13 @@ object FireInTheLake {
     free: Boolean                   = false, // Events grant free commands
     onlyIn: Option[Set[String]]     = None,  // Limit command to the given spaces
     event: Boolean                  = false,
-    singleTarget: Option[String]    = None,  // Airlift/Sweep into this space only (used by events)
     strikeParams: AirStrikeParams   = AirStrikeParams(),
     airliftParams: AirLiftParams    = AirLiftParams(),
     assaultParams: AssaultParams    = AssaultParams(),
     marchParams:   MarchParams      = MarchParams(),
     rallyParams:   RallyParams      = RallyParams(),
     vulnerableTunnels: Boolean      = false,  // Used by events assault/air strike
-    allCubesAsUS: Boolean           = false  // ROCk event for sweep/assault
+    cubeTreatment: CubeTreatment     = NormalTroops 
   ) {
     val limOpOnly = maxSpaces == Some(1)
 
@@ -1957,7 +1983,7 @@ object FireInTheLake {
     coupCardsPlayed: Int              = 0,    // Number of Coup cards played/ignored thus far
     gameOver: Boolean                 = false,
     peaceTalks: Boolean               = false,
-    botLogging: Boolean               = false,
+    botDebug: Boolean                 = false,
     history: Vector[GameSegment]      = Vector.empty,
     log: Vector[String]               = Vector.empty) {  // Log of the cuurent game segment
 
@@ -4665,11 +4691,27 @@ object FireInTheLake {
 
   def pauseIfBot(faction: Faction): Unit = if (game.isBot(faction)) pause()
 
-  var echoLogging = true
+  // We sometimes want to run some Bot code to 
+  // check a what-if situation.  In these cases
+  // we do not want anything to be logged to the
+  // terminal.
+
+  private var loggingSuspended = false
+
+  def suspendLogging[T](code: => T): T = {
+    if (loggingSuspended)
+      code
+    else {
+      loggingSuspended = true
+      try     code
+      finally loggingSuspended = false
+    }
+  }
+
+
   // Print the line to the console and save it in the game's history.
-  def log(line: String = "", echo: Boolean = true): Unit = {
-    if (echo && echoLogging)
-      println(line)
+  def log(line: String = "", force: Boolean = false): Unit = if (!loggingSuspended || force) {
+    println(line)
     game = game.copy(log = game.log :+ line)
   }
 
@@ -5821,9 +5863,9 @@ object FireInTheLake {
 
 
   def adjustBotDebug(): Unit = {
-    val newValue = !game.botLogging
-    val desc = adjustmentDesc("Bot Debug Logging", game.botLogging, newValue)
-    game = game.copy(botLogging = newValue)
+    val newValue = !game.botDebug
+    val desc = adjustmentDesc("Bot Debug Logging", game.botDebug, newValue)
+    game = game.copy(botDebug = newValue)
     log(desc)
     saveGameState("Bot Debug Logging")
   }

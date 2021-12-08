@@ -235,7 +235,7 @@ object SavedGame {
       "coupCardsPlayed"     -> gameState.coupCardsPlayed,
       "gameOver"            -> gameState.gameOver,
       "peaceTalks"          -> gameState.peaceTalks,
-      "botLogging"          -> gameState.botLogging,
+      "botDebug"            -> gameState.botDebug,
       "history"             -> (gameState.history map gameSegmentToMap)
     )
   }
@@ -272,7 +272,7 @@ object SavedGame {
       asInt(data("coupCardsPlayed")),
       asBoolean(data("gameOver")),
       asBoolean(data("peaceTalks")),
-      asBoolean(data("botLogging")),
+      asBoolean(data("botDebug")),
       (asList(data("history")) map (s => gameSegmentFromMap(asMap(s)))).toVector
     )
   }

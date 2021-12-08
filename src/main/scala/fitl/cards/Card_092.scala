@@ -68,10 +68,10 @@ object Card_092 extends EventCard(92, "SEALORDS",
 
   def canSweep(faction: Faction)(sp: Space) =
     !sp.isLoC &&
-    (sp.sweepActivations(faction) > 0)
+    (sp.sweepActivations(faction, NormalTroops) > 0)
 
   def canAssault(faction: Faction)(sp: Space) =
-    assaultEffective(faction, allCubesAsUS = false, vulnerableTunnels = false)(sp)
+    assaultEffective(faction, NormalTroops, vulnerableTunnels = false)(sp)
 
   def canAssultOrSweep(faction: Faction)(sp: Space) =
     canAssault(faction)(sp) || canSweep(faction)(sp)
@@ -91,7 +91,7 @@ object Card_092 extends EventCard(92, "SEALORDS",
     }
 
     askOp(actor, name) match {
-      case SweepOp => sweepInPlace(name, actor)
+      case SweepOp => sweepInPlace(name, actor, NormalTroops)
       case _       => Human.performAssault(actor, name, Params(event = true, free = true))
     }
   }
@@ -103,14 +103,15 @@ object Card_092 extends EventCard(92, "SEALORDS",
     def willAssault(actor: Faction, name: String): Boolean = {
       val sp = game.getSpace(name)
       canAssault(actor)(sp) &&
-      (!sp.pieces.has(UndergroundGuerrillas) || assaultKillsAllVulnerable(actor, false, false)(sp))
+      (!sp.pieces.has(UndergroundGuerrillas) || 
+       assaultKillsAllVulnerable(actor, NormalTroops, vulnerableTunnels = false)(sp))
 
     }
 
     if (willAssault(actor, name))
       Bot.performAssault(actor, name, Params(event = true, free = true))
     else
-      sweepInPlace(name, actor)
+      sweepInPlace(name, actor, NormalTroops)
   }
 
   def unshadedEffective(faction: Faction): Boolean =

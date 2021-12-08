@@ -75,7 +75,7 @@ object Card_070 extends EventCard(70, "ROKs",
     val params = Params(
       event        = true,
       free         = true,
-      allCubesAsUS = true,
+      cubeTreatment = AllCubesAsUS,
       onlyIn = Some(sweepDestinations)
     )
 
@@ -96,7 +96,7 @@ object Card_070 extends EventCard(70, "ROKs",
         for {
           name <- unshadedNames
           sp   =  game.getSpace(name)
-               if assaultEffective(actor, allCubesAsUS = true, vulnerableTunnels = false)(sp)
+               if assaultEffective(actor, AllCubesAsUS, vulnerableTunnels = false)(sp)
         } {
           Human.performAssault(actor, name, params)
           pause()
@@ -110,7 +110,7 @@ object Card_070 extends EventCard(70, "ROKs",
         for {
           name <- unshadedNames
           sp   =  game.getSpace(name)
-               if assaultEffective(actor, allCubesAsUS = true, vulnerableTunnels = false)(sp)
+               if assaultEffective(actor, AllCubesAsUS, vulnerableTunnels = false)(sp)
         } {
           Bot.performAssault(actor, name, params)
           pause()

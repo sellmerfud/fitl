@@ -64,9 +64,10 @@ object Card_075 extends EventCard(75, "Sihanouk",
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
-  def canSweep(faction: Faction)(sp: Space) = sp.sweepActivations(faction) > 0
+  def canSweep(faction: Faction)(sp: Space) = sp.sweepActivations(faction, NormalTroops) > 0
 
-  def canAssault(faction: Faction)(sp: Space) = assaultEffective(faction, false, false)(sp)
+  def canAssault(faction: Faction)(sp: Space) = 
+    assaultEffective(faction, NormalTroops, vulnerableTunnels = false)(sp)
 
 
   // The move priorities for US/ARVN state to keep all cubes
@@ -102,7 +103,7 @@ object Card_075 extends EventCard(75, "Sihanouk",
       }
       else {
         for (sp <- sweepCandidates)
-          sweepInPlace(sp.name, coinFaction)
+          sweepInPlace(sp.name, coinFaction, NormalTroops)
       }
 
       // If for some reason (other event) the faction has cubes in Cambodia

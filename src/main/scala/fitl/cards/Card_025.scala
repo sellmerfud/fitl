@@ -100,14 +100,14 @@ object Card_025 extends EventCard(25, "TF-116 Riverines",
           askMenu(choices, "\nSelect next space to Sweep/Assault:").head match {
             case "finished" =>
             case name =>
-              val params = Params(event = true, free = true, singleTarget = Some(name))
+              val params = Params(event = true, free = true, onlyIn = Some(Set(name)))
               Human.initTurnVariables(false)
               Human.executeSweep(assaulter, params)
               Human.initTurnVariables(false)
               Human.performAssault(assaulter, name, params)
               val addArvnAssault =
                 assaulter == US &&
-                assaultEffective(ARVN, false, false)(game.getSpace(name)) &&
+                assaultEffective(ARVN, NormalTroops, vulnerableTunnels = false)(game.getSpace(name)) &&
                 askYorN(s"\nAdd a free ARVN assault in $name? (y/n) ")
               if (addArvnAssault) {
                 Human.initTurnVariables(false)
@@ -127,7 +127,7 @@ object Card_025 extends EventCard(25, "TF-116 Riverines",
         log("\nSweep/Assault each Lowland Province touch Mekong")
         log(separator())
         for (name <- LowlandTouchingMekong if game.getSpace(name).pieces.has(InsurgentPieces)) {
-          val params = Params(event = true, free = true, singleTarget = Some(name))
+          val params = Params(event = true, free = true, onlyIn = Some(Set(name)))
           Bot.initTurnVariables()  // Treat each space as a fresh turn
           ARVN_Bot.sweepOp(params, 3)
           Bot.initTurnVariables()  // Treat each space as a fresh turn

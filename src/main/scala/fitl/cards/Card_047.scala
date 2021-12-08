@@ -69,7 +69,7 @@ object Card_047 extends EventCard(47, "Chu Luc",
   val doubleCandidate = (sp: Space) =>
     sp.pieces.has(NVAPieces) && sp.pieces.has(ARVNPieces)
 
-  val nvaAssaultEffective = assaultEffective(ARVN, false, false, Set(NVA)) _
+  val nvaAssaultEffective = assaultEffective(ARVN, NormalTroops, vulnerableTunnels = false, Set(NVA)) _
 
   def unshadedEffective(faction: Faction): Boolean =
     (game.availablePieces.has(ARVNTroops) && (game.spaces exists doubleCandidate)) ||

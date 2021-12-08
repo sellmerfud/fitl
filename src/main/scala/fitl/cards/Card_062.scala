@@ -127,7 +127,7 @@ object Card_062 extends EventCard(62, "Cambodian Civil War",
 
   def botSweepInPlace(faction: Faction, candidates: List[Space]): Unit = {
     for (sp <- candidates)
-      sweepInPlace(sp.name, faction)
+      sweepInPlace(sp.name, faction, NormalTroops)
   }
 
   def executeUnshaded(faction: Faction): Unit = {
@@ -153,9 +153,9 @@ object Card_062 extends EventCard(62, "Cambodian Civil War",
     // Bot will only activate guerrillas in place
     if (game.isHuman(faction)) {
       val canSweepUS   = (spaces(Cambodia) exists hasUsTroops) ||
-                         (spaces(Cambodia) exists (_.sweepActivations(US) > 0))
+                         (spaces(Cambodia) exists (_.sweepActivations(US, NormalTroops) > 0))
       val canSweepARVN = (spaces(Cambodia) exists hasArvnTroops) ||
-                         (spaces(Cambodia) exists (_.sweepActivations(ARVN) > 0))
+                         (spaces(Cambodia) exists (_.sweepActivations(ARVN, NormalTroops) > 0))
       if (canSweepUS || canSweepARVN) {
         val choices = List(
           choice(canSweepUS,   US,   "US"),
@@ -173,7 +173,7 @@ object Card_062 extends EventCard(62, "Cambodian Civil War",
             }
 
           case f =>
-            val candidates = spaces(Cambodia) filter (_.sweepActivations(f) > 0)
+            val candidates = spaces(Cambodia) filter (_.sweepActivations(f, NormalTroops) > 0)
             if (candidates.nonEmpty)
               botSweepInPlace(f, candidates)
             else
@@ -184,8 +184,8 @@ object Card_062 extends EventCard(62, "Cambodian Civil War",
         log("\nNeither US nor ARVN can effectively Sweep within Cambodia")
     }
     else {
-      val usCandidates   = spaces(Cambodia) filter (_.sweepActivations(US) > 0)
-      val arvnCandidates = spaces(Cambodia) filter (_.sweepActivations(ARVN) > 0)
+      val usCandidates   = spaces(Cambodia) filter (_.sweepActivations(US, NormalTroops) > 0)
+      val arvnCandidates = spaces(Cambodia) filter (_.sweepActivations(ARVN, NormalTroops) > 0)
 
 
       if (usCandidates.nonEmpty)

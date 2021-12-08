@@ -1033,7 +1033,7 @@ object Human {
       askMenu(choices, "\nChoose Advise option:").head match {
         case "sweep" =>
           askCandidateOrBlank("ARVN Sweep in which space: ", sweepCandidates) foreach { name =>
-            activateGuerrillasForSweep(name, ARVN, params.allCubesAsUS)
+            activateGuerrillasForSweep(name, ARVN, params.cubeTreatment)
             checkShadedBoobyTraps(name, ARVN)
             doCobrasUnshaded(name)
             Special.selectedSpaces = Special.selectedSpaces + name
@@ -1075,7 +1075,10 @@ object Human {
     val maxAirLiftSpaces = if (params.maxSpaces.nonEmpty)
       params.maxSpaces.get
     else if (game.inMonsoon) 2 else 4
-    var airLiftSpaces    = params.singleTarget.toList  // Some events specify air lift into ...
+    var airLiftSpaces    = if (params.airliftParams.onlyTo.size == 1)
+      params.airliftParams.onlyTo.toList
+    else
+      Nil
     val liftedOthers     = new MovingGroups()  // ARVN troops, Rangers, Irregulars (max 4)
 
     def totalLiftedOthers = liftedOthers.allPieces.total
@@ -1098,9 +1101,14 @@ object Human {
       !airLiftSpaces.contains(sp.name)
     })
 
+    def isOnlyDest(name: String) = params.airliftParams.onlyTo.size match {
+      case 1 => params.airliftParams.onlyTo(name)
+      case _ => false
+    }
+
     def liftOutCandidates = if (airLiftSpaces.size > 1)
       airLiftSpaces.filter{ name =>
-        Some(name) != params.singleTarget &&
+        !isOnlyDest(name) &&
         params.airliftParams.canLiftTo(name) &&
         moveablePieces(game.getSpace(name)).nonEmpty
       }
@@ -1111,10 +1119,9 @@ object Human {
     // Lift forces out and place them in a destination space
     def liftForcesOutOf(srcName: String): Unit = {
       val ForceTypes = List(USTroops, Irregulars_U, Irregulars_A, ARVNTroops, Rangers_U, Rangers_A)
-      val destCandidates = if (params.singleTarget.nonEmpty)
-        params.singleTarget.toList
-      else
-        airLiftSpaces filter (_ != srcName)
+      val destCandidates = airLiftSpaces filter { name =>
+        name != srcName && params.airliftParams.canLiftTo(name)
+      }
       val choices = (destCandidates map (name => name -> name)) :+ ("none" -> "Do not move forces now")
 
       def moveForces(destName: String): Unit = {
@@ -2732,7 +2739,8 @@ object Human {
   //  CombActionPlatoons_Shaded - US may select max 2 spaces per sweep
   //  BoobyTraps_Shaded         = Each sweep space, VC afterward removes 1 sweeping troop on
   //                              a roll 1-3 (US to casualties)
-  def executeSweep(faction: Faction, params: Params): Unit = {
+  // Returns the set of spaces were sweep occurred.
+  def executeSweep(faction: Faction, params: Params): Set[String] = {
     val specialActivities = if (faction == US)
       AirLift::AirStrike::Nil
     else
@@ -2746,10 +2754,8 @@ object Human {
     val boobyTraps      = capabilityInPlay(BoobyTraps_Shaded)
     val defaultMax      = if (platoonsShaded) 2 else NO_LIMIT
     val maxSpaces       = params.maxSpaces getOrElse defaultMax
-    val cubeTypes: List[PieceType] = if (params.allCubesAsUS) List(USTroops, ARVNTroops, ARVNPolice)
-                                else if (faction == US)       List(USTroops)
-                                else                          List(ARVNTroops)
-    val cubeDesc = andList(cubeTypes)
+    val cubeTypes       = sweepCubeTypes(faction, params.cubeTreatment).toList
+    val cubeDesc        = andList(cubeTypes)
 
     def canSpecial = Special.allowed
 
@@ -2834,11 +2840,10 @@ object Human {
       }
     }
 
-    // `allCubesAsUS` is used for the ROKs event (Card #70)
     def activateGuerrillas(): Unit = {
       val canActivate = (name: String) => {
         val sp = game.getSpace(name)
-        sp.sweepActivations(faction, params.allCubesAsUS) > 0
+        sp.sweepActivations(faction, params.cubeTreatment) > 0
       }
       val candidates = ((sweepSpaces -- activatedSpaces) filter canActivate).toList.sorted
       val canAll  = candidates.size > 1 && activatedSpaces.isEmpty
@@ -2856,7 +2861,7 @@ object Human {
         askMenu(choices, "\nSweep activation:").head match {
           case "all" | "rest" =>
             for (name <- candidates) {
-              activateGuerrillasForSweep(name, faction, params.allCubesAsUS)
+              activateGuerrillasForSweep(name, faction, params.cubeTreatment)
               checkShadedBoobyTraps(name, faction)
               activatedSpaces = activatedSpaces + name
             }
@@ -2866,7 +2871,7 @@ object Human {
             activateGuerrillas()
 
           case name =>
-            activateGuerrillasForSweep(name, faction, params.allCubesAsUS)
+            activateGuerrillasForSweep(name, faction, params.cubeTreatment)
             checkShadedBoobyTraps(name, faction)
             activatedSpaces = activatedSpaces + name
             activateGuerrillas()
@@ -2887,24 +2892,22 @@ object Human {
       logOpChoice(faction, Sweep, notes)
 
 
-    if (params.singleTarget.nonEmpty)
-      sweepSpaces = Set(params.singleTarget.get)
-    else
-      selectSweepSpace()
+    selectSweepSpace()
     moveTroops()
-    if (sweepSpaces.nonEmpty) {
+    if (sweepSpaces.nonEmpty)
       activateGuerrillas()
-    }
 
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
       executeSpecialActivity(faction, params, specialActivities)
+
+    sweepSpaces
   }
 
 
   //  Perform an assault in the given space.
   def performAssault(faction: Faction, name: String, params: Params): Unit = {
-    val asUS = faction == US || params.allCubesAsUS
+    val asUS = faction == US || params.cubeTreatment == AllCubesAsUS || params.cubeTreatment == AllTroopsAsUS
     val remove1BaseFirst   = asUS && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
     def validEnemy(types: TraversableOnce[PieceType]): TraversableOnce[PieceType] =
@@ -2922,7 +2925,7 @@ object Human {
     def pieces      = game.getSpace(name).pieces  // Always get fresh instance
     val baseFirst   = remove1BaseFirst && pieces.has(baseTargets) && !pieces.has(validEnemy(UndergroundGuerrillas))
     val underground = remove1Underground && pieces.has(validEnemy(UndergroundGuerrillas))
-    val totalLosses = sp.assaultFirepower(faction, params.allCubesAsUS) + 
+    val totalLosses = sp.assaultFirepower(faction, params.cubeTreatment) + 
                       (if (params.assaultParams.removeTwoExtra) 2 else 0)
     var killedPieces = Pieces()
     def remaining   = totalLosses - killedPieces.total
@@ -3036,7 +3039,7 @@ object Human {
       AirLift::AirStrike::Nil
     else
       Transport::Raid::Nil
-    val asUS                = faction == US || params.allCubesAsUS
+    val asUS                = faction == US || params.cubeTreatment == AllCubesAsUS || params.cubeTreatment == AllTroopsAsUS
     val bodyCount           = momentumInPlay(Mo_BodyCount)
     val abramsUnshaded      = asUS && capabilityInPlay(Abrams_Unshaded)
     val abramsShaded        = asUS && capabilityInPlay(Abrams_Shaded) && !params.limOpOnly
@@ -3048,20 +3051,10 @@ object Human {
     var m48PattonSpaces     = List.empty[String]
     var addedARVNAssault    = false
     
-    val cubeTypes: Set[PieceType] = if (params.allCubesAsUS) Set(USTroops, ARVNTroops, ARVNPolice)
-                                else if (faction == US)      Set(USTroops)
-                                else                         Set(ARVNTroops)
-
     val isCandidate = (sp: Space) => {
-      val cubes = if (sp.isLoC || sp.isCity)
-        cubeTypes
-      else
-        cubeTypes - ARVNPolice
-
       params.spaceAllowed(sp.name) &&           // If event limits command to certain spaces
       !assaultSpaces.contains(sp.name) &&       // Not already selected
-      sp.pieces.has(InsurgentPieces) &&
-      sp.pieces.has(cubes)
+      assaultEffective(faction, params.cubeTreatment, vulnerableTunnels = false)(sp)
     }
 
     def canSpecial = Special.allowed
@@ -3080,7 +3073,7 @@ object Human {
       performAssault(faction, name, assaultParams)
 
       val canFollowup = faction == US &&
-                        !params.allCubesAsUS &&  // All cubes already participated!
+                        params.cubeTreatment == NormalTroops &&  // All cubes already participated!
                         addedARVNAssault == false &&
                         game.getSpace(name).pieces.hasExposedInsurgents &&
                         game.getSpace(name).pieces.has(ARVNCubes) &&

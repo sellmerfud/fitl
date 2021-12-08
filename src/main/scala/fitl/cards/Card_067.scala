@@ -102,7 +102,7 @@ object Card_067 extends EventCard(67, "Amphib Landing",
     val params = Params(
       event        = true,
       free         = true,
-      singleTarget = Some(target)
+      onlyIn       = Some(Set(target))
     )
 
     // Cannot sweep into a LoC

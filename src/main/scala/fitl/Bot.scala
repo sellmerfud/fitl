@@ -57,7 +57,10 @@ object Bot {
   // Citys and Provinces.
   private val NO_SCORE  = -1000
 
-  def botLog(msg: => String) = if (game.botLogging) log(msg)
+
+  // Bot debug logs even when logging is suspended!
+  def botDebug(msg: => String) = if (game.botDebug) log(msg, force = true)
+
   def msgResult(result: Any, msg: String): String = {
     val resultStr = result match {
       case true  => "yes"
@@ -70,7 +73,7 @@ object Bot {
 
   //  We log each choice in the list stopping after we reach the
   //  first condition that is true.
-  def botLogChoices(choices: => List[(Boolean, String)]): Unit = {
+  def botDebugChoices(choices: => List[(Boolean, String)]): Unit = {
 
     def logNext(remaining: List[(Boolean, String)]): Unit = remaining match {
       case Nil =>
@@ -81,7 +84,7 @@ object Bot {
         logNext(xs)
     }
 
-    if (game.botLogging)
+    if (game.botDebug)
       logNext(choices)
   }
 
@@ -220,8 +223,8 @@ object Bot {
   def allLocRoutesCanTho_HueBlocked: Boolean = !getPatrolDestinations(CanTho).contains(Hue)
 
 
-  def sweepEffective(faction: Faction, name: String): Boolean = {
-    game.getSpace(name).sweepActivations(faction) > 0
+  def sweepEffective(name: String, faction: Faction, cubeTreatment: CubeTreatment): Boolean = {
+    game.getSpace(name).sweepActivations(faction, cubeTreatment) > 0
   }
 
   // Determine if the given faction can effectively Ambush
@@ -339,10 +342,10 @@ object Bot {
   }
   // Is space on the Can Tho - Hue route and would
   // an assault remove all insurgent pieces
-  def assaultInWouldUnblockAlongCanTho_HueRoute(faction: Faction, allCubesAsUS: Boolean, vulnerableTunnels: Boolean)(sp: Space): Boolean = {
+  def assaultInWouldUnblockAlongCanTho_HueRoute(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean)(sp: Space): Boolean = {
     CanTho_Hue_Routes(sp.name)    &&
     sp.pieces.has(InsurgentForces) &&
-    assaultResult(faction, allCubesAsUS, vulnerableTunnels)(sp).pieces.totalOf(InsurgentForces) == 0
+    assaultResult(faction, cubeTreatment, vulnerableTunnels)(sp).pieces.totalOf(InsurgentForces) == 0
   }
 
   def pickSpaces(num: Int, candidates: List[Space])(picker: (List[Space]) => Space): List[Space] = {
@@ -372,9 +375,9 @@ object Bot {
     bestCandidate(candidates, priorities)
   }
 
-  def pickSpaceWithMostSweepActivations(faction: Faction)(candidates: List[Space]) = {
+  def pickSpaceWithMostSweepActivations(faction: Faction, cubeTreatment: CubeTreatment)(candidates: List[Space]) = {
     val priorities = List(
-      new HighestScore[Space](s"$faction Activates most guerrillas", _.sweepActivations(faction))
+      new HighestScore[Space](s"$faction Activates most guerrillas", _.sweepActivations(faction, cubeTreatment))
     )
     bestCandidate(candidates, priorities)
   }
@@ -545,7 +548,7 @@ object Bot {
         case _         => pieces
       }
     
-    val asUS               = faction == US || params.allCubesAsUS
+    val asUS               = faction == US || params.cubeTreatment == AllCubesAsUS || params.cubeTreatment == AllTroopsAsUS
     val remove1BaseFirst   = asUS && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
     val m48Patton          = asUS && capabilityInPlay(M48Patton_Unshaded)
@@ -558,7 +561,7 @@ object Bot {
     def pieces      = game.getSpace(name).pieces  // Always get fresh instance
     val baseFirst   = remove1BaseFirst && pieces.has(baseTargets) && !pieces.has(validEnemy(UndergroundGuerrillas))
     val underground = remove1Underground && pieces.has(validEnemy(UndergroundGuerrillas))
-    val totalLosses = sp.assaultFirepower(faction)
+    val totalLosses = sp.assaultFirepower(faction, params.cubeTreatment)
     var killedPieces = Pieces()
     def remaining   = totalLosses - killedPieces.total
 
@@ -695,7 +698,7 @@ object Bot {
       if (high == NO_SCORE)
         Nil
       else {
-        botLog(s"$desc: score = $high")
+        botDebug(s"$desc: score = $high")
         entries filter (score(_) == high)
       }
     }
@@ -712,21 +715,21 @@ object Bot {
       if (low == NO_SCORE)
         Nil
       else {
-        botLog(s"$desc): score = $low")
+        botDebug(s"$desc): score = $low")
         entries filter (score(_) == low)
       }
     }
   }
 
-  def assaultResult(faction: Faction, allCubesAsUS: Boolean, vulnerableTunnels: Boolean)(sp: Space): Space = {
-    val num            = assaultFirepower(faction, allCubesAsUS)(sp) min vulnerableInsurgents(sp.pieces, vulnerableTunnels).total
+  def assaultResult(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean)(sp: Space): Space = {
+    val num            = assaultFirepower(faction, cubeTreatment)(sp) min vulnerableInsurgents(sp.pieces, vulnerableTunnels).total
     val (deadPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, num)
     sp.copy(pieces = sp.pieces - deadPieces)
   }
 
-  def assaultWouldRemoveBase(faction: Faction, allCubesAsUS: Boolean, vulnerableTunnels: Boolean)(sp: Space): Boolean = {
+  def assaultWouldRemoveBase(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean)(sp: Space): Boolean = {
     sp.pieces.totalOf(InsurgentNonTunnels) > 
-      assaultResult(faction, allCubesAsUS, vulnerableTunnels)(sp).pieces.totalOf(InsurgentNonTunnels)
+      assaultResult(faction, cubeTreatment, vulnerableTunnels)(sp).pieces.totalOf(InsurgentNonTunnels)
   }
 
   // Returns the number of the requested pieces types that are in
@@ -784,7 +787,7 @@ object Bot {
 
   val COINFirepowerLessThanVulnerable = new BooleanPriority[Space](
     "COIN Firepower < vulnerable enemies where US pieces",
-    sp => sp.pieces.has(USPieces) && coinFirepower(false)(sp) < vulnerableInsurgents(sp.pieces, false).total
+    sp => sp.pieces.has(USPieces) && coinFirepower(NormalTroops)(sp) < vulnerableInsurgents(sp.pieces, false).total
   )
 
   val HasUSBase = new BooleanPriority[Space](
@@ -848,7 +851,7 @@ object Bot {
 
   val MostArvnFirepower = new HighestScore[Space](
     "Most ARVN Firepower",
-    sp => arvnFirepower(false)(sp)
+    sp => arvnFirepower(NormalTroops)(sp)
   )
 
   val CityProvinceFewestEnemyPieces = new LowestScore[Space](
@@ -1062,10 +1065,10 @@ object Bot {
         case (list, f :: fs) =>
           (f filter list) match {
             case Nil =>
-              botLog(s"$f: matched nothing")
+              botDebug(s"$f: matched nothing")
               nextPriority(list, fs) // Filter entire list by next priority
             case best  =>
-              botLog(s"$f: matched [${andList(best)}]")
+              botDebug(s"$f: matched [${andList(best)}]")
               nextPriority(best, fs) // Filter matched list by next priority
           }
       }
@@ -1086,12 +1089,12 @@ object Bot {
 
     narrowCandidates(candidates, priorities) match {
       case best::Nil =>
-        botLog(s"Picked a winner [${best.toString}]")
+        botDebug(s"Picked a winner [${best.toString}]")
         best
 
       case narrowed  =>
         val best = shuffle(narrowed).head        // Take one at random
-        botLog(s"Picked random winner [${best.toString}]")
+        botDebug(s"Picked random winner [${best.toString}]")
         best
     }
   }
@@ -1251,7 +1254,7 @@ object Bot {
     def addPieces(newPieces: Pieces) = copy(selected = selected + newPieces)
   }
 
-  def logKept(params: MoveParams, heading: String, result: String): Unit = if (game.botLogging) {
+  def logKept(params: MoveParams, heading: String, result: String): Unit = if (game.botDebug) {
     import params._
 
     log()
@@ -1263,7 +1266,7 @@ object Bot {
     log(s"kept      : ${andList(selected.descriptions)}")
   }
 
-  def logMoved(params: MoveParams, heading: String, result: String): Unit = if (game.botLogging) {
+  def logMoved(params: MoveParams, heading: String, result: String): Unit = if (game.botDebug) {
     import params._
 
     val nowAtDest = dest.pieces.only(factionPieces(faction)) + selected
@@ -1408,7 +1411,7 @@ object Bot {
   val KP_KeepCoinFirepowerGreaterOrEqualToVulnerable = (params: MoveParams) => {
     import params._
     val desc = "Keep COIN firepower >= vulnerable enemy"
-    val firepower  = coinFirepower(false)(origin)
+    val firepower  = coinFirepower(NormalTroops)(origin)
     val vulnerable = vulnerableInsurgents(origin.pieces, false).total
 
     if (firepower >= vulnerable) {
@@ -1420,7 +1423,7 @@ object Bot {
           val toKeep = selectFriendlyToKeepInPlace(candidates, num)
           // If our firepower is still sufficent then we are done
           val updated = origin.pieces.except(moveTypes) + selected + toKeep
-          if (coinFirepower(false)(origin.setPieces(updated)) >= vulnerable)
+          if (coinFirepower(NormalTroops)(origin.setPieces(updated)) >= vulnerable)
             toKeep
           else  // Try again keeping one more
             keepPieces(num + 1)
@@ -1707,7 +1710,7 @@ object Bot {
       // If our firepower is sufficent then we are done
       val updated = dest.pieces + selected + toMove
 
-      if (coinFirepower(false)(dest.setPieces(updated)) >= numEnemy || num == maxCanMove)
+      if (coinFirepower(NormalTroops)(dest.setPieces(updated)) >= numEnemy || num == maxCanMove)
         toMove
       else  // Try again moving one more
         movePieces(num + 1)
@@ -1732,7 +1735,7 @@ object Bot {
       // If our firepower is sufficent then we are done
       val updated = dest.pieces + selected + toMove
 
-      if (arvnFirepower(false)(dest.setPieces(updated)) >= numEnemy || num == maxCanMove)
+      if (arvnFirepower(NormalTroops)(dest.setPieces(updated)) >= numEnemy || num == maxCanMove)
         toMove
       else  // Try again moving one more
         movePieces(num + 1)
@@ -1826,7 +1829,7 @@ object Bot {
       // If our firepower is sufficent then we are done
       val nowAtDest    = dest.pieces + selected + toMove
 
-      if (coinFirepower(false)(dest.setPieces(nowAtDest)) >= numVulnerable || num == maxCanMove)
+      if (coinFirepower(NormalTroops)(dest.setPieces(nowAtDest)) >= numVulnerable || num == maxCanMove)
         toMove
       else  // Try again moving one more
         movePieces(num + 1)
@@ -2187,13 +2190,13 @@ object Bot {
       new HighestScore[Space]( "Most Moveable Pieces", _.pieces.totalOf(moveTypes))
     )
 
-    botLog(s"\nSelect origin space with moveable: [${andList(moveTypes.toList)}]")
-    botLog(separator(char = '#'))
+    botDebug(s"\nSelect origin space with moveable: [${andList(moveTypes.toList)}]")
+    botDebug(separator(char = '#'))
     if (candidates.nonEmpty) {
       Some(bestCandidate(candidates, priorities).name)
     }
     else {
-      botLog(s"No reachable spaces with moveable pieces")
+      botDebug(s"No reachable spaces with moveable pieces")
       None
     }
   }
@@ -2289,22 +2292,55 @@ object Bot {
       })
     )
 
-    botLog(s"\nSelect Air Lift origin space with moveable: [${andList(moveTypes.toList)}]")
-    botLog(separator(char = '#'))
+    botDebug(s"\nSelect Air Lift origin space with moveable: [${andList(moveTypes.toList)}]")
+    botDebug(separator(char = '#'))
     if (candidates.nonEmpty) {
       Some(bestCandidate(candidates, priorities).name)
     }
     else {
-      botLog(s"No spaces with moveable pieces for AirLift")
+      botDebug(s"No spaces with moveable pieces for AirLift")
       None
     }
+  }
+
+  def sweepAndAssaultSpace(name: String, faction: Faction, cubeTreatment: CubeTreatment): Unit = {
+    initTurnVariables() // Always start with fresh turn state
+    val params = Params(event = true, free = true, cubeTreatment = cubeTreatment, onlyIn = Some(Set(name)))
+    if (faction == US)
+      US_Bot.sweepOp(params)
+    else
+      ARVN_Bot.sweepOp(params, 6)
+    performAssault(faction, name, params)
+  }
+
+  // This is used by Event #99 Masher/White Wing
+  // We select the best target space for the event.
+  // We return the name of the space along with the number
+  // of insurgents that would be eliminated in the space.
+  def bestSweepAssaultTarget(faction: Faction, cubeTreatment: CubeTreatment, candidates: List[String]): Option[(String, Int)] = {
+    var targets = Vector.empty[(String, Int)]
+
+    suspendLogging {
+      for (destName <- candidates) {
+        val saved = game
+        initTurnVariables() // Always start with fresh turn state
+        sweepAndAssaultSpace(destName, faction, cubeTreatment)
+        val before = saved.getSpace(destName).pieces.totalOf(InsurgentPieces)
+        val after  = game.getSpace(destName).pieces.totalOf(InsurgentPieces)
+        if (before > after)
+          targets = targets :+ (destName -> (before - after))
+        game = saved
+      }
+    }
+
+    targets.sortBy(-_._2).headOption
   }
 
   //  This function determines if we should attempt to find another
   //  origin space for the given move destination.
   //  The rules are faction specific and correspond to the
   //  'B' conditions at the bottom of the Move Priorities Table.
-  def canSelectAnotherOrigin(faction: Faction, destName: String): Boolean = {
+  def canSelectAnotherOrigin(faction: Faction, destName: String, cubeTreatment: CubeTreatment): Boolean = {
     val dest         = game.getSpace(destName)
     val numCoin      = dest.pieces.totalOf(CoinPieces)
     val numInsurgent = dest.pieces.totalOf(InsurgentPieces)
@@ -2313,7 +2349,7 @@ object Bot {
       case (US|ARVN, true)  => numCoin < numInsurgent
       case (NVA|VC,  true)  => numInsurgent <= numCoin
       case (US|ARVN, false) => !dest.coinControlled &&
-                               coinFirepower(false)(dest) < vulnerableInsurgents(dest.pieces, false).total
+                               coinFirepower(cubeTreatment)(dest) < vulnerableInsurgents(dest.pieces, false).total
       case (NVA,     false) => !dest.nvaControlled
       case (VC,      false) => dest.coinControlled || dest.nvaControlled
     }
@@ -2411,11 +2447,11 @@ object Bot {
             allOrigins += originName
           }
           else
-            botLog(s"\nNo pieces moved from $originName to $destName")
+            botDebug(s"\nNo pieces moved from $originName to $destName")
           // Check to see if we should try another origin
           // for this destination space
-          if (canSelectAnotherOrigin(faction, destName)) {
-            botLog(s"\n$faction Bot will select another origin space for destination: $destName")
+          if (canSelectAnotherOrigin(faction, destName, params.cubeTreatment)) {
+            botDebug(s"\n$faction Bot will select another origin space for destination: $destName")
             tryOrigin(destName, previousOrigins + originName)
           }
       }
@@ -2438,14 +2474,14 @@ object Bot {
             needActivationRoll  // Return so subsequent calls will know if activation is needed
 
           case Some(destName) =>
-            botLog(s"\n$faction Bot will attempt $action to $destName")
+            botDebug(s"\n$faction Bot will attempt $action to $destName")
             tryOrigin(destName, Set.empty)            // pause()
             val dest = game.getSpace(destName)
 
             // If no pieces could be found to move into the destination then
             // the destination will not have been added to the moveDestinations vector.
             // If we are doing a Sweep, check to see if we can sweep in place.
-            if (action == Sweep && !moveDestinations.contains(destName) && sweepEffective(faction, destName)) {
+            if (action == Sweep && !moveDestinations.contains(destName) && sweepEffective(destName, faction, params.cubeTreatment)) {
               // If this is a sweep operation and no cubes were
               // able to move into the destination, but there are
               // sufficient existing cubes in the destination to
@@ -2519,7 +2555,7 @@ object Bot {
 
     def spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops: Boolean =
       game.spaces exists { sp =>
-        coinFirepower(false)(sp) < sp.pieces.totalOf(NVATroops) &&
+        coinFirepower(NormalTroops)(sp) < sp.pieces.totalOf(NVATroops) &&
         sp.pieces.has(USTroops::USBase::Nil)
       }
     // All routes from Can Tho to Hue blocked and Shaded M-48 not in effect
@@ -2549,8 +2585,8 @@ object Bot {
         filterIf(game.isHuman(VC), MostTotalOpposition)
       ).flatten
 
-      botLog(s"\nUS Select space (Shift Toward Active Support): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nUS Select space (Shift Toward Active Support): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -2565,8 +2601,8 @@ object Bot {
         filterIf(true,              IsHighlandProvince)
       ).flatten
 
-      botLog(s"\nUS Select space (Place Bases): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nUS Select space (Place Bases): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -2582,8 +2618,8 @@ object Bot {
         filterIf(true,   HasEnemyBase)
       ).flatten
 
-      botLog(s"\nUS Select space (Place Cubes or Special Forces): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nUS Select space (Place Cubes or Special Forces): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -2601,8 +2637,8 @@ object Bot {
         filterIf(true,               HasEnemyBase)
       ).flatten
 
-      botLog(s"\nUS Select space (Sweep Destinations): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nUS Select space (Sweep Destinations): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -2616,8 +2652,8 @@ object Bot {
         HasEnemyBase
       )
 
-      botLog(s"\nUS Select space (Air Lift Destinations): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nUS Select space (Air Lift Destinations): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -2632,8 +2668,8 @@ object Bot {
         filterIf(true,                  IsHighlandProvince)
       ).flatten
 
-      botLog(s"\nUS Select space (Air Strike): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nUS Select space (Air Strike): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -2649,8 +2685,8 @@ object Bot {
         filterIf(true,                  LocWithEnemyPieces)
       ).flatten
 
-      botLog(s"\nUS Select space (Remove or Replace): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nUS Select space (Remove or Replace): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -3091,12 +3127,12 @@ object Bot {
           moveDestinations.headOption filter { name =>
             val sp = game.getSpace(name)
             sp.isLoC &&
-            assaultEffective(US, false, false)(sp) &&
+            assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
             (!capabilityInPlay(SearchAndDestroy_Shaded) || sp.pieces.has(NVATroops))
           }
           else {
             val unblockCandidates = spaceNames(game.locSpaces filter { sp =>
-              assaultInWouldUnblockAlongCanTho_HueRoute(US, false, false)(sp) &&
+              assaultInWouldUnblockAlongCanTho_HueRoute(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
               (!capabilityInPlay(SearchAndDestroy_Shaded) || sp.pieces.has(NVATroops))
           })
 
@@ -3126,9 +3162,7 @@ object Bot {
     //
     //  Sweep not allowed in Monsoon.
     def sweepOp(params: Params): Option[CoinOp] = {
-      val cubeTypes: Set[PieceType] =
-        if (params.allCubesAsUS) Set(USTroops, ARVNTroops, ARVNPolice)
-        else                     Set(USTroops)
+      val cubeTypes = sweepCubeTypes(US, params.cubeTreatment)
 
       if (!params.event && game.inMonsoon)
         None
@@ -3138,7 +3172,11 @@ object Bot {
         val maxSweep = (maxTraps.toList ::: params.maxSpaces.toList).sorted.headOption
 
         val nextSweepCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
-          val candidates = game.nonLocSpaces filterNot (sp => sp.isNorthVietnam || prohibited(sp.name))
+          val candidates = game.nonLocSpaces filter { sp =>
+            params.spaceAllowed(sp.name) &&
+            !sp.isNorthVietnam &&
+            !prohibited(sp.name)
+          }
 
           if (candidates.nonEmpty)
             Some(pickSpaceSweepDest(candidates).name)
@@ -3146,26 +3184,16 @@ object Bot {
             None
         }
 
-        val nextSingleTargetCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
-          if (moveDestinations.isEmpty)
-            Some(params.singleTarget.get)
-          else
-            None
-        }
-
         if (!params.event)
           logOpChoice(US, Sweep)
-        val nextDest = if (params.singleTarget.nonEmpty)
-          nextSingleTargetCandidate
-        else
-          nextSweepCandidate
-        movePiecesToDestinations(US, Sweep, cubeTypes , false, params, maxDests = maxSweep)(nextDest)
+          
+        movePiecesToDestinations(US, Sweep, cubeTypes , false, params, maxDests = maxSweep)(nextSweepCandidate)
         val maxCobras = 2  // Unshaded cobras can be used in up to 2 spaces
         var numCobras = 0
         if (moveDestinations.nonEmpty) {
           // Activate guerrillas in each sweep destination
           for (name <- moveDestinations) {
-            activateGuerrillasForSweep(name, US, params.allCubesAsUS)
+            activateGuerrillasForSweep(name, US, params.cubeTreatment)
             checkShadedBoobyTraps(name, US)
             if (numCobras < maxCobras && checkUnshadedCobras(name))
               numCobras += 1
@@ -3215,22 +3243,22 @@ object Bot {
 
         val wouldKillNVATroopsOrBase = (sp: Space) => {
           val targets = Set(NVATroops, NVABase)
-          val result = assaultResult(US, params.allCubesAsUS, false)(sp)
+          val result = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
           sp.pieces.totalOf(targets) > result.pieces.totalOf(targets)
         }
 
 
         val assaultRemovesAllVulnerable = (sp: Space) =>
           !assaultSpaces(sp.name)  &&
-          assaultEffective(US, params.allCubesAsUS, false)(sp) &&
-          noVulnerableInsurgents(assaultResult(US, params.allCubesAsUS, false)(sp)) &&
+          assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
+          noVulnerableInsurgents(assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)) &&
           (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
 
 
         val assaultWithArvn = (sp: Space) => {
-          if (assaultEffective(US, false, false)(sp)) {
-            val afterUS = assaultResult(US, params.allCubesAsUS, false)(sp)
-            assaultEffective(ARVN, false, false)(afterUS) &&
+          if (assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp)) {
+            val afterUS = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
+            assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(afterUS) &&
            (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
           }
           else
@@ -3241,15 +3269,15 @@ object Bot {
           new HighestScore[Space](
             "ARVN Assault removes most enemy",
             (sp: Space) => {
-              val afterUS   = assaultResult(US, params.allCubesAsUS, false)(sp)
-              val afterARVN = assaultResult(ARVN, params.allCubesAsUS, false)(afterUS)
+              val afterUS   = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
+              val afterARVN = assaultResult(ARVN, params.cubeTreatment, params.vulnerableTunnels)(afterUS)
               // Return number of pieces removed by ARVN assault
               afterUS.pieces.totalOf(InsurgentPieces) - afterARVN.pieces.totalOf(InsurgentPieces)
           })
         )
 
         val assaultWithTroops = (sp: Space) =>
-          assaultEffective(US, params.allCubesAsUS, false)(sp) &&
+          assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
           (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
 
 
@@ -3280,7 +3308,7 @@ object Bot {
                             params.free                  ||
                             !game.trackResources(ARVN)   ||
                             game.arvnResources >= 3
-        if (!params.allCubesAsUS && candidatesWithARVN.nonEmpty && canAffordARVN) {
+        if (params.cubeTreatment == NormalTroops && candidatesWithARVN.nonEmpty && canAffordARVN) {
           // Only one space with the most ARVN kills
           val sp = bestCandidate(candidatesWithARVN, arvnAssaultPriorities)
           nextAssault(sp::Nil, addARVN = true)
@@ -3340,14 +3368,14 @@ object Bot {
 
       val canRemoveBaseWithARVN = (sp: Space) =>
         !prohibited(sp) &&
-        assaultWouldRemoveBase(ARVN, params.allCubesAsUS, params.vulnerableTunnels)(sp)
+        assaultWouldRemoveBase(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
 
       val canRemoveBaseWithSpecialForces = (sp: Space) => !prohibited(sp) && specialForcesWouldRemoveBase(sp)
 
       val canArvnSweep = (sp: Space) =>
         !prohibited(sp) &&
         sp.support > Neutral &&
-        sp.sweepActivations(ARVN) > 0
+        sp.sweepActivations(ARVN, params.cubeTreatment) > 0
 
       val canRemoveEnemies = (sp: Space) =>
         hasUndergroundForces(sp) &&
@@ -3363,7 +3391,7 @@ object Bot {
 
           if (!params.event && adviseSpaces.isEmpty)
             logSAChoice(US, Advise)
-          if (assaultWouldRemoveBase(ARVN, params.allCubesAsUS, params.vulnerableTunnels)(sp))
+          if (assaultWouldRemoveBase(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp))
             arvnAssault(sp)
           else
             useSpecialForces(sp)
@@ -3375,13 +3403,13 @@ object Bot {
       def doArvnSweeps(): Unit = if (params.event || !game.inMonsoon) {
         val candidates = game.nonLocSpaces filter canArvnSweep
         if (canAdvise && candidates.nonEmpty) {
-          val sp = pickSpaceWithMostSweepActivations(ARVN)(candidates)
+          val sp = pickSpaceWithMostSweepActivations(ARVN, params.cubeTreatment)(candidates)
 
           if (!params.event && adviseSpaces.isEmpty)
             logSAChoice(US, Advise)
           log(s"\nAdvise in ${sp.name} using ARVN Assault")
           log(separator())
-          activateGuerrillasForSweep(sp.name, ARVN, params.allCubesAsUS, logHeading = false)
+          activateGuerrillasForSweep(sp.name, ARVN, params.cubeTreatment, logHeading = false)
           adviseSpaces += sp.name
           doArvnSweeps()
         }
@@ -3401,7 +3429,7 @@ object Bot {
       }
 
       def doArvnAssaults(): Unit = {
-        val candidates = game.spaces filter assaultEffective(ARVN, false, params.vulnerableTunnels)
+        val candidates = game.spaces filter assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)
         if (canAdvise && candidates.nonEmpty) {
           val sp = pickSpaceRemoveReplace(candidates)
 
@@ -3458,26 +3486,17 @@ object Bot {
             None
         }
 
-        val nextSingleTargetCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
-          if (moveDestinations.isEmpty)
-            Some(params.singleTarget.get)
-          else
-            None
-        }
         
         logSAChoice(US, AirLift)
         //  Since the air lift can be use during a sweep we must preserve the moveDestinations
         val savedMovedDestinations = moveDestinations
         val savedMovedPieces       = movedPieces
         val moveTypes = (USTroops::ARVNTroops::Irregulars:::Rangers).toSet[PieceType]
-        val nextDest = if (params.singleTarget.nonEmpty)
-          nextSingleTargetCandidate
-        else
-          nextAirLiftCandidate
 
         moveDestinations = Vector.empty
+
         movedPieces.reset()
-        movePiecesToDestinations(US, AirLift, moveTypes, false, params, maxDests = maxSpaces)(nextDest)
+        movePiecesToDestinations(US, AirLift, moveTypes, false, params, maxDests = maxSpaces)(nextAirLiftCandidate)
         val effective = moveDestinations.nonEmpty
         moveDestinations = savedMovedDestinations
         movedPieces      = savedMovedPieces
@@ -4168,14 +4187,14 @@ object Bot {
       (checkActivation(ARVN, needRoll, actNum) && (!game.trackResources(ARVN) || game.arvnResources >= 3))
 
     val arvnAssaultWouldAddCoinControl = (sp: Space) =>
-      !sp.coinControlled && assaultResult(ARVN, false, false)(sp).coinControlled
+      !sp.coinControlled && assaultResult(ARVN, NormalTroops, vulnerableTunnels = false)(sp).coinControlled
 
     def arvnAssaultWouldAddCoinControlToASpace: Boolean =
       game.nonLocSpaces exists arvnAssaultWouldAddCoinControl
 
     // Return true if an assault on one of the spaces
     def arvnAssaultWouldUnblockCanTo_HueRouteSpace(candidates: TraversableOnce[Space]): Boolean =
-      candidates exists assaultInWouldUnblockAlongCanTho_HueRoute(ARVN, false, false)
+      candidates exists assaultInWouldUnblockAlongCanTho_HueRoute(ARVN, NormalTroops, vulnerableTunnels = false)
 
     def arvnAssaultWouldAddControlOrUnblockCanTo_Hue: Boolean = {
       arvnAssaultWouldAddCoinControlToASpace ||
@@ -4201,7 +4220,7 @@ object Bot {
     // allows ARVN to free assault in one Transport destination
     // Will only trigger if an transport special activity has take place.
     def armoredCavalryAssault(): Unit = {
-      val candidates = spaces(transportDestinations) filter assaultEffective(ARVN, false, false)
+      val candidates = spaces(transportDestinations) filter assaultEffective(ARVN, NormalTroops, vulnerableTunnels = false)
       // General Landsdale prohibits assault
       if (capabilityInPlay(ArmoredCavalry_Unshaded) && !momentumInPlay(Mo_GeneralLansdale) && candidates.nonEmpty) {
         val sp = pickSpaceRemoveReplace(candidates)
@@ -4219,8 +4238,8 @@ object Bot {
         filterIf(game.isHuman(VC), MostTotalOpposition)
       ).flatten
 
-      botLog(s"\nARVN Select space (Shift Toward Passive Support): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nARVN Select space (Shift Toward Passive Support): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4234,8 +4253,8 @@ object Bot {
         CityProvinceFewestEnemyPieces
       )
 
-      botLog(s"\nARVN Select space (Place Bases): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nARVN Select space (Place Bases): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4251,8 +4270,8 @@ object Bot {
         filterIf(game.isHuman(VC), MostTotalOpposition)
       ).flatten
 
-      botLog(s"\nARVN Select space (Place Cubes or Rangers): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nARVN Select space (Place Cubes or Rangers): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4266,8 +4285,8 @@ object Bot {
         CityProvinceFewestEnemyPieces
       )
 
-      botLog(s"\nARVN Select space (Sweep or Transport Destinations): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nARVN Select space (Sweep or Transport Destinations): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4280,8 +4299,8 @@ object Bot {
         LocWithEnemyPieces
       )
 
-      botLog(s"\nARVN Select space (Patrol Destinations): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nARVN Select space (Patrol Destinations): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4293,8 +4312,8 @@ object Bot {
         MostTotalSupport
       )
 
-      botLog(s"\nARVN Select space (Govern): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nARVN Select space (Govern): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4314,8 +4333,8 @@ object Bot {
         filterIf(true,     CityProvinceFewestEnemyPieces)
       ).flatten
 
-      botLog(s"\nARVN Select space (Remove or Replace): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nARVN Select space (Remove or Replace): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -4500,14 +4519,14 @@ object Bot {
         val assaultLoC = if (params.limOpOnly)
           moveDestinations.headOption filter { name =>
             val sp = game.getSpace(name)
-            sp.isLoC && assaultEffective(ARVN, params.allCubesAsUS, false)(sp)
+            sp.isLoC && assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
           }
         else {
           val unblockCandidates = spaceNames(game.locSpaces filter { sp =>
-            assaultEffective(ARVN, params.allCubesAsUS, false)(sp) &&
-            assaultInWouldUnblockAlongCanTho_HueRoute(ARVN, false, false)(sp)
+            assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
+            assaultInWouldUnblockAlongCanTho_HueRoute(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
           })
-          val genericCandidates = spaceNames(game.locSpaces filter assaultEffective(ARVN, params.allCubesAsUS, false))
+          val genericCandidates = spaceNames(game.locSpaces filter assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels))
 
           shuffle(unblockCandidates).headOption orElse shuffle(genericCandidates).headOption
         }
@@ -4535,9 +4554,7 @@ object Bot {
     //
     //  Sweep not allowed in Monsoon.
     def sweepOp(params: Params, actNum: Int): Option[CoinOp] = {
-      val cubeTypes: Set[PieceType] =
-        if (params.allCubesAsUS) Set(USTroops, ARVNTroops, ARVNPolice)
-        else                     Set(ARVNTroops)
+      val cubeTypes = sweepCubeTypes(US, params.cubeTreatment)
       if (!params.event && game.inMonsoon)
         None
       else {
@@ -4569,26 +4586,16 @@ object Bot {
               None
           }
           
-          val nextSingleTargetCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
-            if (moveDestinations.isEmpty)
-              Some(params.singleTarget.get)
-            else
-              None
-          }
-
           if (!params.event)
             logOpChoice(ARVN, Sweep)
-          val nextDest = if (params.singleTarget.nonEmpty)
-            nextSingleTargetCandidate
-          else
-            nextSweepCandidate
-          movePiecesToDestinations(ARVN, Sweep, cubeTypes, false, params, maxDests = maxSweep)(nextDest)
+
+          movePiecesToDestinations(ARVN, Sweep, cubeTypes, false, params, maxDests = maxSweep)(nextSweepCandidate)
           val maxCobras = 2  // Unshaded cobras can be used in up to 2 spaces
           var numCobras = 0
           if (moveDestinations.nonEmpty) {
             // Activate guerrillas in each sweep destination
             for (name <- moveDestinations) {
-              activateGuerrillasForSweep(name, ARVN, params.allCubesAsUS)
+              activateGuerrillasForSweep(name, ARVN, params.cubeTreatment)
               checkShadedBoobyTraps(name, ARVN)
               if (numCobras < maxCobras && checkUnshadedCobras(name))
                 numCobras += 1
@@ -4624,13 +4631,13 @@ object Bot {
         None
       else {
         val candidates = game.spaces filter { sp =>
-          assaultEffective(ARVN, params.allCubesAsUS, params.vulnerableTunnels)(sp)
+          assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
         }
         if (candidates.nonEmpty) {
           val MostFirepower = List(
             new HighestScore[Space](
             "Most ARVN Firepower",
-            arvnFirepower(params.allCubesAsUS)
+            arvnFirepower(params.cubeTreatment)
           ))
           val sp = bestCandidate(candidates, MostFirepower)
 
@@ -4671,7 +4678,7 @@ object Bot {
           lazy val candidates = game.spaces filter { sp =>
             !previousAssaults(sp.name) &&
             !assaultSpaces(sp.name)    &&
-            assaultEffective(ARVN, params.allCubesAsUS, params.vulnerableTunnels)(sp)
+            assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
           }
 
           if (previousAssaults.size + assaultSpaces.size < maxAssault && candidates.nonEmpty && activated) {
@@ -5168,8 +5175,8 @@ object Bot {
         CityProvinceHighestAjacentPopulation
       )
 
-      botLog(s"\nNVA Select space (Place Bases or Tunnels): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nNVA Select space (Place Bases or Tunnels): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -5189,8 +5196,8 @@ object Bot {
         filterIf(true,               CityProvinceHighestAjacentPopulation)
       ).flatten
 
-      botLog(s"\nNVA Select space (Place NVA Troops): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nNVA Select space (Place NVA Troops): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -5208,8 +5215,8 @@ object Bot {
         filterIf(true,               CityProvinceHighestAjacentPopulation)
       ).flatten
 
-      botLog(s"\nNVA Select space (Place NVA Guerrilllas): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nNVA Select space (Place NVA Guerrilllas): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -5227,8 +5234,8 @@ object Bot {
         filterIf(true,               CityProvinceFewestNonNVAPieces)
       ).flatten
 
-      botLog(s"\nNVA Select space (March Destinations): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nNVA Select space (March Destinations): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -5241,8 +5248,8 @@ object Bot {
         CityProvinceMostNVAGuerrillas
       )
 
-      botLog(s"\nNVA Select space (Place Terror): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nNVA Select space (Place Terror): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -5258,8 +5265,8 @@ object Bot {
         filterIf(true,               CityProvinceMostCoinCubes)
       ).flatten
 
-      botLog(s"\nNVA Select space (Remove or Replace): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nNVA Select space (Remove or Replace): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -5906,8 +5913,8 @@ object Bot {
         filterIf(game.isHuman(US), MostTotalSupport)
       ).flatten
 
-      botLog(s"\nVC Select space (Shift Toward Active Opposition): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nVC Select space (Shift Toward Active Opposition): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -5923,8 +5930,8 @@ object Bot {
         filterIf(coinPlayer,       OnePlusEconLoc)
       ).flatten
 
-      botLog(s"\nVC Select space (Place Terror): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nVC Select space (Place Terror): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -5936,8 +5943,8 @@ object Bot {
         CityProvinceFewestNonVCPieces
       )
 
-      botLog(s"\nVC Select space (Place Bases or Tunnels): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nVC Select space (Place Bases or Tunnels): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -5954,8 +5961,8 @@ object Bot {
         filterIf(true,               CityProvinceFewestNonVCPieces)
       ).flatten
 
-      botLog(s"\nVC Select space (Place Guerrilllas): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nVC Select space (Place Guerrilllas): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -5972,8 +5979,8 @@ object Bot {
         filterIf(true,               CityProvinceFewestNonVCPieces)
       ).flatten
 
-      botLog(s"\nVC Select space (March Destinations): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nVC Select space (March Destinations): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -5987,8 +5994,8 @@ object Bot {
         filterIf(coinPlayer,  OnePlusEconLoc)
       ).flatten
 
-      botLog(s"\nVC Select space (Tax): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nVC Select space (Tax): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -6005,8 +6012,8 @@ object Bot {
         filterIf(true,               CityProvinceFewestNonVCPieces)
       ).flatten
 
-      botLog(s"\nVC Select space (Remove or Replace): [${andList(candidates.sorted)}]")
-      botLog(separator(char = '#'))
+      botDebug(s"\nVC Select space (Remove or Replace): [${andList(candidates.sorted)}]")
+      botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
 
@@ -6564,11 +6571,11 @@ object Bot {
   def chooseAction(faction: Faction): Option[ActionEntry] = {
     val isFirstEligible = game.sequence.numActors == 0
 
-    botLog {
+    botDebug {
       val which = if (isFirstEligible) "1st" else "2nd"
       s"\n$faction Choosing Action using NP Eligiblity Table ($which eligible)"
     }
-    botLog(separator(char = '#'))
+    botDebug(separator(char = '#'))
 
     val table = if (isFirstEligible)
       firstEligibileTable
@@ -6577,7 +6584,7 @@ object Bot {
 
     table find { entry =>
       val result = entry.test(faction)
-      botLog(msgResult(result, entry.desc))
+      botDebug(msgResult(result, entry.desc))
       result
     }
   }
@@ -7947,7 +7954,7 @@ object Bot {
       // Back Operation
       // ------------------------------------------------------------
       val dice = rollDice(3)
-      botLog(s"Dice roll: $dice, available VC pieces: ${game.availablePieces.totalOf(VCPieces)}")
+      botDebug(s"Dice roll: $dice, available VC pieces: ${game.availablePieces.totalOf(VCPieces)}")
 
       val condition = dice <= game.availablePieces.totalOf(VCPieces)
 

@@ -68,16 +68,16 @@ object Card_095 extends EventCard(95, "Westmoreland",
 
   val canSweep = (sp: Space) =>
     !sp.isLoC &&
-    sp.sweepActivations(US) > 0
+    sp.sweepActivations(US, NormalTroops) > 0
 
   val canAssault = (sp: Space) =>
-    assaultEffective(US, allCubesAsUS = false, vulnerableTunnels = false)(sp)
+    assaultEffective(US, NormalTroops, vulnerableTunnels = false)(sp)
 
   val canAssultOrSweep = (sp: Space) => canAssault(sp) || canSweep(sp)
   
   val assaultKillsAllActive = (sp: Space) =>
       canAssault(sp) &&
-      assaultKillsAllVulnerable(US, false, false)(sp)
+      assaultKillsAllVulnerable(US, NormalTroops, vulnerableTunnels = false)(sp)
 
   val botCanAssultOrSweep = (sp: Space) => assaultKillsAllActive(sp) || canSweep(sp)
 
@@ -98,7 +98,7 @@ object Card_095 extends EventCard(95, "Westmoreland",
         
         askMenu(choices, s"\nChoose operation for $name").head match {
           case "assault" => Human.performAssault(US, name, Params(event = true, free = true))
-          case _         => sweepInPlace(name, US)
+          case _         => sweepInPlace(name, US, NormalTroops)
         }
         spacesSelected += name
         nextSpace()
@@ -129,8 +129,8 @@ object Card_095 extends EventCard(95, "Westmoreland",
       val candidates = validSpaces filter canSweep
 
       if (spacesSelected.size < 2 && candidates.nonEmpty) {
-        val sp = Bot.pickSpaceWithMostSweepActivations(US)(candidates)
-        sweepInPlace(sp.name, US)
+        val sp = Bot.pickSpaceWithMostSweepActivations(US, NormalTroops)(candidates)
+        sweepInPlace(sp.name, US, NormalTroops)
         spacesSelected += sp.name
         nextSweep()
       }

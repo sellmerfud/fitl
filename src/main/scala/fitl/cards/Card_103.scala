@@ -41,6 +41,19 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// National Guard imposes order: Any 2 US Casualties to Available.
+// 1 free US LimOp. US Eligible.
+//
+// Shaded Text
+// National Guard overreacts: Up to 3 US Troop Casualties out of play.
+// Aid –6. US Ineligible through next card.
+//
+// Tips
+// For the unshaded text, place the US Eligibility Cylinder from wherever
+// it is into the “Eligible Factions” box. If US executed the Event and
+// ARVN 2nd Eligible, ARVN may execute Ops & Special Activity as usual.
+
 object Card_103 extends EventCard(103, "Kent State",
   DualEvent,
   List(VC, NVA, US, ARVN),
@@ -50,9 +63,60 @@ object Card_103 extends EventCard(103, "Kent State",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.casualties.has(USPieces)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val usCasualties = game.casualties.only(USPieces)
+    val toAvail = if (game.isHuman(faction))
+      askPieces(usCasualties, 2 min usCasualties.total, prompt = Some("Select US Casualties to move to Available"))
+    else
+      Bot.selectFriendlyToPlaceOrMove(usCasualties, 2 min usCasualties.total)
+
+    println()
+    if (toAvail.isEmpty)
+      log("There are no US Casualties")
+    else
+      moveCasualtiesToAvailable(toAvail)
+
+    log("\nUS executes a free Limited Op")
+    log(separator(char = '='))
+    pause()
+
+    val limOpParams = Params(free = true, maxSpaces = Some(1))
+    if (game.isHuman(US))
+      Human.executeCoinOp(US, limOpParams)
+    else {
+      Bot.executeOp(US, limOpParams)
+      pause()
+    }
+
+    // US becomes eligible
+    // This is a bit funky because the US cannot act again if
+    // it just took the action.
+    // So if the the US has acted or is the currently executing
+    // this event,  we mark it to stay eligible for the next turn,
+    // otherwise, we move the US cylinder to the eligible box.
+    println()
+    if (faction == US || game.sequence.acted(US))
+      remainEligibleNextTurn(US)
+    else
+      makeEligible(US)
+  }
+
+  def shadedEffective(faction: Faction): Boolean =
+    game.casualties.has(USTroops) ||
+    (game.trackResources(ARVN) && game.usAid > 0)
+
+  def executeShaded(faction: Faction): Unit = {
+    val maxCasualties = game.casualties.totalOf(USTroops) min 3
+    val numTroops = if (game.isHuman(faction))
+      askInt("\nMove how many US Troop Casualties to Out Of Play", 0, maxCasualties)
+    else
+      maxCasualties
+
+    println()
+    moveCasualtiesToOutOfPlay(Pieces(usTroops = numTroops))
+    decreaseUsAid(6)
+    makeIneligibleThroughNextTurn(US)
+  }
 }

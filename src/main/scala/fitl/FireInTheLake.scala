@@ -1900,6 +1900,13 @@ object FireInTheLake {
            ineligibleNextTurn = ineligibleNextTurn + faction,
            eligibleNextTurn   = eligibleNextTurn - faction)
 
+    def makeEligible(faction: Faction): SequenceOfPlay =
+      copy(eligibleThisTurn  = eligibleThisTurn + faction,
+          actors             = actors filterNot (_.faction == faction),
+          passed             = passed - faction,
+          eligibleNextTurn   = eligibleNextTurn - faction,
+          ineligibleNextTurn = ineligibleNextTurn - faction) 
+
     def makeIneligible(faction: Faction): SequenceOfPlay =
         copy(eligibleThisTurn = eligibleThisTurn - faction)
 
@@ -1911,6 +1918,14 @@ object FireInTheLake {
                                         passed             ++
                                         eligibleNextTurn   --
                                         ineligibleNextTurn)
+    }
+  }
+
+  //  Move the faction to the eligible box.
+  def makeEligible(faction: Faction): Unit = {
+    if (!game.sequence.eligibleThisTurn(faction)) {
+      log(s"Move the $faction cylinder to the Eligible Factions box")
+      game = game.copy(sequence = game.sequence.makeEligible(faction))
     }
   }
 

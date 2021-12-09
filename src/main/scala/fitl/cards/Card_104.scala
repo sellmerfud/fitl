@@ -41,6 +41,19 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// VC CAPABILITY
+//
+// Unshaded Text
+// Larger footprints: March into Support/LoC Activates if moving
+// plus non-Base COIN >1 (vice >3).
+//
+// Shaded Text
+// Hard-hitting guerrillas: 1 VC Ambush space may remove 2 enemy pieces.
+//
+// Tips
+// The shaded Capability will enable each VC Ambush Special Activity to
+// remove up to a total of 3 enemy pieces between its maximum 2 spaces.
+
 object Card_104 extends EventCard(104, "Main Force Bns",
   DualEvent,
   List(VC, NVA, US, ARVN),
@@ -50,9 +63,11 @@ object Card_104 extends EventCard(104, "Main Force Bns",
           VC   -> (Critical  -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = playCapability(MainForceBns_Unshaded)
+
+  def shadedEffective(faction: Faction): Boolean = true
+
+  def executeShaded(faction: Faction): Unit = playCapability(MainForceBns_Shaded)
 }

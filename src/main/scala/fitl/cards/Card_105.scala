@@ -41,6 +41,17 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Onerous VC Taxation: Shift 4 Provinces with any VC each
+// by 1 level toward Active Support.
+//
+// Shaded Text
+// Local government corruption: Shift 3 Provinces with Police each
+// by 1 level toward Active Opposition. Patronage +6 or –6.
+//
+// Tips
+// A Province with 0 Population cannot be shifted from Neutral (1.6).
+
 object Card_105 extends EventCard(105, "Rural Pressure",
   DualEvent,
   List(VC, NVA, US, ARVN),
@@ -50,9 +61,96 @@ object Card_105 extends EventCard(105, "Rural Pressure",
           VC   -> (Critical    -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  val unshadedCandidate = (sp: Space) =>
+    sp.isProvince           &&
+    sp.pieces.has(VCPieces) &&
+    sp.support < ActiveSupport
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.nonLocSpaces exists unshadedCandidate
+
+  def executeUnshaded(faction: Faction): Unit = {
+    val candidates     = game.nonLocSpaces filter unshadedCandidate
+    val selectedSpaces = if (candidates.isEmpty)
+      Nil
+    else if (candidates.size <= 4)
+      spaceNames(candidates)
+    else if (game.isHuman(faction))
+      askSimpleMenu(spaceNames(candidates), "\nChoose 4 Provinces with VC pieces:", numChoices = 4)
+    else
+      Bot.pickSpaces(4, candidates)(US_Bot.pickSpaceTowardActiveSupport) map (_.name)
+
+    loggingPointsChanges {
+      if (selectedSpaces.isEmpty)
+        log("There are no spaces that qualify for the event")
+      else {
+        println()
+        for (name <- selectedSpaces)
+          increaseSupport(name, 1)
+      }
+    }
+  }
+
+  val shadedCandidate = (sp: Space) =>
+    sp.isProvince             &&
+    sp.pieces.has(ARVNPolice) &&
+    sp.support > ActiveOpposition
+
+  def shadedEffective(faction: Faction): Boolean = faction match {
+    case ARVN => game.patronage < EdgeTrackMax
+    case _    => game.nonLocSpaces exists shadedCandidate
+  }
+
+  // Event instructions for ARVN:
+  // Shift 1-Pop spaces at Active Support first, the Neutral
+  def arvnPickSpace(candidates: List[Space]): Space = {
+
+    val priorities = List(
+      new Bot.BooleanPriority[Space]("1-Pop, Active Support", sp => sp.population == 1 && sp.support == ActiveSupport),
+      new Bot.BooleanPriority[Space]("1-Pop, Neutral", sp => sp.population == 1 && sp.support == Neutral),
+      new Bot.BooleanPriority[Space]("1-Pop", sp => sp.population == 1)
+    )
+
+    Bot.botDebug(s"\nUS Select space (Shift Toward Active Support): [${andList(candidates.sorted)}]")
+    Bot.botDebug(separator(char = '#'))
+    Bot.bestCandidate(candidates, priorities)
+  }
+
+
+  def executeShaded(faction: Faction): Unit = {
+    val candidates     = game.nonLocSpaces filter shadedCandidate
+    val selectedSpaces = if (candidates.isEmpty)
+      Nil
+    else if (candidates.size <= 3)
+      spaceNames(candidates)
+    else if (game.isHuman(faction))
+      askSimpleMenu(spaceNames(candidates), "\nChoose 3 Provinces with Police:", numChoices = 3)
+    else if (faction == ARVN)
+      Bot.pickSpaces(3, candidates)(arvnPickSpace) map (_.name)
+      else
+      Bot.pickSpaces(3, candidates)(VC_Bot.pickSpaceTowardActiveOpposition) map (_.name)
+
+    val addPatronage = if (game.isHuman(faction)) {
+      val choices = List(true -> "Increase Patronage +6", false -> "Decrease Patronage -6")
+       askMenu(choices, "\nChoose one:").head
+    }
+    else
+      faction == ARVN
+
+
+    loggingPointsChanges {
+      if (selectedSpaces.isEmpty)
+        log("There are no spaces that qualify for the event")
+      else {
+        println()
+        for (name <- selectedSpaces)
+          decreaseSupport(name, 1)
+      }
+
+      log()
+      if (addPatronage)
+        increasePatronage(6)
+      else
+        decreasePatronage(6)
+    }
+  }
 }

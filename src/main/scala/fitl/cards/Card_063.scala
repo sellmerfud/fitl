@@ -80,7 +80,10 @@ object Card_063 extends EventCard(63, "Fact Finding",
 
     action match {
       case "oopUS" if numOopUS == 0 => log("\nThere are no Out of Play US pieces")
-      case "oopUS" => placeOutOfPlayPiecesOnMap(faction, 2 min numOopUS, USPieces, SouthVietnam)
+      case "oopUS" => 
+        loggingControlChanges {
+          placeOutOfPlayPiecesOnMap(faction, 2 min numOopUS, USPieces, SouthVietnam)
+        }
       case _       =>
         val die = d6
         val num = d6 min game.patronage

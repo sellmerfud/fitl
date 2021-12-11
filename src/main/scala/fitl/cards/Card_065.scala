@@ -62,7 +62,9 @@ object Card_065 extends EventCard(65, "International Forces",
   def unshadedEffective(faction: Faction): Boolean = game.outOfPlay.totalOf(USPieces) > 0
 
   def executeUnshaded(faction: Faction): Unit = {
-    placeOutOfPlayPiecesOnMap(faction, 4, USPieces, spaceNames(game.spaces filter (!_.isNorthVietnam)))
+    loggingControlChanges {
+      placeOutOfPlayPiecesOnMap(faction, 4, USPieces, spaceNames(game.spaces filter (!_.isNorthVietnam)))
+    }
   }
 
   def shadedEffective(faction: Faction): Boolean = game.totalOnMap(_.pieces.totalOf(USPieces)) > 0

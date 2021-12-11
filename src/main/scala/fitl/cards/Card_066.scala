@@ -95,7 +95,7 @@ object Card_066 extends EventCard(66, "Ambassador Taylor",
       increaseUsAid(9)
       increaseResources(ARVN, 9)
       action match {
-        case USOOP     => placeOutOfPlayPiecesOnMap(faction, 2, USPieces, SouthVietnam)
+        case USOOP     => loggingControlChanges(placeOutOfPlayPiecesOnMap(faction, 2, USPieces, SouthVietnam))
         case PATRONAGE => decreasePatronage(3)
         case NOTHING   => 
       }

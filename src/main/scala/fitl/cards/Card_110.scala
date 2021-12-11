@@ -41,6 +41,17 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Respite: Place 2 Casualties onto the map.
+// All Rangers and Irregulars Underground.
+//
+// Shaded Text
+// Charlie bugs out: Flip all VC and NVA Guerrillas Underground.
+//
+// Tips
+// The unshaded text allows selection of any 2 pieces from the Casualties box—Troops,
+// Irregulars, or Bases—and their placement into any map spaces where they may stack (1.4.2).
+
 object Card_110 extends EventCard(110, "No Contact",
   DualEvent,
   List(VC, NVA, ARVN, US),
@@ -49,10 +60,29 @@ object Card_110 extends EventCard(110, "No Contact",
           NVA  -> (Performed   -> Shaded),
           VC   -> (NotExecuted -> Shaded))) {
 
+  val ActiveSpecials = Set(Irregulars_A, Rangers_A)
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    game.casualties.nonEmpty ||
+    (game.spaces exists (_.pieces.has(ActiveSpecials)))
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val num = game.casualties.total min 2
+    val validSpaces = spaceNames(game.spaces filterNot (_.isNorthVietnam))
+
+    loggingControlChanges {
+      if (num > 0)
+        placeCasualtyPiecesOnMap(faction, num, Set(USTroops, USBase, Irregulars_U), validSpaces)
+
+      for (sp <- game.spaces)
+        hidePieces(sp.name, sp.pieces.only(ActiveSpecials))
+    }
+  }
+
+  def shadedEffective(faction: Faction): Boolean = game.spaces exists (_.pieces.has(ActiveGuerrillas))
+
+  def executeShaded(faction: Faction): Unit = {
+      for (sp <- game.spaces)
+        hidePieces(sp.name, sp.pieces.only(ActiveGuerrillas))
+  }
 }

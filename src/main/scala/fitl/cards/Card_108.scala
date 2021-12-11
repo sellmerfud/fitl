@@ -41,6 +41,17 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Public furor sparks enlistment: If fewer than 3 Casualty pieces,
+// 3 US Troops from out of play to Available.
+//
+// Shaded Text
+// Recruiting sags: Move 1 US Troop per Casualty piece, to a maximum of 3,
+// from Available to out of play.
+//
+// Tips
+// "Pieces" include Bases.
+
 object Card_108 extends EventCard(108, "Draft Dodgers",
   DualEvent,
   List(VC, NVA, ARVN, US),
@@ -50,9 +61,35 @@ object Card_108 extends EventCard(108, "Draft Dodgers",
           VC   -> (NotExecuted -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    game.casualties.total < 3 &&
+    game.outOfPlay.has(USTroops)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val numCasualties = game.casualties.total
+    val numTroops     = game.outOfPlay.totalOf(USTroops) min 3
+
+    if (numCasualties >= 3)
+      log(s"Event has no effect because there are $numCasualties casualties")
+    else if (numTroops == 0)
+      log(s"Event has no effect because there are no Out of Play US Troops")
+    else
+      moveOutOfPlayToAvailable(Pieces(usTroops = numTroops))
+  }
+
+  def shadedEffective(faction: Faction): Boolean =
+    game.casualties.total > 0 &&
+    game.availablePieces.has(USTroops)
+
+  def executeShaded(faction: Faction): Unit = {
+    val numCasualties = game.casualties.total min 3
+    val numTroops     = game.availablePieces.totalOf(USTroops) min numCasualties
+
+    if (numCasualties == 0)
+      log(s"Event has no effect because there are no casualties")
+    else if (numTroops == 0)
+      log(s"Event has no effect because there are Available US Troops")
+    else
+      moveAvailableToOutOfPlay(Pieces(usTroops = numTroops))
+  }
 }

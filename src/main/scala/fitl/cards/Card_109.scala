@@ -41,6 +41,18 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Party control of NLF draws anti-communist reaction: 
+// Shift each City with VC 1 level toward Active Support.
+//
+// Shaded Text
+// National Liberation Front leader: Place a VC Base and
+// a VC Guerrilla in Saigon. Stay Eligible.
+//
+// Tips
+// The VC Base cannot be placed if there are already 2 of any
+//  Factions’ Bases in Saigon (1.4.2, 5.1.1).
+
 object Card_109 extends EventCard(109, "Nguyen Huu Tho",
   DualEvent,
   List(VC, NVA, ARVN, US),
@@ -49,10 +61,49 @@ object Card_109 extends EventCard(109, "Nguyen Huu Tho",
           NVA  -> (NotExecuted -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
+  val unshadedCandidate = (sp: Space) =>
+    sp.isCity &&
+    sp.pieces.has(VCPieces) &&
+    sp.support < ActiveSupport
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.citySpaces exists unshadedCandidate
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val canidates = game.citySpaces filter unshadedCandidate
+
+    if (canidates.isEmpty)
+      log("There are no city spaces that qualify for the event")
+    else
+      loggingPointsChanges {
+        for (sp <- canidates)
+          increaseSupport(sp.name, 1)
+      }
+  }
+
+  def askRemove(pieceType: PieceType): Boolean = {
+    Human.numToPlace(pieceType: PieceType, 1) == 1
+  }
+
+  def shadedEffective(faction: Faction): Boolean =
+    game.availablePieces.has(VCGuerrillas_U) ||
+    (game.availablePieces.has(VCBase) && game.getSpace(Saigon).canTakeBase)
+
+  def executeShaded(faction: Faction): Unit = {
+    val canRemove     = faction == VC && game.isHuman(VC)
+    val canTakeBase   = game.getSpace(Saigon).canTakeBase
+    val haveBase      = game.availablePieces.has(VCBase)
+    val haveGuerrilla = game.availablePieces.has(VCGuerrillas_U)
+    var toPlace       = Pieces()
+
+    if (canTakeBase && (haveBase || (canRemove && askRemove(VCBase))))
+        toPlace = toPlace.add(1, VCBase)
+
+    if (haveGuerrilla || (canRemove && askRemove(VCGuerrillas_U)))
+      toPlace = toPlace.add(1, VCGuerrillas_U)
+
+    placePieces(Saigon, toPlace)
+
+    println()
+    remainEligibleNextTurn(faction)
+  }
 }

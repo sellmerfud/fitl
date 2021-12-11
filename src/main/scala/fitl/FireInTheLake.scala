@@ -3556,7 +3556,7 @@ object FireInTheLake {
     // Next find all eligible human factions
     // that could play their pivotal event without
     // being trumped by the Bot.
-    val pivotHumans = eligible.takeWhile { faction =>
+    val pivotHumans = (eligible filter game.isHuman).takeWhile { faction =>
       pivotBot match {
         case Some(bot) => bot != faction
         case None      => true

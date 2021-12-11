@@ -41,6 +41,17 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Gruesome protests close elite ranks: Patronage +3 or, if Saigon at Active Support, +6.
+//
+// Shaded Text
+// Anti-regime self-immolation: Shift Saigon 1 level toward Active Opposition. Aid –12.
+//
+// Tips
+// Adjust the ARVN victory marker (COIN Control + Patronage) when increasing or decreasing Patronage,
+// the US victory marker (Support + Available) if changing Support, and the VC victory marker
+// (Opposition + Bases) if adding Opposition.
+
 object Card_107 extends EventCard(107, "Burning Bonze",
   DualEvent,
   List(VC, NVA, ARVN, US),
@@ -50,9 +61,20 @@ object Card_107 extends EventCard(107, "Burning Bonze",
           VC   -> (Critical    -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.patronage < EdgeTrackMax
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val num = if (game.getSpace(Saigon).support == ActiveSupport) 6 else 3
+
+    increasePatronage(num)
+  }
+
+  def shadedEffective(faction: Faction): Boolean =
+    (game.getSpace(Saigon).support != ActiveOpposition) ||
+    (game.trackResources(ARVN) && game.usAid > 0)
+
+  def executeShaded(faction: Faction): Unit = {
+    decreaseSupport(Saigon, 1)
+    decreaseUsAid(12)
+  }
 }

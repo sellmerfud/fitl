@@ -63,6 +63,7 @@ object Card_109 extends EventCard(109, "Nguyen Huu Tho",
 
   val unshadedCandidate = (sp: Space) =>
     sp.isCity &&
+    sp.canHaveSupport &&
     sp.pieces.has(VCPieces) &&
     sp.support < ActiveSupport
 

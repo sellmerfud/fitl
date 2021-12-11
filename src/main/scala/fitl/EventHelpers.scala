@@ -64,13 +64,7 @@ object EventHelpers {
       numExposedInsurgents(sp.pieces) > 0
 
   def airStrikeEffective: Boolean = {
-    val prohibited = momentumInPlay(Mo_RollingThunder) ||
-                     momentumInPlay(Mo_DaNang)         ||
-                     momentumInPlay(Mo_BombingPause)
-
-    if (prohibited)
-      false
-    else if (capabilityInPlay(ArcLight_Unshaded))
+    if (capabilityInPlay(ArcLight_Unshaded))
       game.spaces exists (sp => numExposedInsurgents(sp.pieces) > 0)
     else
       game.spaces exists canAirStrike

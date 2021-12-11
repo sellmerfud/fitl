@@ -41,6 +41,19 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Counter-sanctuary chemical: All Insurgents in Jungle go Active.
+// US free Air Strikes among up to any 2 Jungle spaces (no effect on Trail).
+//
+// Shaded Text
+// Industrial defoliation: Shift each Jungle and Highland with Insurgents 1 level
+// toward Active Opposition.
+//
+// Tips
+// For the unshaded text, the US decides the details of the Air Strike but may not
+// Degrade the Trail. For shaded, a Province with 0 Population cannot be shifted
+// from Neutral (1.6).
+
 object Card_111 extends EventCard(111, "Agent Orange",
   DualEvent,
   List(VC, ARVN, US, NVA),
@@ -50,9 +63,51 @@ object Card_111 extends EventCard(111, "Agent Orange",
           VC   -> (Critical    -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  val unshadedCandidate = (sp: Space) =>
+    sp.isJungle &&
+    sp.pieces.has(UndergroundGuerrillas)
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean =
+    (game.nonLocSpaces exists unshadedCandidate) ||
+    airStrikeEffective
+
+  def executeUnshaded(faction: Faction): Unit = {
+    val candidates = game.nonLocSpaces filter unshadedCandidate
+
+    for (sp <- candidates)
+      revealPieces(sp.name, sp.pieces.only(UndergroundGuerrillas))
+    
+    val jungles = spaceNames(game.nonLocSpaces filter (_.isJungle)).toSet
+    val params = Params(
+      event     = true,
+      free      = true,
+      maxSpaces = Some(2),
+      airstrike = AirStrikeParams(canDegradeTrail = false, designated = Some(jungles)))
+
+      if (game.isHuman(US))
+        Human.doAirStrike(params)
+      else
+        US_Bot.airStrikeActivity(params)
+  }
+
+  val shadedCandidate = (sp: Space) =>
+    (sp.isJungle || sp.isHighland) &&
+    sp.canHaveSupport &&
+    sp.support > ActiveOpposition &&
+    sp.pieces.has(InsurgentPieces)
+
+  def shadedEffective(faction: Faction): Boolean =
+    game.nonLocSpaces exists shadedCandidate
+
+  def executeShaded(faction: Faction): Unit = {
+    val candidates = game.nonLocSpaces filter shadedCandidate
+
+    if (candidates.isEmpty)
+      log("There are no spaces that qualify for the event")
+    else
+      loggingPointsChanges {
+        for (sp <- candidates)
+          decreaseSupport(sp.name, 1)
+      }
+  }
 }

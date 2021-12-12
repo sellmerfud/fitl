@@ -2749,7 +2749,7 @@ object Human {
       AirLift::AirStrike::Nil
     else
       Transport::Raid::Nil
-    var sweepSpaces     = Set.empty[String]
+    var sweepSpaces     = params.sweep.explicitSpaces
     var activatedSpaces = Set.empty[String]
     var cobrasSpaces    = Set.empty[String]
     val alreadyMoved    = new MovingGroups()
@@ -2792,7 +2792,7 @@ object Human {
       }
 
       val choices = (destCandidates map (name => name -> name)) :+ ("finished" -> "Finished moving troops")
-      askMenu(choices, "\nMove cubes to:").head match {
+      askMenu(choices, "\nSweep Troops into:").head match {
         case "finished" =>
         case name =>
           moveTroopsTo(name)
@@ -2854,31 +2854,40 @@ object Human {
       val canRest = candidates.size > 1 && activatedSpaces.nonEmpty
 
       if (candidates.nonEmpty) {
-        val topChoices = List(
-          choice(canAll,     "all",      "Activate guerrillas in all sweep spaces"),
-          choice(canRest,    "rest",     "Activate guerrillas in the rest of the sweep spaces"),
-          choice(canSpecial, "special",  "Perform a Special Activity")
-        ).flatten
-        val spaceChoices = candidates map (n => n -> s"Activate guerrillas in $n")
-        val choices = topChoices ::: spaceChoices
-
-        askMenu(choices, "\nSweep activation:").head match {
-          case "all" | "rest" =>
-            for (name <- candidates) {
+        if (canSpecial) {
+          val topChoices = List(
+            choice(canAll,     "all",      "Activate guerrillas in all Sweep spaces"),
+            choice(canRest,    "rest",     "Activate guerrillas in the rest of the Sweep spaces"),
+            choice(canSpecial, "special",  "Perform a Special Activity")
+          ).flatten
+          val spaceChoices = candidates map (n => n -> s"Activate guerrillas in $n")
+          val choices = topChoices ::: spaceChoices
+  
+          askMenu(choices, "\nSweep activation:").head match {
+            case "all" | "rest" =>
+              for (name <- candidates) {
+                activateGuerrillasForSweep(name, faction, params.cubeTreatment)
+                checkShadedBoobyTraps(name, faction)
+                activatedSpaces = activatedSpaces + name
+              }
+  
+            case "special" =>
+              executeSpecialActivity(faction, params, specialActivities)
+              activateGuerrillas()
+  
+            case name =>
               activateGuerrillasForSweep(name, faction, params.cubeTreatment)
               checkShadedBoobyTraps(name, faction)
               activatedSpaces = activatedSpaces + name
-            }
-
-          case "special" =>
-            executeSpecialActivity(faction, params, specialActivities)
-            activateGuerrillas()
-
-          case name =>
+              activateGuerrillas()
+          }
+        }
+        else {
+          for (name <- candidates) {
             activateGuerrillasForSweep(name, faction, params.cubeTreatment)
             checkShadedBoobyTraps(name, faction)
             activatedSpaces = activatedSpaces + name
-            activateGuerrillas()
+          }
         }
       }
       else if (activatedSpaces.isEmpty)
@@ -2896,7 +2905,8 @@ object Human {
       logOpChoice(faction, Sweep, notes)
 
 
-    selectSweepSpace()
+    if (sweepSpaces.isEmpty)
+      selectSweepSpace()
     moveTroops()
     if (sweepSpaces.nonEmpty)
       activateGuerrillas()

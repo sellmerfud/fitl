@@ -4555,7 +4555,7 @@ object Bot {
     //
     //  Sweep not allowed in Monsoon.
     def sweepOp(params: Params, actNum: Int): Option[CoinOp] = {
-      val cubeTypes = sweepCubeTypes(US, params.cubeTreatment)
+      val cubeTypes = sweepCubeTypes(ARVN, params.cubeTreatment)
       if (!params.event && game.inMonsoon)
         None
       else {

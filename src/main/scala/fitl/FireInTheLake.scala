@@ -645,7 +645,10 @@ object FireInTheLake {
         log(s"\nActivating guerrillas in $name")
         log(separator())
       }
-      val guerrillas = askPieces(sp.pieces, num, UndergroundGuerrillas)
+      val guerrillas = if (game.isHuman(faction))
+        askPieces(sp.pieces, num, UndergroundGuerrillas)
+      else
+        Bot.selectEnemyRemoveReplaceActivate(sp.pieces.only(UndergroundGuerrillas), num)
       revealPieces(name, guerrillas)
     }
   }
@@ -1756,6 +1759,10 @@ object FireInTheLake {
     maxAmbush: Option[Int ]  = None
   )
 
+  case class SweepParams(
+    explicitSpaces: Set[String] = Set.empty  // Used by Human only, for bot use Params.onlyIn
+  )
+
   // Some events treat all cubes as US Troops
   // Some event treat all troops as US Troops
   sealed trait CubeTreatment
@@ -1792,6 +1799,7 @@ object FireInTheLake {
     event: Boolean               = false,
     airstrike: AirStrikeParams   = AirStrikeParams(),
     airlift: AirLiftParams       = AirLiftParams(),
+    sweep: SweepParams           = SweepParams(),
     assault: AssaultParams       = AssaultParams(),
     march:   MarchParams         = MarchParams(),
     rally:   RallyParams         = RallyParams(),

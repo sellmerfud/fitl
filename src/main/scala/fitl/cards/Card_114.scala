@@ -41,6 +41,17 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Buddhists counter Communists: Set up to 3 Neutral or Opposition Cities
+// to Passive Support.
+//
+// Shaded Text
+// People’s Revolutionary Committee: Shift Hue, Da Nang, and Saigon 1 level
+// toward Active Opposition. Place a VC piece in Saigon.
+//
+// Tips
+// A "piece" may be a Base.
+
 object Card_114 extends EventCard(114, "Tri Quang",
   DualEvent,
   List(VC, ARVN, US, NVA),
@@ -49,10 +60,76 @@ object Card_114 extends EventCard(114, "Tri Quang",
           NVA  -> (NotExecuted -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
+  val unshadedCandidate = (sp: Space) =>
+    sp.isCity &&
+    sp.support < PassiveSupport
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = game.citySpaces exists unshadedCandidate
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val candidates = game.citySpaces filter unshadedCandidate
+    
+    if (candidates.isEmpty)
+      log("There are no cities that qualify for the event")
+    else {
+      val maxNum         = candidates.size min 3
+      val selectedCities = if (game.isHuman(faction)) {
+        val num = askInt("Set how many cities to Passive Support", 0, maxNum)
+        if (num == 0)
+          Nil
+        else
+          askSimpleMenu(spaceNames(candidates), s"\nSelect ${amountOf(num, "City", Some("Cities"))}:", numChoices = num)
+      }
+      else if (faction == US)
+        Bot.pickSpaces(maxNum, candidates)(US_Bot.pickSpaceTowardActiveSupport) map (_.name)
+      else
+        Bot.pickSpaces(maxNum, candidates)(ARVN_Bot.pickSpaceTowardPassiveSupport) map (_.name)
+
+      println()
+      loggingPointsChanges {
+        for (name <- selectedCities)
+          setSupport(name, PassiveSupport)
+      }
+    }
+  }
+
+  def shadedCandidates = spaces(Hue::DaNang::Saigon::Nil) filter (_.support > ActiveOpposition)
+
+  def shadedEffective(faction: Faction): Boolean =
+    shadedCandidates.nonEmpty ||
+    game.availablePieces.has(VCGuerrillas_U) ||
+    (game.availablePieces.has(VCBase) && game.getSpace(Saigon).canTakeBase)
+
+  def executeShaded(faction: Faction): Unit = {
+    val saigon   = game.getSpace(Saigon)
+    val pool     = if (game.isHuman(faction) && faction == VC) game.piecesToPlace else game.availablePieces
+    val haveBase = pool.has(VCBase) && saigon.canTakeBase
+    val haveG    = pool.has(VCGuerrillas_U)
+
+    val toPlace = if (game.isHuman(faction)) {
+      (haveBase, haveG) match {
+        case (true, true) =>
+          val choices = List(Pieces(vcBases = 1) -> "VC Base", Pieces(vcGuerrillas_U = 1) -> "VC Guerrilla")
+          askMenu(choices, "\nChoose piece to place in Saigon").head
+        case (true, false)  => Pieces(vcBases = 1)
+        case (false, true)  => Pieces(vcGuerrillas_U = 1)
+        case (false, false) => Pieces()
+      }
+    }
+    else if (haveBase && (saigon.support < PassiveSupport || !haveG))
+      Pieces(vcBases = 1)
+    else if (haveG)
+      Pieces(vcGuerrillas_U = 1)
+    else
+      Pieces()
+    
+    println()
+    loggingControlChanges {
+      for (sp <- shadedCandidates)
+        decreaseSupport(sp.name, 1)
+  
+      log()
+      placePieces(Saigon, toPlace)
+    }
+  }
 }

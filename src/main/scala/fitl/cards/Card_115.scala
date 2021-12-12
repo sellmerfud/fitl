@@ -41,6 +41,15 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Single Event Text
+// Year of storms: Until Coup, no Air Lift, Transport, or Bombard, and all other
+// Special Activities are maximum 1 space. Executing Faction stays Eligible.
+//
+// MOMENTUM
+// Tips
+// Air Strike can still Degrade the Trail in addition to affecting 1 space. When “Typhoon Kate”
+// is in effect during Monsoon, no Air Lift is allowed, and Air Strike is limited to 1 space not 2 (5.1.1).
+
 object Card_115 extends EventCard(115, "Typhoon Kate",
   SingleEvent,
   List(VC, ARVN, US, NVA),
@@ -50,8 +59,8 @@ object Card_115 extends EventCard(115, "Typhoon Kate",
           VC   -> (NotExecuted -> Unshaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = singleNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
+  def executeUnshaded(faction: Faction): Unit = playMomentum(Mo_TyphoonKate)
 
   // Single event - These functions are not used
   def shadedEffective(faction: Faction): Boolean = false

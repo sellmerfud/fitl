@@ -41,6 +41,21 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// VC CAPABILITY
+//
+// Unshaded Text
+// Manpower to political sections: VC to Terror or Agitate must remove
+// 2 VC Guerrillas per space.
+//
+// Shaded Text
+// NLF village committees: VC Rally in 1 space where VC already had a Base
+// may Agitate as if Support Phase even if COIN Control.
+//
+// Tips
+// For the unshaded effect, if VC have fewer than 2 Guerrillas in a space,
+// they may not execute Terror or Agitate there, until they do have 2 Guerrillas
+// there to remove.
+
 object Card_116 extends EventCard(116, "Cadres",
   DualEvent,
   List(VC, ARVN, NVA, US),
@@ -50,9 +65,11 @@ object Card_116 extends EventCard(116, "Cadres",
           VC   -> (Critical    -> Shaded))) {
 
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def unshadedEffective(faction: Faction): Boolean = true
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = playCapability(Cadres_Unshaded)
+
+  def shadedEffective(faction: Faction): Boolean = true
+
+  def executeShaded(faction: Faction): Unit = playCapability(Cadres_Shaded)
 }

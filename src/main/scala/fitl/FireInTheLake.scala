@@ -2250,6 +2250,10 @@ object FireInTheLake {
     b += separator()
     val leaderFlip = if (game.rvnLeaderFlipped) " (flipped face down)" else ""
     b += s"RVN Leader     : ${game.currentRvnLeader}$leaderFlip"
+    if (game.rvnLeaders.size > 1) {
+      wrap("Past Leaders   : ", game.rvnLeaders.tail) foreach (b += _)
+      b += separator()
+    }
     if (game.cardsDrawn > 0) {
       b += s"Current card   : ${eventDeck(game.currentCard).fullString}"
       if (game.onDeckCard > 0) {

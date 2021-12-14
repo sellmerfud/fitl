@@ -41,6 +41,21 @@ import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
 
+// Unshaded Text
+// Initial support: Move US pieces from out of play to map:
+// - 4 if 0-2 cards in RVN Leader box
+// - 2 if 3-5 cards in RVN Leader box
+//
+// Shaded Text
+// Building skepticism: US Troop Casualties up to cards in RVN Leader
+// box plus all US Base Casualties go out of play.
+//
+// Tips
+// "Pieces" can include Bases. For the shaded text, count the number of Coup cards
+// (including any "Failed Attempt" cards) in the RVN Leader box: the executing Faction
+// selects that number of non-Base pieces in the Casualties box—in addition to all
+// Bases there—to move to the Out of Play box.
+
 object Card_120 extends EventCard(120, "US Press Corps",
   DualEvent,
   List(VC, ARVN, NVA, US),
@@ -49,10 +64,27 @@ object Card_120 extends EventCard(120, "US Press Corps",
           NVA  -> (Performed   -> Shaded),
           VC   -> (NotExecuted -> Shaded))) {
 
+  def unshadedEffective(faction: Faction): Boolean = game.outOfPlay.has(USPieces)
 
-  def unshadedEffective(faction: Faction): Boolean = false
-  def executeUnshaded(faction: Faction): Unit = unshadedNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val num = if (game.numCardsInLeaderBox < 3) 4 else 2
+    val validSpaces = spaceNames(game.spaces filterNot (_.isNorthVietnam)) 
+    
+    if (!game.outOfPlay.has(USPieces))
+      log("There are no Out of Play US Pieces")
+    else
+      placeOutOfPlayPiecesOnMap(faction, num, USPieces, validSpaces)
+  }
 
-  def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def shadedEffective(faction: Faction): Boolean =
+    game.casualties.has(USBase) ||
+    (game.numCardsInLeaderBox > 0 && game.casualties.has(USTroops))
+
+  def executeShaded(faction: Faction): Unit = {
+    val numTroops = game.numCardsInLeaderBox min game.casualties.totalOf(USTroops)
+    val numBases  = game.casualties.totalOf(USBase)
+    val pieces    = Pieces(usTroops = numTroops, usBases = numBases)
+
+    moveCasualtiesToOutOfPlay(pieces)
+  }
 }

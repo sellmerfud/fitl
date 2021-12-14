@@ -39,21 +39,7 @@ import FireInTheLake._
 import Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 
 object EventHelpers {
-  // Temporary Functions
-  def unshadedNotYet(): Unit = {
-    log(s"\n${eventDeck(game.currentCard)}: Unshaded event not yet implemented")
-  }
-  
-  def shadedNotYet(): Unit = {
-    log(s"\n${eventDeck(game.currentCard)}: Shaded event not yet implemented")
-  }
-  def singleNotYet(): Unit = {
-    log(s"\n${eventDeck(game.currentCard)}: Event not yet implemented")
-  }
-  def coupNotYet(): Unit = {
-    log(s"\n${eventDeck(game.currentCard)}: Coup event not yet implemented")
-  }
-  
+  // Temporary Functions  
   def pivotalNotYet(faction: Faction): Unit = {
     log(s"\n${eventDeck(game.currentCard)}: $faction pivotal event not yet implemented")
   }

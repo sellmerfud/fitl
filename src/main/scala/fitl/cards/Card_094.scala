@@ -166,5 +166,5 @@ object Card_094 extends EventCard(94, "Tunnel Rats",
 
   // Single event - These functions are not used
   def shadedEffective(faction: Faction): Boolean = false
-  def executeShaded(faction: Faction): Unit = shadedNotYet()
+  def executeShaded(faction: Faction): Unit = ()
 }

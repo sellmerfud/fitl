@@ -664,7 +664,7 @@ object Bot {
 
       // SearchAndDestroy_Shaded
       //    Each US and ARVN assault Province shifts support one level toward Active Opposition
-      if (searchDestroy && sp.isProvince && sp.population > 0 && sp.support != ActiveOpposition) {
+      if (searchDestroy && sp.isProvince && sp.canHaveSupport && sp.support != ActiveOpposition) {
         log(s"\nEach assault shifts support toward Active Opposition [$SearchAndDestroy_Shaded]")
         decreaseSupport(name, 1)
       }
@@ -767,7 +767,7 @@ object Bot {
     sp => {
       val numUS = sp.pieces.totalOf(USTroops::Irregulars)
       val numUnderground = sp.pieces.totalOf(UndergroundGuerrillas)
-      !sp.isLoC && sp.population > 0 && sp.support > Neutral && numUS < numUnderground
+      !sp.isLoC && sp.canHaveSupport && sp.support > Neutral && numUS < numUnderground
     }
   )
 
@@ -778,7 +778,7 @@ object Bot {
 
   val CityProvinceNoActiveSupport = new BooleanPriority[Space](
     "City or Province not at Active Support",
-    sp => !sp.isLoC && sp.population > 0 && sp.support != ActiveSupport
+    sp => !sp.isLoC && sp.canHaveSupport && sp.support != ActiveSupport
   )
 
   val PoliceWithoutUSTroops = new BooleanPriority[Space](
@@ -973,7 +973,7 @@ object Bot {
 
   val CityProvinceNoActiveOpposition = new BooleanPriority[Space](
     "City or Province not at Active Opposition",
-    sp => !sp.isLoC && sp.population > 0 && sp.support != ActiveOpposition
+    sp => !sp.isLoC && sp.canHaveSupport && sp.support != ActiveOpposition
   )
 
   val CityProvinceFewestVCPieces = new LowestScore[Space](
@@ -1671,7 +1671,7 @@ object Bot {
     import params._
     val desc = "Keep 1 Undeground VC Guerrilla in 1+ Pop space not at Active Opposition"
 
-    if (!origin.isLoC && origin.population > 0 && origin.support != ActiveOpposition) {
+    if (!origin.isLoC && origin.canHaveSupport && origin.support != ActiveOpposition) {
       val numNow  = (origin.pieces - candidates).totalOf(VCGuerrillas_U)
 
       if (numNow > 0) {
@@ -2542,7 +2542,7 @@ object Bot {
 
     def twoOrMoreSpacesWithSupportAndUndergroundGuerrillas: Boolean =
       game.nonLocSpaces exists { sp =>
-        sp.population > 0           &&
+        sp.canHaveSupport           &&
         sp.support > Neutral        &&
         sp.pieces.has(UndergroundGuerrillas)
       }
@@ -4732,7 +4732,7 @@ object Bot {
         sp.name == Saigon
       val isCandidate = (sp: Space) =>
         !prohibited(sp)   &&
-        sp.population > 0 &&
+        sp.canHaveSupport &&
         sp.coinControlled &&
         sp.support > Neutral
 
@@ -5669,7 +5669,7 @@ object Bot {
       val isCandidate = (sp: Space) => {
         (sp.pieces.has(NVAGuerrillas_U) || sp.pieces.has(NVATroops)) &&
         ((sp.isLoC && sp.terror == 0 && sp.printedEconValue > 0) ||
-         (!sp.isLoC && sp.population > 0 && (sp.terror == 0 || sp.support > Neutral)))
+         (!sp.isLoC && sp.canHaveSupport && (sp.terror == 0 || sp.support > Neutral)))
       }
 
       def nextTerror(numRemaining: Int, candidates: List[Space], needActivation: Boolean): Unit = {
@@ -6043,14 +6043,14 @@ object Bot {
       def nextShift(numRemaining: Int): Unit = if (numRemaining > 0) {
         val candidates1 = game.nonLocSpaces filter { sp =>
           !shiftSpaces(sp.name)         &&
-          sp.population > 0             &&
+          sp.canHaveSupport             &&
           sp.population <= numRemaining &&
           sp.support == PassiveSupport  &&
           sp.pieces.has(VCBases)
         }
         val candidates2 = game.nonLocSpaces filter { sp =>
           !shiftSpaces(sp.name)         &&
-          sp.population > 0             &&
+          sp.canHaveSupport             &&
           sp.population <= numRemaining &&
           sp.support > ActiveOpposition
         }
@@ -6373,7 +6373,7 @@ object Bot {
         val needed = if (sp.pieces.has(VCBases)) 2 else 1
         sp.pieces.totalOf(VCGuerrillas_U) >= needed &&
         ((sp.isLoC && sp.terror == 0 && sp.printedEconValue > 0) ||
-         (!sp.isLoC && sp.population > 0 && (sp.terror == 0 || sp.support != ActiveOpposition)))
+         (!sp.isLoC && sp.canHaveSupport && (sp.terror == 0 || sp.support != ActiveOpposition)))
       }
 
       def nextTerror(numRemaining: Int, candidates: List[Space], needActivation: Boolean): Unit = {

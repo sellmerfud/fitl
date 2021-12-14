@@ -581,7 +581,7 @@ object Human {
       def nextShift(numRemaining: Int): Unit = if (numRemaining > 0) {
         val candidates = spaceNames(game.nonLocSpaces filter { sp =>
           !shiftSpaces(sp.name)         &&
-          sp.population >  0            &&
+          sp.canHaveSupport             &&
           sp.population <= numRemaining &&
           sp.support > ActiveOpposition
         })
@@ -1485,7 +1485,7 @@ object Human {
         params.spaceAllowed(sp.name) &&
         !sp.isLoC            &&
         sp.coinControlled    &&
-        sp.population > 0    &&
+        sp.canHaveSupport    &&
         sp.support > Neutral &&
         sp.name != Saigon    &&
         !Special.trainingSpaces(sp.name) &&
@@ -3022,7 +3022,7 @@ object Human {
 
       // SearchAndDestroy_Shaded
       //    Each US and ARVN assault Province shifts support one level toward Active Opposition
-      if (searchDestroy && sp.isProvince && sp.population > 0 && sp.support != ActiveOpposition) {
+      if (searchDestroy && sp.isProvince && sp.canHaveSupport && sp.support != ActiveOpposition) {
         log(s"\nEach assault shifts support toward Active Opposition [$SearchAndDestroy_Shaded]")
         decreaseSupport(name, 1)
       }
@@ -3636,7 +3636,7 @@ object Human {
     def nextTerrorAction(): Unit = {
       val hasTheCash   = params.free || game.resources(faction) > 0
       var canTerrorize = (sp: Space) => {
-        val canTerror = sp.isLoC || sp.population > 0
+        val canTerror = sp.isLoC || sp.canHaveSupport
         val canPay    = sp.isLoC || hasTheCash
         val hasPiece  = faction match {
           case VC if cadres => sp.pieces.has(VCGuerrillas_U) && sp.pieces.totalOf(VCGuerrillas) > 1

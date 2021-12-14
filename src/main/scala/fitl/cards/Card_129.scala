@@ -46,9 +46,35 @@ object Card_129 extends EventCard(129, "Coup! Failed Attempt", SingleEvent, List
   // This function is not used for Coup Cards
   def unshadedEffective(faction: Faction): Boolean = false
 
+  val isCandidate = (sp: Space) => sp.pieces.totalOf(ARVNCubes) > 2
+
   // Coup round event
   // ARVN removes 1 in 3 of its cubes per space (rounded down)
-  def executeUnshaded(faction: Faction): Unit = coupNotYet()
+  def executeUnshaded(faction: Faction): Unit = {
+    val candidates = game.spaces filter isCandidate
+
+    log("ARVN must remove 1 in 3 of its Cubes per space")
+    log()
+    if (candidates.isEmpty)
+      log("There are no spaces with 3 or more ARVN Cubes")
+    else {
+      val removals = for (sp <- candidates) yield {
+        val cubes = sp.pieces.only(ARVNCubes)
+        val num   = cubes.total / 3
+        val pieces = if (game.isHuman(ARVN))
+          askPieces(cubes, num, prompt = Some(s"Select cubes to remove from ${sp.name}"))
+        else
+          Bot.selectFriendlyRemoval(cubes, num)
+
+        (sp.name, pieces)
+        }
+
+      loggingControlChanges {
+        for ((name, pieces) <- removals)
+          removePieces(name, pieces)
+      }
+    }
+  }
 
   def shadedEffective(faction: Faction): Boolean = false
   def executeShaded(faction: Faction): Unit = ()

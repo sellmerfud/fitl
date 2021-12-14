@@ -2834,7 +2834,7 @@ object FireInTheLake {
     // Place the leader card in the Leader Box
     placeLeader()
 
-    val gameOver = if (isFailedCoup) {
+    val gameOver = if (game.prevCardWasCoup) {
       //  We just drew a Coup! card immediately after a Coup round.
       //  We resolve the RVN Leader and any immediate effects from
       //  the Coup event,  but we do not conduct a Coup Round.
@@ -2924,7 +2924,7 @@ object FireInTheLake {
     log("\nSabotage LoCs")
     log(separator())
     if (sabotageCandidates.isEmpty)
-      log("There are not LoCs that can be sabotaged")
+      log("There are no LoCs that can be sabotaged")
     else if (game.terrorMarkersAvailable == 0)
       log("There are no sabotage markers available")
     else {

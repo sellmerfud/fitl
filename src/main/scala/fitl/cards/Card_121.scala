@@ -48,6 +48,11 @@ import fitl.Human
 // Unrestricted air war: NVA removes 2 Bases, reduces Resources to half
 // (round down), Ineligible through next card.
 // 3 US Casualties to Available.
+//
+// Tips
+// Do not count Duong Van Minh—an RVN leader but not a card—for the precondition (2.4.1).
+// The NVA Faction decides which 2 of its Bases to remove, then loses Resources and is
+// marked Ineligible. The US decides which Casualties (including Bases) then move to Available.
 
 object Card_121 extends EventCard(121, "Linebacker II",
   SingleEvent,
@@ -63,7 +68,46 @@ object Card_121 extends EventCard(121, "Linebacker II",
     game.numCardsInLeaderBox >= 2 && game.usPoints > threshold
   }
 
-  def executeUnshaded(faction: Faction): Unit = pivotalNotYet(US)
+  def executeUnshaded(faction: Faction): Unit = {
+    val numBases     = game.totalOnMap(_.pieces.totalOf(NVABases)) min 2
+    val usCasualties = game.casualties.only(USPieces)
+    val numUS        = usCasualties.total min 3
+
+    log("\nNVA must remove 2 Bases from the map")
+    log(separator(char = '='))
+    if (numBases == 0)
+      log("There are no NVA Bases on the map")
+    else
+      removePiecesFromMap(NVA, numBases, Seq(NVABase, NVATunnel),
+                          friendly = true,
+                          validSpaces = spaceNames(game.nonLocSpaces))
+
+
+    log("\nReduce NVA resources by half (rounded down)")
+    log(separator(char = '='))
+    if (game.trackResources(NVA))
+      decreaseResources(NVA, game.nvaResources / 2)
+    else
+      log("NVA resources are not used by the NVA Bot")
+
+    makeIneligibleThroughNextTurn(NVA)
+
+    log("\n3 US Casualties to Available")
+    log(separator(char = '='))
+    val toAvail = if (numUS == usCasualties.total)
+      usCasualties
+    else if (game.isHuman(US))
+      askPieces(usCasualties, numUS)
+    else
+      Bot.selectFriendlyToPlaceOrMove(usCasualties, numUS)
+
+    if (toAvail.isEmpty)
+      log("\nThere are no US Casualties")
+    else {
+      println()
+      moveCasualtiesToAvailable(toAvail)
+    }
+  }
 
   // Shaded functions not used for Pivotal Event  
   def shadedEffective(faction: Faction): Boolean = false

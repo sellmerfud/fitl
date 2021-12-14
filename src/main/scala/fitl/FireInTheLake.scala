@@ -3547,10 +3547,19 @@ object FireInTheLake {
 
     def askHumanPivot(factions: List[Faction], pivotBot: Option[Faction]): Option[Faction] = {
       factions match {
-        case Nil   => None
+        case Nil   =>
+          None
+
         case f::fs =>
-          pivotBot foreach { bot => println(s"\n$bot Bot plans to play its pivotal event") }
-          if (askYorN(s"\nDoes $f wish to play their Pivotal Event? (y/n) "))
+          pivotBot foreach { bot =>
+            println(s"\n$bot Bot plans to play its pivotal event")
+            println(separator())
+          }
+          val prompt = pivotBot match {
+            case None      => s"\nDoes $f wish to play their Pivotal Event? (y/n) "
+            case Some(bot) => s"\nDoes $f wish to trump $bot and play their Pivotal Event? (y/n) "
+          }
+          if (askYorN(prompt))
             Some(f)
           else
             askHumanPivot(fs, pivotBot)
@@ -3568,11 +3577,10 @@ object FireInTheLake {
     // Next find all eligible human factions
     // that could play their pivotal event without
     // being trumped by the Bot.
-    val pivotHumans = (eligible filter game.isHuman).takeWhile { faction =>
-      pivotBot match {
-        case Some(bot) => bot != faction
-        case None      => true
-      }
+
+    val pivotHumans = pivotBot match {
+      case None      => eligible filter game.isHuman
+      case Some(bot) => eligible takeWhile (_ != bot) filter game.isHuman
     }
 
     val pivotPlayer = askHumanPivot(pivotHumans, pivotBot)

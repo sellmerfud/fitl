@@ -47,6 +47,12 @@ import fitl.Human
 //
 // Invasion: NVA free Marches. Then NVA Troops on LoCs with no US/ARVN may move 1 space.
 // Then all NVA Troops free Attack.
+//
+// Tips
+// Do not count Minh as a card for the precondition. “On map” means in South Vietnam,
+// North Vietnam, Laos, and Cambodia combined. NVA March may include the usual multiple
+// moves in or out of Laos/Cambodia spaces (unless the Trail is at “0”, 3.3.2). NVA Troops
+// must Attack wherever there are enemies; NVA Guerrillas may March but do not Attack.
 
 object Card_122 extends EventCard(122, "Easter Offensive",
   SingleEvent,
@@ -56,12 +62,109 @@ object Card_122 extends EventCard(122, "Easter Offensive",
           NVA  -> (Critical    -> Unshaded),
           VC   -> (NotExecuted -> Unshaded))) {
 
+
+  def humanMoveTroops(locsWithTroops: List[String]): Unit = {
+    val moved = new MovingGroups()
+
+    def numCanMoveFrom(name: String): Int =
+      (game.getSpace(name).pieces.only(NVATroops) - moved(name)).total
+
+    val canMoveFrom = (name: String) => numCanMoveFrom(name) > 0
+
+    def moveTroopsFrom(origin: String): Unit = if (canMoveFrom(origin)) {
+      val dests = getAdjacent(origin).toList.sorted(SpaceNameOrdering)
+      val choices = (dests map (n => n ->n )) :+ "finished" -> s"Finished moving NVA Troops from $origin"
+
+      println(s"\nMoving NVA Troops off of $origin")
+      println(separator())
+      askMenu(choices, "Select destination:").head match {
+        case "finished" =>
+        case dest =>
+          val num = askInt(s"\nMove how many Troops to $dest", 0, numCanMoveFrom(origin))
+          if (num > 0) {
+            val troops = Pieces(nvaTroops = num)
+            println()
+            movePieces(troops, origin, dest)
+            moved.add(dest, troops)
+          }
+          moveTroopsFrom(origin)
+      }
+    }
+
+    def nextAction(): Unit = {
+      val origins = locsWithTroops filter canMoveFrom
+      val choices = (origins map (n => n -> n)) :+ ("finished" -> "Finished moving NVA Troops from LoCs")
+
+      askMenu(choices, "\nSelect LoC from which to move NVA Troops:").head match {
+        case "finished" =>
+        case origin     => moveTroopsFrom(origin)
+      }
+    }
+
+    nextAction()
+  }
+
+  def botMoveTroops(locsWithTroops: List[String]): Unit = {
+
+    def nextMove(locs: List[String]): Unit = locs match {
+      case Nil =>
+
+      case origin::rest if !game.getSpace(origin).pieces.has(NVATroops) =>
+        nextMove(rest)
+
+      case origin::rest =>
+        Bot.initTurnVariables()
+        val dest   = NVA_Bot.pickSpaceMarchDest(spaces(getAdjacent(origin))).name
+        val troops = Bot.movePiecesFromOneOrigin(origin, dest, NVA, EventMove(None), Set(NVATroops), Bot.NO_LIMIT, Params())
+
+        if (troops.isEmpty)
+          nextMove(rest)  // No more troops that the Bot wants to move from here
+        else {
+          movePieces(troops, origin, dest)
+          nextMove(locs)  // Retry with same origin in case there are more troops to move elsewhere
+        }
+    }
+
+    nextMove(locsWithTroops)
+  }
+
   // Is NVA pivotal event playable?
   def unshadedEffective(faction: Faction): Boolean =
     game.numCardsInLeaderBox >= 2 &&
     game.totalOnMap(_.pieces.totalOf(NVATroops)) > game.totalOnMap(_.pieces.totalOf(USTroops))
 
-  def executeUnshaded(faction: Faction): Unit = pivotalNotYet(NVA)
+  def executeUnshaded(faction: Faction): Unit = {
+    val params = Params(event = true, free = true)
+
+    log("\nNVA free Marches")
+    log(separator(char = '='))
+
+    if (game.isHuman(NVA))
+      Human.executeMarch(NVA, params)
+    else
+      NVA_Bot.marchOp(params, 6, withLoC = false, withLaosCambodia = false, easterOffensive = true)
+
+    val locsWithTroops = spaceNames(game.locSpaces filter (sp => sp.pieces.has(NVATroops) && !sp.pieces.has(CoinPieces)))
+    log("\nNVA Troops on LoCs with no US/ARVN forces may move 1 space")
+    log(separator(char = '='))
+    if (locsWithTroops.isEmpty)
+      log("There are no NVA Troops on LoCs without US/ARVN forces")
+    else if (game.isHuman(NVA))
+      humanMoveTroops(locsWithTroops)
+    else
+      botMoveTroops(locsWithTroops)
+
+    val attackSpaces = spaceNames(game.spaces filter { sp => sp.pieces.has(NVATroops) && sp.pieces.has(CoinPieces) })
+
+    log("\nAll NVA Troops free Attack")
+    log(separator(char = '='))
+    if (attackSpaces.isEmpty)
+      log("There are no spaces where NVA Troops can attack")
+    else if (game.isHuman(NVA))
+      Human.easterOffensiveAttack(attackSpaces)
+    else
+      NVA_Bot.easterOffensiveAttack(attackSpaces)
+  }
 
   // Shaded functions not used for Pivotal Event  
   def shadedEffective(faction: Faction): Boolean = false

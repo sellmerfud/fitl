@@ -826,7 +826,8 @@ object Human {
   }
 
 
-  def performAttack(name: String, faction: Faction, free: Boolean): Unit = {
+  // The 'nvaTroopOnly' flag is used duing the Easter Offensive event.
+  def performAttack(name: String, faction: Faction, free: Boolean, nvaTroopsOnly: Boolean = false): Unit = {
     val sp = game.getSpace(name)
     val guerrillas = sp.pieces.only(if (faction == NVA) NVAGuerrillas else VCGuerrillas)
     val troops     = if (faction == NVA) sp.pieces.only(NVATroops) else Pieces()
@@ -834,10 +835,14 @@ object Human {
 
     if (faction == VC && guerrillas.isEmpty)
       log(s"\nThere are no VC Guerrillas in $name to carry out the attack")
+    else if (nvaTroopsOnly && troops.isEmpty)
+      log(s"\nThere are no NVA Troops in $name to carry out the attack")
     else if (guerrillas.isEmpty && troops.isEmpty)
       log(s"\nThere are no NVA Guerrillas or Troops in $name to carry out the attack")
     else {
-      val guerrillaAttack = if (faction == NVA) {
+      val guerrillaAttack = if (nvaTroopsOnly)
+        false
+      else if (faction == NVA) {
         if (guerrillas.nonEmpty && troops.nonEmpty) {
           val choices = List("guerrillas" -> "Guerrillas", "troops" -> "Troops")
           askMenu(choices, "Attack using which units:").head == "guerrillas"
@@ -918,6 +923,10 @@ object Human {
   }
 
 
+  def easterOffensiveAttack(attackSpaces: List[String]): Unit = {
+    for (name <- attackSpaces)
+      performAttack(name, NVA, free = true, nvaTroopsOnly = true)
+  }
 
   // A human player has opted to take an action on the current card.
   def act(): Unit = {

@@ -1642,6 +1642,11 @@ object FireInTheLake {
     override def toString() = "Event Move"
   }
 
+  // Special MoveAction use by NVA PivotalEvent
+  // Allows us to tweak the Move Priorities
+  // to Move Max Troops onto LoCs adjacent to Saigon.
+  case object EasterTroops extends MoveAction
+
   case object  Train   extends CoinOp("Train")
   case object  Patrol  extends CoinOp("Patrol") with MoveAction
   case object  Sweep   extends CoinOp("Sweep")  with MoveAction
@@ -3510,24 +3515,27 @@ object FireInTheLake {
     }
   }
 
-  // Return the list of factions that may play their
-  // pivotal event.
+  // Return the list of factions that may play their pivotal event.
   // The factions are returned in the order: VC, ARVN, NVA, US
+  // (Factions in this order can Trump those that follow)
   def getPlayablePivotalEvents: List[Faction] = {
+
+    def canPlayPivotal(faction: Faction): Boolean = {
+      val pivotCard = eventDeck(faction.pivotCard)
+
+      game.pivotCardsAvailable(faction)       &&
+      game.sequence.eligibleThisTurn(faction) &&
+      pivotCard.eventEffective(faction)
+    }
+
     // Pivotal events are only available if no
     // faction has acted on the current card and
     // the next card showing is not a Coup! card.
     // For pivot cards, the eventEffection() function
     // returns true if the condition for playing the pivotal
     // event has been met.
-    if (game.sequence.numActors == 0 && !game.isCoupRound && !game.onDeckIsCoup) {
-      val factionOrder = List(VC, ARVN, NVA, US)
-      for {
-        faction  <- factionOrder
-        pivotCard =  eventDeck(faction.pivotCard)
-        if game.sequence.eligibleThisTurn(faction) && pivotCard.eventEffective(faction)
-      } yield faction
-    }
+    if (game.sequence.numActors == 0 && !game.isCoupRound && !game.onDeckIsCoup) 
+      List(VC, ARVN, NVA, US) filter canPlayPivotal
     else
       Nil
   }
@@ -3570,7 +3578,7 @@ object FireInTheLake {
     // Find the first Bot that will play their card.
     val pivotBot = eligible find { faction =>
       game.isBot(faction)           &&
-      d6 < game.numCardsInLeaderBox &&
+      // d6 < game.numCardsInLeaderBox &&   // TODO !! This is tempoarary for testing
       !currentEventIsCritical(faction)
     }
 
@@ -3597,8 +3605,10 @@ object FireInTheLake {
     if (!game.gameOver && pivotFaction.nonEmpty) {
       val faction = pivotFaction.get
 
-      log(s"\n$faction elects to play their Pivotal Event")
-      log(separator())
+      log()
+      log(separator(char = '='))
+      log(s"$faction elects to play their Pivotal Event")
+      log(separator(char = '='))
       log(s"Replace the current event card with ${eventDeck(faction.pivotCard)}")
 
       // Replace the current card with the faction's Pivotal event
@@ -5769,7 +5779,7 @@ object FireInTheLake {
 
     val savedGame = game
     nextAdjustment()
-    if (savedGame.capabilities != game.capabilities)
+    if (savedGame.momentum != game.momentum)
       saveGameState("Adjusted Momentum cards in play")
   }
 
@@ -5808,7 +5818,7 @@ object FireInTheLake {
 
     val savedGame = game
     nextAdjustment()
-    if (savedGame.capabilities != game.capabilities)
+    if (savedGame.pivotCardsAvailable != game.pivotCardsAvailable)
       saveGameState("Adjusted Pivotal cards availablity")
   }
 

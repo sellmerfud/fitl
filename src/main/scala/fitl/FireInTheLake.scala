@@ -4739,11 +4739,7 @@ object FireInTheLake {
   }
 
   def pause() {
-    import scala.util.Properties.isWin
-    if (isWin)
-      readLine("[ Press Enter to continue... ] ")
-    else
-      readLine("[ Continue ↩︎ ] " )
+    readLine("[ Press Enter to continue... ]")
   }
 
   def pauseIfBot(faction: Faction): Unit = if (game.isBot(faction)) pause()

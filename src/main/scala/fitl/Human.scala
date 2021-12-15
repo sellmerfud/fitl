@@ -924,8 +924,10 @@ object Human {
 
 
   def easterOffensiveAttack(attackSpaces: List[String]): Unit = {
-    for (name <- attackSpaces)
+    for (name <- attackSpaces) {
       performAttack(name, NVA, free = true, nvaTroopsOnly = true)
+      pause()
+    }
   }
 
   // A human player has opted to take an action on the current card.

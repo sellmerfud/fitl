@@ -2495,7 +2495,7 @@ object Bot {
 
           case Some(destName) =>
             botDebug(s"\n$faction Bot will attempt $action to $destName")
-            tryOrigin(destName, Set.empty)            // pause()
+            tryOrigin(destName, Set.empty)
             val dest = game.getSpace(destName)
 
             // If no pieces could be found to move into the destination then
@@ -2514,6 +2514,7 @@ object Bot {
             }
 
             if (moveDestinations.contains(destName)) {
+              pause()  // Pause after each successful move
               // Since the last move was successful we must determine if an
               // activation roll is necessary to continue.
               val needActivationRoll = faction match {
@@ -2967,6 +2968,7 @@ object Bot {
           placePieces(sp.name, toPlace)
           checkARVNActivation()
           trainingSpaces += sp.name
+          pause()
           if (!once)
             trainToPlaceCubes(once = false)
         }
@@ -2987,6 +2989,7 @@ object Bot {
           placePieces(sp.name, toPlace)
           checkARVNActivation()
           trainingSpaces += sp.name
+          pause()
           trainToPlaceRangers()
         }
       }
@@ -3003,6 +3006,7 @@ object Bot {
           log(separator())
           placePieces(sp.name, toPlace)
           trainingSpaces += sp.name
+          pause()
           trainToPlaceIrregulars()
         }
       }
@@ -3311,6 +3315,7 @@ object Bot {
             // performAssault will reduce the ARVN resources to pay for the Assault
             if (addARVN)
               performAssault(ARVN, sp.name, params)
+            pause()
             assaultSpaces += sp.name
             nextAssault(candidates filterNot (_.name == sp.name), false)
           }
@@ -4396,6 +4401,7 @@ object Bot {
 
             placePieces(sp.name, toPlace)
             trainingSpaces += sp.name
+            pause()
             trainToPlaceRangers(candidates filterNot (_.name == sp.name))
           }
           else
@@ -4420,7 +4426,8 @@ object Bot {
               decreaseResources(ARVN, 3)
             placePieces(sp.name, toPlace)
             trainingSpaces += sp.name
-            trainToPlaceRangers(candidates filterNot (_.name == sp.name))
+            pause()
+            trainToPlaceCubes(candidates filterNot (_.name == sp.name))
           }
           else
             false  // Failed activation or out of ARVN resources
@@ -4688,6 +4695,7 @@ object Bot {
         def assaultIn(name: String): Unit = {
           performAssault(ARVN, name, params)
           assaultSpaces += name
+          pause()
         }
 
 
@@ -5349,6 +5357,7 @@ object Bot {
               placePieces(sp.name, Pieces(nvaBases = 1))
             }
             rallySpaces = rallySpaces + sp.name
+            pause()
             rallyToPlaceBase(candidates filterNot (_.name == sp.name))
           }
           false // Failed activation
@@ -5370,6 +5379,7 @@ object Bot {
             log(separator())
             placePieces(sp.name, Pieces(nvaGuerrillas_U = numToPlace))
             rallySpaces = rallySpaces + sp.name
+            pause()
             rallyToPlaceGuerrillas(candidates filterNot (_.name == sp.name))
           }
           false // Failed activation
@@ -5649,6 +5659,7 @@ object Bot {
 
             performAttack(name, useTroops)
             attackSpaces += name
+            pause()
             nextAttack(candidates filterNot (_.name == name), useTroops, needActivation = true)
             true  // Did not fail activation roll
           }
@@ -5717,8 +5728,10 @@ object Bot {
 
     def easterOffensiveAttack(attackSpaces: List[String]): Unit = {
       clearPT76Shaded()
-      for (name <- attackSpaces)
+      for (name <- attackSpaces) {
         performAttack(name, useTroops = true)
+        pause()
+      }
       applyPt76Shaded()  // If it is in effect
 }
 
@@ -5743,16 +5756,16 @@ object Bot {
         if (numRemaining > 0 && candidates.nonEmpty && activateOK) {
           val sp = pickSpacePlaceTerror(candidates)
 
-            log(s"\n$NVA selects ${sp.name} for Terror")
-            if (sp.pieces.has(NVAGuerrillas_U))
-              revealPieces(sp.name, Pieces(nvaGuerrillas_U = 1))
+          log(s"\n$NVA selects ${sp.name} for Terror")
+          if (sp.pieces.has(NVAGuerrillas_U))
+            revealPieces(sp.name, Pieces(nvaGuerrillas_U = 1))
 
-            if (sp.terror == 0)
-              addTerror(sp.name, 1) // Terror/Sabotage marker
+          if (sp.terror == 0)
+            addTerror(sp.name, 1) // Terror/Sabotage marker
 
-            if (!sp.isLoC && sp.support > Neutral)
-              decreaseSupport(sp.name, 1)
-
+          if (sp.canHaveSupport && sp.support > Neutral)
+            decreaseSupport(sp.name, 1)
+          pause()
           nextTerror(numRemaining - 1, candidates filterNot (_.name == sp.name), needActivation = !sp.isLoC)
         }
       }
@@ -6217,6 +6230,7 @@ object Bot {
             rallySpaces = rallySpaces + sp.name
             if (hadBase)
               tryCadresAgitate(sp)
+            pause()
             rallyToPlaceBase(candidates filterNot (_.name == sp.name))
           }
           else
@@ -6242,6 +6256,7 @@ object Bot {
             rallySpaces = rallySpaces + sp.name
             if (hadBase)
               tryCadresAgitate(sp)
+            pause()
             rallyToPlaceGuerrillas(candidates filterNot (_.name == sp.name))
           }
           else
@@ -6263,6 +6278,7 @@ object Bot {
             rallySpaces = rallySpaces + sp.name
             // We know the space already had a base
             tryCadresAgitate(sp)
+            pause()
             rallyToFlipGuerrillas(candidates filterNot (_.name == sp.name))
           }
           else
@@ -6393,6 +6409,7 @@ object Bot {
             loggingControlChanges {
               removePieces(sp.name, deadPieces)
               removeToAvailable(sp.name, attrition, Some("Attrition:"))
+              pause()
             }
           }
           nextAttack(candidates filterNot (_.name == sp.name), needActivation = true)
@@ -6447,20 +6464,21 @@ object Bot {
         if (numRemaining > 0 && candidates.nonEmpty && activateOK) {
           val sp = pickSpacePlaceTerror(candidates)
 
-            log(s"\n$VC selects ${sp.name} for Terror")
-            revealPieces(sp.name, Pieces(vcGuerrillas_U = 1))
-            if (capabilityInPlay(Cadres_Unshaded)) {
-              // Get fresh copy of space to include the guerrilla that was just flipped
-              val toRemove = selectFriendlyRemoval(game.getSpace(sp.name).pieces.only(VCGuerrillas), 2)
-              removeToAvailable(sp.name, toRemove, Some(s"$Cadres_Unshaded triggers"))
-            }
+          log(s"\n$VC selects ${sp.name} for Terror")
+          revealPieces(sp.name, Pieces(vcGuerrillas_U = 1))
+          if (capabilityInPlay(Cadres_Unshaded)) {
+            // Get fresh copy of space to include the guerrilla that was just flipped
+            val toRemove = selectFriendlyRemoval(game.getSpace(sp.name).pieces.only(VCGuerrillas), 2)
+            removeToAvailable(sp.name, toRemove, Some(s"$Cadres_Unshaded triggers"))
+          }
 
-            if (sp.terror == 0)
-              addTerror(sp.name, 1) // Terror/Sabotage marker
+          if (sp.terror == 0)
+            addTerror(sp.name, 1) // Terror/Sabotage marker
 
-            if (!sp.isLoC && sp.support != ActiveOpposition)
-              decreaseSupport(sp.name, 1)
+          if (sp.canHaveSupport)
+            decreaseSupport(sp.name, 1)
 
+          pause()
           nextTerror(numRemaining - 1, candidates filterNot (_.name == sp.name), !sp.isLoC)
         }
       }

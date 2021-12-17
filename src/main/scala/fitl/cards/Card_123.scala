@@ -47,6 +47,10 @@ import fitl.Human
 // 
 // Mechanization: +12 ARVN Resources. +12 Aid.
 // All out-of-play ARVN Available. Place 4 ARVN cubes anywhere.
+//
+// Tips
+// Do not count Minh as a card for the precondition.
+// "On map" means in South Vietnam, Laos, and Cambodia combined.
 
 object Card_123 extends EventCard(123, "Vietnamization",
   SingleEvent,
@@ -60,7 +64,31 @@ object Card_123 extends EventCard(123, "Vietnamization",
   def unshadedEffective(faction: Faction): Boolean =
     game.numCardsInLeaderBox >= 2 && game.totalOnMap(_.pieces.totalOf(USTroops)) < 20
 
-  def executeUnshaded(faction: Faction): Unit = pivotalNotYet(VC)
+  def executeUnshaded(faction: Faction): Unit = {
+    log("\n+12 ARVN Resources and +12 US Aid")
+    log(separator(char = '='))
+    if (game.trackResources(ARVN)) {
+      increaseResources(ARVN, 12)
+      increaseUsAid(12)
+    }
+    else
+      log("ARVN resources and US Aid are not being used used")
+
+    log("\nAll Out of Play ARVN pieces to Available")
+    log(separator(char = '='))
+    if (game.outOfPlay.has(ARVNPieces))
+      moveOutOfPlayToAvailable(game.outOfPlay.only(ARVNPieces))
+    else
+      log("There are no Out of Play ARVN pieces")
+
+    log("\nPlace 4 ARVN Cubes anywhere")
+    log(separator(char = '='))
+    val numCubes = if (game.isHuman(ARVN)) 4 else game.availablePieces.totalOf(ARVNCubes) min 4
+    if (numCubes == 0)
+      log("The ARVN Bot places no cubes because there are none available.")
+    else
+      placePiecesOnMap(ARVN, numCubes, ARVNCubes, spaceNames(game.spaces filterNot (_.isNorthVietnam)))
+  }
 
   // Shaded functions not used for Pivotal Event  
   def shadedEffective(faction: Faction): Boolean = false

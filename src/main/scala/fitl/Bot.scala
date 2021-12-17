@@ -5596,14 +5596,15 @@ object Bot {
       }
 
       val die        = d6
-      val success    = useTroops || die <= guerrillas.total
+      val numGs      = guerrillas.total
+      val success    = useTroops || die <= numGs
       val forceDisplay = if (useTroops) "Troops" else "Guerrillas"
 
       log(s"\n$NVA Attacks in ${sp.name} using $forceDisplay")
       log(separator())
       revealPieces(sp.name, toActivate)
       if (!useTroops)
-        log(s"Die roll: $die [${if (success) "Success!" else "Failure"}]")
+        log(s"Die roll (${amountOf(numGs, "Guerrilla")}): $die [${if (success) "Success!" else "Failure"}]")
 
       if (pt76_unshaded && sp.pieces.has(NVATroops))
         removeToAvailable(sp.name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
@@ -5760,7 +5761,7 @@ object Bot {
           if (sp.pieces.has(NVAGuerrillas_U))
             revealPieces(sp.name, Pieces(nvaGuerrillas_U = 1))
 
-          if (sp.terror == 0)
+          if (sp.terror == 0 && game.terrorMarkersAvailable > 0)
             addTerror(sp.name, 1) // Terror/Sabotage marker
 
           if (sp.canHaveSupport && sp.support > Neutral)
@@ -6393,11 +6394,12 @@ object Bot {
           val toActivate = guerrillas.only(VCGuerrillas_U)
           val num        = 2 min coinPieces.total
           val die        = d6
-          val success    = die <= guerrillas.total
+          val numGs      = guerrillas.total
+          val success    = die <= numGs
 
           log(s"\n$VC Attacks in ${sp.name}")
           log(separator())
-          log(s"Die roll: $die [${if (success) "Success!" else "Failure"}]")
+          log(s"Die roll ${amountOf(numGs, "Guerrilla")}): $die [${if (success) "Success!" else "Failure"}]")
           attackSpaces += sp.name
           
           if (success) {
@@ -6472,7 +6474,7 @@ object Bot {
             removeToAvailable(sp.name, toRemove, Some(s"$Cadres_Unshaded triggers"))
           }
 
-          if (sp.terror == 0)
+          if (sp.terror == 0 && game.terrorMarkersAvailable > 0)
             addTerror(sp.name, 1) // Terror/Sabotage marker
 
           if (sp.canHaveSupport)

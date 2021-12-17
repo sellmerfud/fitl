@@ -195,8 +195,8 @@ object FireInTheLake {
   // Pivotal card numbers
   val PivotalUS   = 121
   val PivotalNVA  = 122
-  val PivotalVC   = 123
-  val PivotalARVN = 124
+  val PivotalARVN = 123
+  val PivotalVC   = 124
 
   object eventDeck {
     import fitl.cards._
@@ -3578,7 +3578,7 @@ object FireInTheLake {
     // Find the first Bot that will play their card.
     val pivotBot = eligible find { faction =>
       game.isBot(faction)           &&
-      // d6 < game.numCardsInLeaderBox &&   // TODO !! This is tempoarary for testing
+      d6 < game.numCardsInLeaderBox &&
       !currentEventIsCritical(faction)
     }
 
@@ -4313,13 +4313,6 @@ object FireInTheLake {
       Nil
 
     (inPlace.toList ::: adjacent).sorted
-  }
-
-  def numVCGuerrillasInSouth: Int = {
-    game.spaces.foldLeft(0) { (sum, sp) =>
-      val num = if (isInSouthVietnam(sp.name)) sp.pieces.totalOf(VCGuerrillas) else 0
-      sum + num
-    }
   }
 
   def askPieceType(prompt: String, pieceTypes: TraversableOnce[PieceType], generic: Boolean = true): PieceType = {

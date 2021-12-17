@@ -862,7 +862,8 @@ object Human {
         val toActivate = sp.pieces.only(underground)
         val maxNum     = 2 min coinPieces.total
         val die        = d6
-        val success    = die <= guerrillas.total
+        val numGs      = guerrillas.total
+        val success    = die <= numGs
 
         log(s"\n$faction Attacks in $name")
         log(separator())
@@ -874,10 +875,10 @@ object Human {
         loggingControlChanges {
           if (faction == NVA && capabilityInPlay(PT76_Unshaded) && troops.nonEmpty)
             removeToAvailable(name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
-          log(s"\nDie roll: $die [${if (success) "Success!" else "Failure"}]")
+          log(s"\nDie roll (${amountOf(numGs, "Guerrilla")}): $die [${if (success) "Success!" else "Failure"}]")
           if (success) {
-            val num        = askInt("\nRemove how many pieces", 1, maxNum, Some(maxNum))
-            val deadPieces = askEnemyCoin(coinPieces, num, prompt = Some(s"Attacking in $name"))
+            val num        = askInt("\nRemove how many enemy pieces", 1, maxNum, Some(maxNum))
+            val deadPieces = askEnemyCoin(coinPieces, num, prompt = Some(s"Remove ${amountOf(num, "enemy piece")} in $name"))
             val attrition  = deadPieces.only(USTroops::USBase::Nil).total min sp.pieces.only(guerrilla_types).total
 
             removePieces(name, deadPieces)
@@ -3692,7 +3693,7 @@ object Human {
               removeToAvailable(name, toRemove)
             }
 
-            if (sp.terror == 0)
+            if (sp.terror == 0 && game.terrorMarkersAvailable > 0)
               addTerror(name, 1) // Terror/Sabotage marker
 
             faction match {

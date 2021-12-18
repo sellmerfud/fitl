@@ -1934,6 +1934,17 @@ object FireInTheLake {
     }
   }
 
+  def actorBoxName(action: Action): String = {
+    if (game.sequence.numActors == 0)
+      action.toString
+    else
+      game.sequence.actors.head.action match {
+        case OpOnly        => "LimOp"
+        case OpPlusSpecial => "LimOp or Event"
+        case _             => "Op - May add Special Activity"
+      }
+  }
+
   //  Move the faction to the eligible box.
   def makeEligible(faction: Faction): Unit = {
     if (!game.sequence.eligibleThisTurn(faction)) {
@@ -2243,8 +2254,8 @@ object FireInTheLake {
     b += separator()
     if (game.trackResources(ARVN)) {
       b += f"Econ           : ${game.econ}%2d"
-      b += f"US Aid         : ${game.usAid}%2d"
     }
+    b += f"US Aid         : ${game.usAid}%2d"
     b += f"Patronage      : ${game.patronage}%2d"
     b += separator()
     b += f"Trail          : ${game.trail}%2d"
@@ -2776,7 +2787,7 @@ object FireInTheLake {
     }
     else {
       updateFactionEligibility(makeAllEligible = eventDeck(game.currentCard).isCoup)
-      val nextCard = askCardNumber("\nEnter the number of the next Event card: ")
+      val nextCard = askCardNumber("\nEnter the number of the next On Deck Event card: ")
       game = game.copy(currentCard     = game.onDeckCard,
                        onDeckCard      = nextCard,
                        prevCardWasCoup = game.isCoupRound,
@@ -2859,7 +2870,7 @@ object FireInTheLake {
       log(separator())
 
       log(s"\nVictory Phase")
-      log(separator())
+      log(separator(char = '='))
       val leader = game.scores.head
       if (game.isBot(leader.faction) && leader.score > 0) {
         val coupRound = game.coupCardsPlayed + 1
@@ -2869,6 +2880,8 @@ object FireInTheLake {
         //  Many people like to play it out until the end of the final Coup round.
         gameEnded = !askYorN("\nDo you want to continue playing this game? (y/n)")
       }
+      else
+        log("None of the Bots has achieved its victory condition")
 
       if (!gameEnded) {
         coupResourcesPhase()
@@ -2974,7 +2987,7 @@ object FireInTheLake {
     pause()
 
     val vcBasesOnMap  = game.totalOnMap(_.pieces.totalOf(VCBases))
-    val nvaBasesOnMap = game.totalOnMap(_.pieces.totalOf(NVABases))
+    val nvaBasesLaosCambodia = (game.nonLocSpaces filter (sp => isInLaosCambodia(sp.name)) map (_.pieces.totalOf(NVABases))).sum
     log("\nInsurgent Earnings")
     log(separator())
     if (game.trackResources(VC) && vcBasesOnMap > 0)
@@ -2983,7 +2996,7 @@ object FireInTheLake {
       log("VC resources are not being tracked")
 
     if (game.trackResources(NVA))
-      increaseResources(NVA, nvaBasesOnMap + (2 * game.trail))
+      increaseResources(NVA, nvaBasesLaosCambodia + (2 * game.trail))
     else
       log("NVA resources are not being tracked")
     pause()
@@ -3488,10 +3501,11 @@ object FireInTheLake {
     val upNext    = s"  ($faction is up next)"
     val actorCmds = if (game.isBot(faction)) List(BotCmd) else List(ActCmd)
     val opts      = orList((actorCmds map (_.name)) :+ "?")
+    val monsoon   = if (game.inMonsoon) " [MONSOON]" else ""
     val prompt = {
       val promptLines = new ListBuffer[String]
       promptLines += ""
-      promptLines += s">>> $faction turn <<<"
+      promptLines += s">>> $faction turn$monsoon <<<"
       promptLines += separator(char = '=')
       promptLines ++= sequenceList(eventDeck(game.currentCard), game.sequence)
       promptLines += s"($opts): "
@@ -3583,7 +3597,7 @@ object FireInTheLake {
     }
 
     // Next find all eligible human factions
-    // that could play their pivotal event without
+    // that could play their pivotal event without  
     // being trumped by the Bot.
 
     val pivotHumans = pivotBot match {
@@ -3823,12 +3837,12 @@ object FireInTheLake {
     }
   }
 
-  def increaseUsAid(amount: Int): Unit = if (game.trackResources(ARVN) && amount > 0) {
+  def increaseUsAid(amount: Int): Unit = if (amount > 0) {
     game = game.copy(usAid = (game.usAid + amount) min EdgeTrackMax)
     log(s"Increase US Aid by +$amount to ${game.usAid}")
   }
 
-  def decreaseUsAid(amount: Int): Unit = if (game.trackResources(ARVN) && amount > 0) {
+  def decreaseUsAid(amount: Int): Unit = if (amount > 0) {
     game = game.copy(usAid = (game.usAid - amount) max 0)
     log(s"Decrease US Aid by -$amount to ${game.usAid}")
   }

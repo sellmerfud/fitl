@@ -943,10 +943,10 @@ object Human {
       askMenu(choices, "\nChoose one:").head
     }
 
-    game = game.copy(sequence = game.sequence.addActor(faction, action))
     log()
-    log(s"Move the $faction cylinder to the $action box")
-
+    log(s"Move the $faction cylinder to the ${actorBoxName(action)} box")
+    game = game.copy(sequence = game.sequence.addActor(faction, action))
+    
     action match {
       case Event         => executeEvent(faction)
       case OpPlusSpecial => executeOp(faction, Params(addSpecialActivity = true))

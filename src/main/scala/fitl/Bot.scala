@@ -2280,7 +2280,7 @@ object Bot {
     movedPieces.allPieces
   }
 
-  def selectAirLiftOrigin(currentOrigins: Set[String], addNewOrigin: Boolean, params: Params): Option[String] = {
+  def selectAirLiftOrigin(currentOrigins: Set[String], alreadyTried: Set[String], addNewOrigin: Boolean, params: Params): Option[String] = {
     import params.airlift.allowedType
     // Can only move up to 4 ARVNTroop, Irregulars, Rangers
     val otherTypes = (ARVNTroops::Irregulars:::Rangers).toSet filter allowedType
@@ -2296,7 +2296,10 @@ object Bot {
       !currentOrigins(sp.name)            &&
       sp.pieces.has(moveTypes)
     }
-    val existingCandidates = spaces(currentOrigins) filter { sp => sp.pieces.has(moveTypes) }
+    val existingCandidates = spaces(currentOrigins) filter { sp =>
+      !alreadyTried(sp.name) &&
+      sp.pieces.has(moveTypes)
+    }
     val candidates = if (addNewOrigin)
       newcandidates:::existingCandidates
     else
@@ -2414,7 +2417,7 @@ object Bot {
         // Use the same (single) origin from previous Transport destinations
         case Transport if transportOrigin.nonEmpty => transportOrigin
 
-        case AirLift => selectAirLiftOrigin(allOrigins, canAddAirLiftOrigin, params)
+        case AirLift => selectAirLiftOrigin(allOrigins, previousOrigins, canAddAirLiftOrigin, params)
 
         // Select the top priority origin
         case _ => selectMoveOrigin(faction, destName, action, moveTypes, params, previousOrigins)
@@ -2950,8 +2953,8 @@ object Bot {
       def canPlaceARVN = arvnOk && (params.free || !game.trackResources(ARVN) || game.arvnResources >= 3)
       def canTrain(arvn: Boolean) = trainingSpaces.size < maxTrain && (!arvn || canPlaceARVN)
       def prohibited(sp: Space) = !params.spaceAllowed(sp.name) || trainingSpaces(sp.name) || adviseSpaces(sp.name)
-      val irregCandidate = (sp: Space) => !(prohibited(sp) || sp.pieces.has(USPieces))
-      val arvnCandidate  = (sp: Space) => !(prohibited(sp) || sp.pieces.has(USBase))
+      val irregCandidate = (sp: Space) => !prohibited(sp) && sp.pieces.has(USPieces)
+      val arvnCandidate  = (sp: Space) => !prohibited(sp) && sp.pieces.has(USBase)
 
       def trainToPlaceCubes(once: Boolean): Unit = {
         val candidates = game.nonLocSpaces filter arvnCandidate
@@ -2961,7 +2964,7 @@ object Bot {
           val num     = 6 min avail.total
           val toPlace = selectFriendlyToPlaceOrMove(avail, num)
 
-          log(s"\n$ARVN selects ${sp.name} for Train")
+          log(s"\n$US selects ${sp.name} for Train")
           log(separator())
           if (game.trackResources(ARVN))
             decreaseResources(ARVN, 3)
@@ -2982,7 +2985,7 @@ object Bot {
           val num     = 2 min avail.total
           val toPlace = selectFriendlyToPlaceOrMove(avail, num)
 
-          log(s"\n$ARVN selects ${sp.name} for Train")
+          log(s"\n$US selects ${sp.name} for Train")
           log(separator())
           if (game.trackResources(ARVN))
             decreaseResources(ARVN, 3)
@@ -3002,7 +3005,7 @@ object Bot {
           val num     = 2 min avail.total
           val toPlace = selectFriendlyToPlaceOrMove(avail, num)
 
-          log(s"\n$ARVN selects ${sp.name} for Train")
+          log(s"\n$US selects ${sp.name} for Train")
           log(separator())
           placePieces(sp.name, toPlace)
           trainingSpaces += sp.name
@@ -3070,7 +3073,7 @@ object Bot {
           // val numShift  = (maxPacify - numTerror) min maxShift
 
           if (!trainingSpaces(sp.name)) {
-            log(s"\n$ARVN selects ${sp.name} for Train")
+            log(s"\n$US selects ${sp.name} for Train")
             log(separator())
             trainingSpaces += sp.name
           }
@@ -3088,7 +3091,7 @@ object Bot {
       trainToPlaceCubes(once = false)
       checkCombinesActionPlatoons()
       if (game.patronage >= 17 && !adviseSpaces(Saigon) && (trainingSpaces(Saigon) || canTrain(false))) {
-        log(s"\nARVN selects Saigon to transfer Patronage to ARVN resources")
+        log(s"\nUS selects Saigon to transfer Patronage to ARVN resources")
         log(separator())
         decreasePatronage(3)
         increaseResources(ARVN, 3)
@@ -4380,7 +4383,9 @@ object Bot {
       def canTrain     = trainingSpaces.size < maxTrain &&
                          checkARVNActivation(trained, actNum, params.free)
       def prohibited(sp: Space) = !params.spaceAllowed(sp.name) || trainingSpaces(sp.name)
-      val canTrainRangers = (sp: Space) => !(prohibited(sp) || sp.nvaControlled)
+      val canTrainRangers = (sp: Space) =>
+        !(prohibited(sp) || sp.nvaControlled) &&
+        (sp.isCity || sp.pieces.has(CoinBases))
       val canTrainCubes   = (sp: Space) =>
         !(prohibited(sp) || sp.nvaControlled) &&
         (sp.isCity || sp.pieces.has(CoinBases))
@@ -6526,6 +6531,7 @@ object Bot {
             increaseSupport(sp.name, 1)
           increaseAgitateTotal(num)
           taxSpaces += sp.name
+          pause()
           nextTax()
         }
       }
@@ -6762,8 +6768,8 @@ object Bot {
       }
     }
 
+    log(s"\nMove the $faction cylinder to the ${actorBoxName(action)} box")
     game = game.copy(sequence = game.sequence.addActor(faction, action))
-    log(s"\nMove the $faction cylinder to the $action box")
 }
 
   sealed trait ExecuteResult

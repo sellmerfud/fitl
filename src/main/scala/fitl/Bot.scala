@@ -2405,8 +2405,9 @@ object Bot {
 
     val maxDest = maxDests getOrElse NO_LIMIT
     var allOrigins = Set.empty[String] // For air lift we must limit origins+destinations
+    var totalMoved = 0
     // ----------------------------------------
-    def tryOrigin(destName: String, previousOrigins: Set[String]): Unit = {
+    def tryOrigin(destName: String, previousOrigins: Set[String]): Unit = if (totalMoved < maxPieces) {
       val canAddAirLiftOrigin = if (moveDestinations contains destName)
         allOrigins.size + moveDestinations.size < maxDest
       else
@@ -2427,7 +2428,7 @@ object Bot {
         case None =>  // No more origin spaces, so we are finished
 
         case Some(originName) =>
-          val toMove = movePiecesFromOneOrigin(originName, destName, faction, action, moveTypes, maxPieces, params)
+          val toMove = movePiecesFromOneOrigin(originName, destName, faction, action, moveTypes, maxPieces - totalMoved, params)
           if (toMove.nonEmpty) {
             //  First time we move pieces to a dest log
             //  the selection of the destination space.
@@ -2437,6 +2438,7 @@ object Bot {
             }
             movePieces(toMove, originName, destName)
             movedPieces.add(destName, toMove)
+            totalMoved += toMove.total
 
             // Marching Guerrillas may have to activate
             if (action == March) {
@@ -3346,7 +3348,7 @@ object Bot {
         val candidatesGeneric = game.spaces filter assaultWithTroops
         nextAssault(candidatesGeneric)
 
-        if (assaultSpaces.nonEmpty)
+        if (assaultSpaces.nonEmpty || didSpecial)
           Some(Assault -> didSpecial)
         else {
           logNoOp(US, Assault)
@@ -3657,6 +3659,7 @@ object Bot {
                 }
               }
             }
+            pause()
           }
         }
 
@@ -3694,6 +3697,7 @@ object Bot {
             totalRemoved += killedPieces.total
             strikeSpaces += sp.name
             spaceKills += sp.name -> killedPieces.total
+            pause()
             strikeASpace()
           }
         }
@@ -4873,13 +4877,16 @@ object Bot {
     // ArmoredCavalry_Shaded   - Transport Rangers only (NO TROOPS)
     // RVN_Leader_NguyenKhanh  - Transport uses max 1 LOC space - Enforced by getTransportOrigins()
     def transportActivity(params: Params): Boolean = {
-      var flippedARanger = false
-
+        
       if (!params.event && momentumInPlay(Mo_TyphoonKate))
         false  // Typhoon Kate prohibits transport
       else {
+        val savedMovedDestinations = moveDestinations
+        val savedMovedPieces       = movedPieces
+        var flippedARanger         = false
+      
         val moveTypes: Set[PieceType] =
-          if (capabilityInPlay(ArmoredCavalry_Shaded)) Rangers.toSet else ARVNForces.toSet
+          if (capabilityInPlay(ArmoredCavalry_Shaded)) Rangers.toSet else (ARVNTroops::Rangers).toSet
 
         val nextTransportCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
           val candidates = game.spaces filter { sp =>
@@ -4895,10 +4902,14 @@ object Bot {
             None
         }
 
+        moveDestinations = Vector.empty
+        movedPieces.reset()
         if (!params.event)
           logSAChoice(ARVN, Transport)
         movePiecesToDestinations(ARVN, Transport, moveTypes, false, params, maxPieces = 6)(nextTransportCandidate)
 
+        transportDestinations = moveDestinations
+        moveDestinations      = savedMovedDestinations
         if (transportDestinations.isEmpty)
           log(s"\nNo spaces found for $ARVN $Transport")
 
@@ -6527,9 +6538,11 @@ object Bot {
           log(s"\nVC Taxes in ${sp.name}")
           log(separator())
           revealPieces(sp.name, Pieces(vcGuerrillas_U = 1))
-          if (!sp.isLoC && sp.support != ActiveSupport)
-            increaseSupport(sp.name, 1)
-          increaseAgitateTotal(num)
+          loggingPointsChanges {
+            if (!sp.isLoC && sp.support != ActiveSupport)
+              increaseSupport(sp.name, 1)
+            increaseAgitateTotal(num)
+          }
           taxSpaces += sp.name
           pause()
           nextTax()

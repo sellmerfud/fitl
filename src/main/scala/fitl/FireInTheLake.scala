@@ -2624,8 +2624,8 @@ object FireInTheLake {
     }
   }
 
-  def getSaveName(save_number: Int) = s"save-$save_number"
-  def getLogName(save_number: Int)  = s"log-$save_number"
+  def getSaveName(save_number: Int) = f"save-$save_number%03d"
+  def getLogName(save_number: Int)  = f"log-$save_number%03d"
 
   // Given a directory for a saved game finds the most recent save file.
   def mostRecentSaveNumber(name: String): Option[Int] = {
@@ -2779,7 +2779,9 @@ object FireInTheLake {
   // Then update the game state with the new card numbers.
   def drawNextCard(): Unit = {
     if (game.cardsDrawn == 0) {
-      val card1 = askCardNumber("\nEnter the number of the 1st Event card: ")
+      println("\nDraw event cards")
+      println(separator())
+      val card1 = askCardNumber("Enter the number of the 1st Event card: ")
       val card2 = askCardNumber("Enter the number of the 2nd Event card: ")
       game = game.copy(currentCard  = card1,
                        onDeckCard   = card2,
@@ -2787,7 +2789,9 @@ object FireInTheLake {
     }
     else {
       updateFactionEligibility(makeAllEligible = eventDeck(game.currentCard).isCoup)
-      val nextCard = askCardNumber("\nEnter the number of the next On Deck Event card: ")
+      println("\nDraw event card")
+      println(separator())
+      val nextCard = askCardNumber("Enter the number of the next On Deck Event card: ")
       game = game.copy(currentCard     = game.onDeckCard,
                        onDeckCard      = nextCard,
                        prevCardWasCoup = game.isCoupRound,
@@ -4520,13 +4524,14 @@ object FireInTheLake {
   // If there are not enough of the pieces in the available box, then we must
   // ask for vountariy removal.
   def ensurePieceTypeAvailable(pieceType: PieceType, num: Int): Unit = {
-    assert(game.piecesToPlace.totalOf(pieceType) >= num, "askPieceTypeToPlace: Not enought pieces can be placed")
+    val normalized = normalizedType(pieceType)
+    assert(game.piecesToPlace.totalOf(normalized) >= num, s"askPieceTypeToPlace: Not enought pieces can be placed ($pieceType)")
 
-    if (game.availablePieces.totalOf(pieceType) <  num) {
-      val mustRemove = num - game.availablePieces.totalOf(pieceType)
+    if (game.availablePieces.totalOf(normalized) <  num) {
+      val mustRemove = num - game.availablePieces.totalOf(normalized)
 
-      println(s"\nThere are not enough ${pieceType.genericPlural} in the available box")
-      voluntaryRemoval(mustRemove, pieceType)
+      println(s"\nThere are not enough ${normalized.genericPlural} in the available box")
+      voluntaryRemoval(mustRemove, normalized)
     }
   }
 
@@ -4746,7 +4751,7 @@ object FireInTheLake {
   }
 
   def pause() {
-    readLine("[ Press Enter to continue... ]")
+    readLine(">>>>> [ Press Enter to continue... ] <<<<<")
   }
 
   def pauseIfBot(faction: Faction): Unit = if (game.isBot(faction)) pause()

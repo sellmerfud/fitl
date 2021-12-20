@@ -6761,11 +6761,11 @@ object Bot {
       case DualEvent =>
         card.eventPart(faction) match {
           case Unshaded =>
-            log(s"\n$faction executes the unshaded Event: ${card.name}")
+            log(s"\n$faction executes the Unshaded Event: ${card.name}")
             log(separator())
             card.executeUnshaded(faction)
           case Shaded =>
-            log(s"\n$faction executes the shaded Event: ${card.name}")
+            log(s"\n$faction executes the Shaded Event: ${card.name}")
             log(separator())
             card.executeShaded(faction)
         }

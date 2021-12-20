@@ -90,7 +90,7 @@ object Card_121 extends EventCard(121, "Linebacker II",
     else
       log("NVA resources are not used by the NVA Bot")
 
-    makeIneligibleThroughNextTurn(NVA)
+    makeIneligibleThroughNextTurn(NVA, false)
 
     log("\n3 US Casualties to Available")
     log(separator(char = '='))

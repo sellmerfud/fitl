@@ -76,7 +76,7 @@ object Card_054 extends EventCard(54, "Son Tay",
     else
       moveCasualtiesToAvailable(Pieces(usTroops = num))
 
-    makeIneligibleThroughNextTurn(NVA)
+    makeIneligibleThroughNextTurn(NVA, faction == NVA)
     remainEligibleNextTurn(US)
   }
 
@@ -95,6 +95,6 @@ object Card_054 extends EventCard(54, "Son Tay",
       moveCasualtiesToOutOfPlay(pieces)
     }
 
-    makeIneligibleThroughNextTurn(US)
+    makeIneligibleThroughNextTurn(US, faction == US)
   }
 }

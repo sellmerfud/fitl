@@ -137,7 +137,7 @@ object Card_067 extends EventCard(67, "Amphib Landing",
       }
     }
 
-    makeIneligibleThroughNextTurn(US)
-    makeIneligibleThroughNextTurn(ARVN)
+    makeIneligibleThroughNextTurn(US, faction == US)
+    makeIneligibleThroughNextTurn(ARVN, faction == ARVN)
   }
 }

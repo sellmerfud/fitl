@@ -79,7 +79,7 @@ object Card_079 extends EventCard(79, "Henry Cabot Lodge",
     loggingControlChanges {
       removePiecesFromMap(faction, num, ARVNPieces, friendly = faction == ARVN, spaceNames(game.spaces))
       increasePatronage(num * 2)
-      makeIneligibleThroughNextTurn(ARVN)
+      makeIneligibleThroughNextTurn(ARVN, faction == ARVN)
     }
 
   }

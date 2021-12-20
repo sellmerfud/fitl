@@ -1958,9 +1958,9 @@ object FireInTheLake {
     }
   }
 
-  def makeIneligibleThroughNextTurn(faction: Faction): Unit = {
+  def makeIneligibleThroughNextTurn(faction: Faction, currentlyActing: Boolean): Unit = {
     log(s"\n$faction is ineligible through the next card")
-    if (game.sequence.eligibleThisTurn(faction))
+    if (game.sequence.eligibleThisTurn(faction) && !currentlyActing)
       log(s"Move the $faction cylinder to the Ineligible Factions box")
 
     game = game.copy(sequence = game.sequence.ineligibleThroughNextTurn(faction))

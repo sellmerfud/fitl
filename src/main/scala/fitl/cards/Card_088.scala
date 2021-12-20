@@ -89,6 +89,6 @@ object Card_088 extends EventCard(88, "Phan Quang Dan",
       decreasePatronage(5)
     }
     log()
-    makeIneligibleThroughNextTurn(ARVN)
+    makeIneligibleThroughNextTurn(ARVN, faction == ARVN)
   }
 }

@@ -117,6 +117,6 @@ object Card_103 extends EventCard(103, "Kent State",
     println()
     moveCasualtiesToOutOfPlay(Pieces(usTroops = numTroops))
     decreaseUsAid(6)
-    makeIneligibleThroughNextTurn(US)
+    makeIneligibleThroughNextTurn(US, faction == US)
   }
 }

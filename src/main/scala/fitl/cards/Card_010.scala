@@ -67,7 +67,7 @@ object Card_010 extends EventCard(10, "Rolling Thunder",
   def executeUnshaded(faction: Faction): Unit = {
     degradeTrail(2)
     decreaseResources(NVA, 9)
-    makeIneligibleThroughNextTurn(NVA)
+    makeIneligibleThroughNextTurn(NVA, faction == NVA)
   }
 
   def shadedEffective(faction: Faction): Boolean = true

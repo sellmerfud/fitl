@@ -198,6 +198,6 @@ object Card_117 extends EventCard(117, "Corps Commanders",
         botShaded(die)
     }
     log()
-    makeIneligibleThroughNextTurn(ARVN)
+    makeIneligibleThroughNextTurn(ARVN, faction == ARVN)
   }
 }

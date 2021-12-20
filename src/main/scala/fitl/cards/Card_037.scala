@@ -115,6 +115,6 @@ object Card_037 extends EventCard(37, "Khe Sanh",
       removePieces(name, Pieces(usTroops = num))
     }
 
-    makeIneligibleThroughNextTurn(US)
+    makeIneligibleThroughNextTurn(US, faction == US)
   }
 }

@@ -2743,6 +2743,7 @@ object FireInTheLake {
                   |  adjust uspolicy        - Current US Policy
                   |  adjust casualties      - Pieces in the Casualties box
                   |  adjust out of play     - Pieces in the Out of Play box
+                  |  adjust on deck card    - Change the on deck card
                   |  adjust capabilities    - Capabilities currently in play
                   |  adjust momentum        - Momentum events currently in play
                   |  adjust rvnLeaders      - Stack of RVN Leaders
@@ -5669,9 +5670,11 @@ object FireInTheLake {
       println("\nNo on deck card has been drawn")
     else {
       println(s"\nThe on deck card is: ${eventDeck(game.onDeckCard)}")
-      val newCardNum = askCardNumber("\nEnter the number of the on deck card: ")
-      if (newCardNum != game.onDeckCard) {
-        log(adjustmentDesc(s"On Deck Card", eventDeck(game.onDeckCard).toString, eventDeck(newCardNum).toString))
+      val oldOnDeckNum = game.onDeckCard
+      val newOnDeckNum = askCardNumber("\nEnter the number of the on deck card: ")
+      if (newOnDeckNum != oldOnDeckNum) {
+        game = game.copy(onDeckCard = newOnDeckNum)
+        log(adjustmentDesc(s"On Deck Card", eventDeck(oldOnDeckNum).toString, eventDeck(newOnDeckNum).toString))
         saveGameState("Adjusted On Deck Card")
       }
     }

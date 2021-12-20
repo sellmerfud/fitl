@@ -116,8 +116,9 @@ object Card_082 extends EventCard(82, "Domino Theory",
       Bot.selectEnemyRemoveReplaceActivate(oopTroops, 3)
 
     println()
-    moveAvailableToOutOfPlay(pieces)
-    log()
-    decreaseUsAid(9)
+    loggingPointsChanges {
+      moveAvailableToOutOfPlay(pieces)
+      decreaseUsAid(9)      
+    }
   }
 }

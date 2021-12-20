@@ -4547,6 +4547,7 @@ object Bot {
           log(s"\nLeader: $RVN_Leader_DuongVanMinh effect triggers")
           log(separator())
           increaseUsAid(5)
+          pause()
         }
         Some(Train)
       }
@@ -4894,6 +4895,7 @@ object Bot {
               increasePatronage(2)
             }
           }
+          pause()
         }
         logEndSA(ARVN, Transport)
         true
@@ -4957,7 +4959,7 @@ object Bot {
           flippedARanger = true
         }
         if (!flippedARanger)
-          log("There are no active Rangers on the map")
+          log("There are no Active Rangers on the map")
 
         if (transportDestinations.nonEmpty || flippedARanger) {
           logEndSA(ARVN, Transport)

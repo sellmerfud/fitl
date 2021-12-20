@@ -1940,7 +1940,7 @@ object FireInTheLake {
   }
 
   def actorBoxName(action: Action): String = {
-    if (game.sequence.numActors == 0)
+    if (action == Pass || game.sequence.numActors == 0)
       action.toString
     else
       game.sequence.actors.head.action match {
@@ -3183,18 +3183,18 @@ object FireInTheLake {
 
       if (params.factions(US)) {
         pacify(US)
-        if (usSpaces.isEmpty)
+        if (usSpaces.isEmpty) {
           log("\nUS does not pacify any spaces")
-        if (game.isBot(US) || usSpaces.isEmpty)
           pause()
+        }
       }
 
       if (params.factions(ARVN)) {
         pacify(ARVN)
-        if (arvnSpaces.isEmpty)
+        if (arvnSpaces.isEmpty) {
           log("\nARVN does not pacify any spaces")
-        if (game.isBot(ARVN) || arvnSpaces.isEmpty)
           pause()        
+        }
       }
 
       if (params.factions(VC)) {
@@ -3204,10 +3204,10 @@ object FireInTheLake {
           log(note)
 
         agitate()
-        if (agitateSpaces.isEmpty)
+        if (agitateSpaces.isEmpty) {
           log("\nVC does not agitate any spaces")
-        if (game.isBot(VC) || agitateSpaces.isEmpty)
           pause()
+        }
       }
     }
   }
@@ -3304,11 +3304,12 @@ object FireInTheLake {
 
       log("\nNVA Redeploy")
       log(separator())
-      if (game.isBot(NVA))
+      if (game.isBot(NVA)) {
         Bot.NVA_Bot.redeployNVATroops()
+        pause()
+      }
       else
         Human.redeployNVATroops()
-       pause()
     }
   }
 

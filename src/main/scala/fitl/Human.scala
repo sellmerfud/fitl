@@ -281,9 +281,9 @@ object Human {
             if (num > 0) {
               movePieces(Pieces(arvnTroops = num), origin, dest)
             }
+            // Keep trying until no more troops or user is finished
+            moveTroopsFrom(origin, mandatory)
         }
-        // Keep trying until no more troops or user is finished
-        moveTroopsFrom(origin, mandatory)
       }
     }
 
@@ -398,9 +398,9 @@ object Human {
             if (num > 0) {
               movePieces(Pieces(nvaTroops = num), origin, dest)
             }
+            // Keep trying until no more troops or user is finished
+            moveTroopsFrom(origin)
         }
-        // Keep trying until no more troops or user is finished
-        moveTroopsFrom(origin)
       }
     }
 
@@ -1661,7 +1661,7 @@ object Human {
       flippedOne = true
     }
     if (!flippedOne)
-      log("There are no active Rangers on the map")
+      log("There are no Active Rangers on the map")
   }
 
 
@@ -1946,6 +1946,7 @@ object Human {
     def nextBombardAction(): Unit = {
       val candidates = getCandidates
       if (bombardSpaces.size < maxSpaces && candidates.nonEmpty) {
+        val count   = bombardSpaces.size + 1
         val choices = (candidates map (n => n -> n)) :+
                       ("finished" -> "Finished with Bombard special activity")
         println(s"\n${amountOf(bombardSpaces.size, "space")} of $maxSpaces selected for Bombard")
@@ -1953,7 +1954,7 @@ object Human {
         if (bombardSpaces.nonEmpty)
           wrap("", bombardSpaces.toList, showNone = false) foreach println
 
-        askMenu(choices, "\nChoose space to Bombard:").head match {
+        askMenu(choices, s"\nChoose ${ordinal(count)} space to Bombard:").head match {
           case "finished" =>
 
           case name =>

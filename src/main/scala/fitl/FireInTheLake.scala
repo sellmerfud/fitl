@@ -4252,10 +4252,10 @@ object FireInTheLake {
     assert(sp.pieces contains visible, s"hidePieces() $spaceName does not contain all requested pieces: $visible")
 
     val hidden = Pieces(
-      irregulars_A    = visible.irregulars_U,
-      rangers_A       = visible.rangers_U,
-      nvaGuerrillas_A = visible.nvaGuerrillas_U,
-      vcGuerrillas_A  = visible.vcGuerrillas_U)
+      irregulars_U    = visible.irregulars_A,
+      rangers_U       = visible.rangers_A,
+      nvaGuerrillas_U = visible.nvaGuerrillas_A,
+      vcGuerrillas_U  = visible.vcGuerrillas_A)
     val updated = sp.copy(pieces = sp.pieces - visible + hidden)
     game = game.updateSpace(updated)
 

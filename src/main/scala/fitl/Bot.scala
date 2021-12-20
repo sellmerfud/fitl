@@ -203,6 +203,7 @@ object Bot {
       val activations = for ((sp, num) <- numbers) {
         val guerrillas = selectEnemyRemoveReplaceActivate(sp.pieces.only(UndergroundGuerrillas), num)
         revealPieces(sp.name, guerrillas)
+        pause()
       }
     }
   }
@@ -314,7 +315,7 @@ object Bot {
     val numTerror = maxPacify min sp.terror
     val numShift  = (maxPacify - numTerror) min maxShift
 
-    log(s"\n$faction Pacifies in ${sp.name}")
+    log(s"\n$faction Pacifies ${amountOf(numShift, "level")} in ${sp.name}")
     log(separator())
     decreaseResources(ARVN, (numTerror + numShift) * cost)
     removeTerror(sp.name, numTerror)
@@ -612,12 +613,19 @@ object Bot {
       // Add any removed underground guerrilla that did NOT count toward remaining hits above
       killedPieces = killedPieces + killedUnderground
 
-      if (killedPieces.isEmpty)
+      if (killedPieces.isEmpty && affectedTunnel.isEmpty)
         log("\nNo insurgemnt pieces were removed in the assault")
       else {
         removePieces(name, killedPieces)
-        if (affectedTunnel.nonEmpty)
-          removeTunnelMarker(name, affectedTunnel)
+        if (affectedTunnel.nonEmpty) {
+          val die = d6
+          val success = die > 3
+          log("\nNext piece to remove would be a tunneled base")
+          log(separator())
+          log(s"Die roll is: ${die} [${if (success) "Tunnel destroyed!" else "No effect"}]")
+          if (success)
+            removeTunnelMarker(name, affectedTunnel)
+        }
 
         // Trigger the M48 Patton capability if it is in play and would
         // be effective (max two non-Lowland spaces)
@@ -2467,6 +2475,8 @@ object Bot {
             //  The dest space can no longer be considered for
             //  a destination or for an origin
             moveDestinations = moveDestinations :+ destName
+            if (action == Transport)
+              transportOrigin = Some(originName)
             allOrigins += originName
           }
           else
@@ -2948,11 +2958,21 @@ object Bot {
     //    US Training may pacify only to PassiveSupport (Not ActiveSupport)
     //  RVN_Leader_NguyenCaoKy - US/ARVN pacification costs 4 resources per Terror/Level
     def trainOp(params: Params, actNum: Int): Option[CoinOp] = {
-      val maxTrain     = params.maxSpaces getOrElse NO_LIMIT
-      var arvnOk        = true   // Until we fail an activation or run out of resources
+      val maxTrain      = params.maxSpaces getOrElse NO_LIMIT
+      var needArvnCheck = false
+      var arvnExhausted = false   // Until we fail an activation or run out of resources
 
-      def checkARVNActivation(): Unit = { arvnOk = makeActivationRoll(ARVN, actNum) }
-      def canPlaceARVN = arvnOk && (params.free || !game.trackResources(ARVN) || game.arvnResources >= 3)
+      def checkARVNActivation: Boolean = if (needArvnCheck == false)
+        true
+      else if (arvnExhausted)
+        false
+      else {
+        val passed = makeActivationRoll(ARVN, actNum)
+        arvnExhausted = !passed
+        passed
+      }
+      def canAffordARVN = params.free || !game.trackResources(ARVN) || game.arvnResources >= 3  
+      def canPlaceARVN = canAffordARVN && (!needArvnCheck || checkARVNActivation)
       def canTrain(arvn: Boolean) = trainingSpaces.size < maxTrain && (!arvn || canPlaceARVN)
       def prohibited(sp: Space) = !params.spaceAllowed(sp.name) || trainingSpaces(sp.name) || adviseSpaces(sp.name)
       val irregCandidate = (sp: Space) => !prohibited(sp) && sp.pieces.has(USPieces)
@@ -2971,7 +2991,7 @@ object Bot {
           if (game.trackResources(ARVN))
             decreaseResources(ARVN, 3)
           placePieces(sp.name, toPlace)
-          checkARVNActivation()
+          needArvnCheck = true
           trainingSpaces += sp.name
           pause()
           if (!once)
@@ -2992,7 +3012,7 @@ object Bot {
           if (game.trackResources(ARVN))
             decreaseResources(ARVN, 3)
           placePieces(sp.name, toPlace)
-          checkARVNActivation()
+          needArvnCheck = true
           trainingSpaces += sp.name
           pause()
           trainToPlaceRangers()
@@ -3222,10 +3242,13 @@ object Bot {
         if (moveDestinations.nonEmpty) {
           // Activate guerrillas in each sweep destination
           for (name <- moveDestinations) {
-            activateGuerrillasForSweep(name, US, params.cubeTreatment)
-            checkShadedBoobyTraps(name, US)
-            if (numCobras < maxCobras && checkUnshadedCobras(name))
+            val activated = activateGuerrillasForSweep(name, US, params.cubeTreatment)
+            val traps     = checkShadedBoobyTraps(name, US)
+            val cobras    = numCobras < maxCobras && checkUnshadedCobras(name)
+            if (cobras)
               numCobras += 1
+            if (activated || traps || cobras)
+              pause()
           }
 
           // Finally pay for the operation of applicable
@@ -3271,9 +3294,11 @@ object Bot {
         val maxAssault    = paramsMax min capMax
 
         val wouldKillNVATroopsOrBase = (sp: Space) => {
-          val targets = Set(NVATroops, NVABase)
-          val result = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
-          sp.pieces.totalOf(targets) > result.pieces.totalOf(targets)
+          !assaultSpaces(sp.name)  && {
+            val targets = Set(NVATroops, NVABase)
+            val result = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
+            sp.pieces.totalOf(targets) > result.pieces.totalOf(targets)
+          }
         }
 
 
@@ -3285,7 +3310,7 @@ object Bot {
 
 
         val assaultWithArvn = (sp: Space) => {
-          if (assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp)) {
+          if (!assaultSpaces(sp.name) && assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp)) {
             val afterUS = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
             assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(afterUS) &&
            (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
@@ -3306,6 +3331,7 @@ object Bot {
         )
 
         val assaultWithTroops = (sp: Space) =>
+          !assaultSpaces(sp.name)  &&
           assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
           (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
 
@@ -3440,6 +3466,7 @@ object Bot {
           log(s"\nAdvise in ${sp.name} using ARVN Assault")
           log(separator())
           activateGuerrillasForSweep(sp.name, ARVN, params.cubeTreatment, logHeading = false)
+          pause()
           adviseSpaces += sp.name
           doArvnSweeps()
         }
@@ -3579,7 +3606,7 @@ object Bot {
         val migs_shaded = capabilityInPlay(MiGs_Shaded) && !capabilityInPlay(TopGun_Unshaded)
         val aaa_shaded = capabilityInPlay(AAA_Shaded)
         val arclight_unshaded = capabilityInPlay(ArcLight_Unshaded)
-        val minTrail   = if (aaa_shaded) 2 else 1
+        val minTrail   = if (aaa_shaded) 2 else TrailMin
         val maxHits       = params.airstrike.maxHits getOrElse d6
         var hitsRemaining = maxHits
         val wildWeasels = momentumInPlay(Mo_WildWeasels) &&
@@ -3707,28 +3734,34 @@ object Bot {
           for {
             name <- strikeSpaces
             sp = game.getSpace(name)
-            if !(sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition)
+            if !(sp.isLoC || sp.population == 0)
           } {
             if (!shiftedOnce) {
               log("\nShift support in strike spaces toward Active Opposition")
-              log(separator())
+              log(separator(char = '='))
               shiftedOnce = true
             }
             val numKills = spaceKills(name)
-            val numShifts = if (numKills > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
-                log(s"$name: Shift 2 levels toward Active Opposition [$ArcLight_Shaded]")
-                2
+            
+            if (sp.support == ActiveOpposition)
+              log(s"\n$name: No shift [Already at Active Opposition]")
+            else if (numKills == 0)
+              log(s"\n$name: No shift [No pieces removed]")
+            else if (numKills > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
+                log(s"\n$name: Shift 2 levels [$ArcLight_Shaded]")
+                log(separator())
+                decreaseSupport(name, 2)
             }
-            else if (numKills == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded)) {
-              log(s"$name: No shift toward Active Opposition [$LaserGuidedBombs_Unshaded]")
-              0
-            }
+            else if (numKills == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded))
+              log(s"\n$name: No shift [$LaserGuidedBombs_Unshaded]")
             else {
-              log(s"$name: Shift 1 level toward Active Opposition")
-              1
+              log(s"\n$name: Shift 1 level toward Active Opposition")
+              log(separator())
+              decreaseSupport(name, 1)
             }
-            decreaseSupport(name, numShifts)
           }
+          if (shiftedOnce)
+            pause()
         }
 
         // Start of Air Strike Special Activity
@@ -4631,10 +4664,13 @@ object Bot {
           if (moveDestinations.nonEmpty) {
             // Activate guerrillas in each sweep destination
             for (name <- moveDestinations) {
-              activateGuerrillasForSweep(name, ARVN, params.cubeTreatment)
-              checkShadedBoobyTraps(name, ARVN)
-              if (numCobras < maxCobras && checkUnshadedCobras(name))
+              val activated = activateGuerrillasForSweep(name, ARVN, params.cubeTreatment)
+              val traps     = checkShadedBoobyTraps(name, ARVN)
+              val cobras    = numCobras < maxCobras && checkUnshadedCobras(name)
+              if (cobras)
                 numCobras += 1
+              if (activated || traps || cobras)
+                pause()
             }
 
             // Finally pay for the operation of applicable
@@ -4913,11 +4949,15 @@ object Bot {
         if (transportDestinations.isEmpty)
           log(s"\nNo spaces found for $ARVN $Transport")
 
+        log("\nFlip all Rangers underground")
+        log(separator())
         // Flip all rangers underground
         for (sp <- game.spaces; if sp.pieces.has(Rangers_A)) {
           hidePieces(sp.name, sp.pieces.only(Rangers_A))
           flippedARanger = true
         }
+        if (!flippedARanger)
+          log("There are no active Rangers on the map")
 
         if (transportDestinations.nonEmpty || flippedARanger) {
           logEndSA(ARVN, Transport)
@@ -4951,7 +4991,8 @@ object Bot {
       )
       var raidSpaces = Set.empty[String]
 
-      def nextRaid(candidates: List[Space]): Unit = {
+      def nextRaid(getCandidates: () => List[Space]): Unit = {
+        val candidates = getCandidates() filterNot (sp => raidSpaces.contains(sp.name))
         if (raidSpaces.size < maxRaid && candidates.nonEmpty) {
           val baseCandidates = candidates filter canRemoveBase
           val sp = if (baseCandidates.nonEmpty)
@@ -4975,16 +5016,20 @@ object Bot {
           // Move ranger in if necessary
           if (!sp.pieces.has(Rangers_U)) {
             val adjacent = spaces(getAdjacent(sp.name)) filter (_.pieces.has(Rangers_U))
-            val source = bestCandidate(adjacent, MoveRangerPriorities)
-            movePieces(uRanger, source.name, sp.name)
+            if (adjacent.nonEmpty) {
+              val source = bestCandidate(adjacent, MoveRangerPriorities)
+              movePieces(uRanger, source.name, sp.name)
+            }
           }
           revealPieces(sp.name, uRanger)
           removeToAvailable(sp.name, deadForces + deadBases)
-          nextRaid(candidates filterNot (_.name == sp.name))
+          raidSpaces += sp.name
+          pause()
+          nextRaid(getCandidates)
         }
       }
 
-      val raidInPlaceCandidates: List[Space] =
+      def raidInPlaceCandidates(): List[Space] =
         game.spaces filter { sp =>
           params.spaceAllowed(sp.name) &&
           !sp.isNorthVietnam &&
@@ -4992,7 +5037,7 @@ object Bot {
           sp.pieces.has(Rangers_U)
         }
 
-      val raidAdjacentCandidates: List[Space] =
+      def raidAdjacentCandidates(): List[Space] =
         game.spaces filter { sp =>
           params.spaceAllowed(sp.name) &&
           !sp.isNorthVietnam &&
@@ -5000,8 +5045,8 @@ object Bot {
           hasAdjacentUndergroundRangers(sp)
         }
 
-      nextRaid(raidInPlaceCandidates)
-      nextRaid(raidAdjacentCandidates)
+      nextRaid(raidInPlaceCandidates _)
+      nextRaid(raidAdjacentCandidates _)
       if (raidSpaces.nonEmpty)
         logEndSA(ARVN, Raid)
       raidSpaces.nonEmpty
@@ -6172,13 +6217,15 @@ object Bot {
 
       if (game.agitateTotal > 0 && (coupRound || capabilityInPlay(Cadres_Shaded)) && cadres_check) {
         val cadres_msg = if (coupRound) "" else s" [$Cadres_Shaded]"
-        log(s"\nVC Agitates in ${name}$cadres_msg")
-        log(separator())
         val numTerror = sp.terror min game.agitateTotal
         val numShift  = (sp.support.value - ActiveOpposition.value) min (game.agitateTotal - numTerror) min maxLevels
-        removeTerror(sp.name, numTerror)
-        decreaseSupport(sp.name, numShift)
-        decreaseAgitateTotal(numTerror + numShift)
+        log(s"\nVC Agitates ${amountOf(numShift, "level")} in ${name}$cadres_msg")
+        log(separator())
+        loggingPointsChanges {
+          removeTerror(sp.name, numTerror)
+          decreaseSupport(sp.name, numShift)
+          decreaseAgitateTotal(numTerror + numShift)
+        }
 
         if (cadres_unshaded) {
           // Get fresh copy of space to include the guerrilla that was just flipped
@@ -6578,6 +6625,7 @@ object Bot {
           totalRemoved += toRemove.total
           if (toRemove.total == 1 && game.availablePieces.has(VCGuerrillas_U))
             placePieces(sp.name, Pieces(vcGuerrillas_U = 1))
+          pause()
           nextSubvert(candidates filterNot (_.name == sp.name), numSubverted + 1)
         }
       }
@@ -6590,6 +6638,7 @@ object Bot {
         if (totalRemoved / 2 > 0) {
           log()
           decreasePatronage(totalRemoved / 2)
+          pause()
         }
         logEndSA(VC, Subvert)
         true

@@ -652,7 +652,8 @@ object Human {
         false
       else {
         val shift = (num - sp.terror) max 0
-        println()
+        log(s"\n$faction Pacifies ${amountOf(shift, "level")} in ${name}")
+        log(separator())
         decreaseResources(ARVN, num * cost)
         removeTerror(name, num min sp.terror)
         increaseSupport(name, shift)
@@ -670,17 +671,15 @@ object Human {
     val maxPossible = if (free) maxInSpace else maxInSpace min game.arvnResources
     val cadres_msg = if (coupRound) "" else s" [$Cadres_Shaded]"
 
-    log(s"\nVC Agitates in ${name}$cadres_msg")
-    log(separator())
     if (cadres)
-      log(s"VC must remove 2 guerrillas per agitate space [$Cadres_Unshaded]")
+      println(s"\nVC must remove 2 guerrillas per agitate space [$Cadres_Unshaded]")
 
     if (cadres && sp.pieces.totalOf(VCGuerrillas) < 2) {
-      log(s"\nThere are not two VC guerrillas in $name")
+      println(s"\nThere are not two VC guerrillas in $name")
       false
     }
     else if (maxPossible == 0) {
-      log(s"\nIt is not possible to agitate in $name")
+      println(s"\nIt is not possible to agitate in $name")
       false
     }
     else {
@@ -696,15 +695,19 @@ object Human {
         false
       else {
         val shift = (num - sp.terror) max 0
-        log()
-        if (cadres) {
-          val toRemove = askPieces(sp.pieces, 2, VCGuerrillas, Some(s"Remove guerrillas for [$Cadres_Unshaded]"))
-          removeToAvailable(name, toRemove)
+        log(s"\nVC Agitates ${amountOf(shift, "level")} in ${name}$cadres_msg")
+        log(separator())
+        loggingControlChanges {
+          if (cadres) {
+            val toRemove = askPieces(sp.pieces, 2, VCGuerrillas, Some(s"Remove guerrillas for [$Cadres_Unshaded]"))
+            removeToAvailable(name, toRemove)
+          }
+          
+          if (!free)
+            decreaseResources(VC, num)
+          removeTerror(name, num min sp.terror)
+          decreaseSupport(name, shift)
         }
-        if (!free)
-          decreaseResources(VC, num)
-        removeTerror(name, num min sp.terror)
-        decreaseSupport(name, shift)
         true
       }
     }
@@ -1301,7 +1304,7 @@ object Human {
                          hitsRemaining > 0 &&
                          strikeSpaces.size < maxSpaces &&
                          selectCandidates.nonEmpty
-        val minTrail   = if (aaa_shaded) 2 else 1
+        val minTrail   = if (aaa_shaded) 2 else TrailMin
         val canDegrade = params.airstrike.canDegradeTrail &&
                          !oriskany &&
                          !hasDegraded &&
@@ -1429,7 +1432,7 @@ object Human {
       for {
         name <- strikeSpaces
         sp = game.getSpace(name)
-        if !(sp.isLoC || sp.population == 0 || sp.support == ActiveOpposition || spaceKills(name) == 0)
+        if !(sp.isLoC || sp.population == 0)
       } {
         if (!shiftedOnce) {
           log("\nShift support in strike spaces toward Active Opposition")
@@ -1437,20 +1440,25 @@ object Human {
           shiftedOnce = true
         }
         val numKills = spaceKills(name)
-        val numShifts = if (numKills > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
-            log(s"$name: Shift 2 levels toward Active Opposition [$ArcLight_Shaded]")
-            2
+        if (game.getSpace(name).support == ActiveOpposition)
+          log(s"\n$name: No shift [Already at Active Opposition]")
+        else if (numKills == 0)
+          log(s"\n$name: No shift [No pieces removed]")
+        else if (numKills > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
+            log(s"\n$name: Shift 2 levels [$ArcLight_Shaded]")
+            log(separator())
+            decreaseSupport(name, 2)
         }
-        else if (numKills == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded)) {
-          log(s"$name: No shift toward Active Opposition [$LaserGuidedBombs_Unshaded]")
-          0
-        }
+        else if (numKills == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded))
+          log(s"\n$name: No shift [$LaserGuidedBombs_Unshaded]")
         else {
-          log(s"$name: Shift 1 level toward Active Opposition")
-          1
+          log(s"\n$name: Shift 1 level")
+          log(separator())
+          decreaseSupport(name, 1)
         }
-        decreaseSupport(name, numShifts)
       }
+      if (shiftedOnce)
+        pause()
     }
 
     val notes = List(
@@ -1644,9 +1652,16 @@ object Human {
       nextDestination(movingPieces, destCandidates)
     }
 
+    log("\nFlip all Rangers underground")
+    log(separator())
+    var flippedOne = false
     // Flip all rangers underground
-    for (sp <- game.spaces; if sp.pieces.has(Rangers_A))
+    for (sp <- game.spaces; if sp.pieces.has(Rangers_A)) {
       hidePieces(sp.name, sp.pieces.only(Rangers_A))
+      flippedOne = true
+    }
+    if (!flippedOne)
+      log("There are no active Rangers on the map")
   }
 
 

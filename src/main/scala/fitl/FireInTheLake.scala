@@ -2280,7 +2280,7 @@ object FireInTheLake {
     if (game.cardsDrawn > 0) {
       b += s"Current card   : ${eventDeck(game.currentCard).fullString}"
       if (game.onDeckCard > 0) {
-        b += s"On deck card   : ${eventDeck(game.onDeckCard).fullString}"
+        b += s"On Deck card   : ${eventDeck(game.onDeckCard).fullString}"
       }
     }
 
@@ -2820,7 +2820,7 @@ object FireInTheLake {
 
     log()
     log(s"Current card: ${eventDeck(game.currentCard)}")
-    log(s"On deck card: ${eventDeck(game.onDeckCard)}")
+    log(s"On Deck card: ${eventDeck(game.onDeckCard)}")
   }
 
 

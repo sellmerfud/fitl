@@ -75,15 +75,15 @@ class MediumScenario extends Scenario {
     Default_CentralLaos.setPieces(Pieces(
       nvaBases = 1, nvaGuerrillas_U = 1, nvaTroops = 9)),
     Default_SouthernLaos.setPieces(Pieces(
-      nvaBases = 2, nvaGuerrillas_U = 1)),
+      nvaBases = 1, nvaGuerrillas_U = 2)),
     Default_NortheastCambodia.setPieces(Pieces(
-      nvaBases = 2, nvaGuerrillas_U = 1)),
+      nvaBases = 1, nvaGuerrillas_U = 2)),
     Default_TheFishhook.setPieces(Pieces(
-      nvaBases = 2, nvaGuerrillas_U = 1)),
+      nvaBases = 1, nvaGuerrillas_U = 2)),
     Default_TheParrotsBeak.setPieces(Pieces(
-      nvaBases = 2, nvaGuerrillas_U = 1)),
+      nvaBases = 1, nvaGuerrillas_U = 2)),
     Default_Sihanoukville.setPieces(Pieces(
-      nvaBases = 2, nvaGuerrillas_U = 1)),
+      nvaBases = 1, nvaGuerrillas_U = 2)),
     Default_NorthVietnam.setPieces(Pieces(nvaBases = 1, nvaGuerrillas_U = 1, nvaTroops = 9)),
     Default_QuangTri_ThuaThien.copy(support = PassiveSupport).setPieces(Pieces(
       usBases    = 1, usTroops        = 4, irregulars_U = 1,
@@ -114,7 +114,7 @@ class MediumScenario extends Scenario {
       nvaGuerrillas_U = 1)),
     Default_QuangDuc_LongKhanh.setPieces(Pieces(
       arvnTroops     = 2, arvnPolice = 1,
-      vcGuerrillas_U = 2)),
+      vcGuerrillas_U = 1)),
     Default_BinhTuy_BinhThuan.setPieces(Pieces(
       usBases    = 1, usTroops       = 2,
       arvnTroops = 3, arvnPolice     = 1,
@@ -124,13 +124,13 @@ class MediumScenario extends Scenario {
       arvnTroops      = 2, rangers_U      = 1,
       vcTunnels       = 1, vcGuerrillas_U = 3,
       nvaGuerrillas_U = 2)),
-    Default_KienPhong.copy(support = PassiveSupport).setPieces(Pieces(
+    Default_KienPhong.copy(support = PassiveOpposition).setPieces(Pieces(
       arvnPolice     = 1,
       vcGuerrillas_U = 1)),
-    Default_KienHoa_VinhBinh.copy(support = PassiveSupport).setPieces(Pieces(
+    Default_KienHoa_VinhBinh.copy(support = PassiveOpposition).setPieces(Pieces(
       arvnPolice     = 1,
       vcGuerrillas_U = 1)),
-    Default_BaXuyen.copy(support = PassiveSupport).setPieces(Pieces(
+    Default_BaXuyen.copy(support = PassiveOpposition).setPieces(Pieces(
       arvnPolice     = 1,
       vcGuerrillas_U = 1)),
     Default_KienGiang_AnXuyen.copy(support = ActiveOpposition).setPieces(Pieces(

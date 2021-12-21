@@ -5902,6 +5902,7 @@ object Bot {
               removeToAvailable(sp.name, toRemove)
               placePieces(sp.name, toPlace)
             }
+            pause()
             infiltrateSpaces += sp.name
             placeTroops()
           }
@@ -5931,6 +5932,7 @@ object Bot {
                   addTunnelMarker(sp.name, Pieces(nvaBases = 1))
               infiltrateSpaces += sp.name
             }
+            pause()
           }
 
           // Next attempt to place troops at NVA bases

@@ -2251,11 +2251,13 @@ object FireInTheLake {
     game.scores foreach { s => b += displayScore(s) }
     b += separator()
     if (game.trackResources(ARVN))
-      b += f"ARVN resources : ${game.arvnResources}%2d"
+      b += f"ARVN Resources : ${game.arvnResources}%2d"
     if (game.isHuman(NVA))
-      b += f"NVA  resources : ${game.nvaResources}%2d"
-    val agitate = if (game.isBot(VC)) " (Agitate Total)" else ""
-    b += f"VC   resources : ${game.vcResources}%2d${agitate}"
+      b += f"NVA  Resources : ${game.nvaResources}%2d"
+    if (game.isHuman(VC))
+      b += f"VC   Resources : ${game.vcResources}%2d"
+    else
+      b += f"VC   Agitate   : ${game.vcResources}%2d"
     b += separator()
     if (game.trackResources(ARVN)) {
       b += f"Econ           : ${game.econ}%2d"
@@ -2824,7 +2826,7 @@ object FireInTheLake {
 
   def showScores(header: String): Unit = {
 
-    val winner = game.scores.head
+    val winner = game.scores.head.faction
 
     log()
     log(separator(char = '='))
@@ -2835,7 +2837,7 @@ object FireInTheLake {
     log("Victory Margins")
     log(separator())
     for (Score(faction, _, score) <- game.scores)
-      log(s"${padLeft(faction, 4)}  ${score}")
+      log(f"${padLeft(faction, 4)}  ${score}%+3d")
   }
 
   // Resolve Coup Round
@@ -4783,7 +4785,7 @@ object FireInTheLake {
   }
 
   def pause() {
-    readLine(">>>>> [ Press Enter to continue... ] <<<<<")
+    readLine("\n>>>>> [ Press Enter to continue... ] <<<<<")
   }
 
   def pauseIfBot(faction: Faction): Unit = if (game.isBot(faction)) pause()

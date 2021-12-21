@@ -3344,8 +3344,10 @@ object Bot {
               logOpChoice(US, Assault)
             performAssault(US, sp.name, params)
             // performAssault will reduce the ARVN resources to pay for the Assault
-            if (addARVN)
+            if (addARVN) {
+              log(s"\nUS adds a follow up ARVN asault in ${sp.name}")
               performAssault(ARVN, sp.name, params)
+            }
             pause()
             assaultSpaces += sp.name
             nextAssault(candidates filterNot (_.name == sp.name), false)
@@ -4897,7 +4899,7 @@ object Bot {
           }
           pause()
         }
-        logEndSA(ARVN, Transport)
+        logEndSA(ARVN, Govern)
         true
       }
       else

@@ -5993,6 +5993,7 @@ object Bot {
             log(s"\nNVA Bombards ${sp.name}")
             log(separator())
             removePieces(sp.name, toRemove)
+            pause()
             nextBombard(numBombarded + 1)
           }
         }

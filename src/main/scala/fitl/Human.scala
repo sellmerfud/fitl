@@ -276,8 +276,7 @@ object Human {
         askMenu(choices, "Choose destination:", allowAbort = false).head match {
           case "finished" =>
           case dest =>
-            val num = askInt("Move how many troops", 0, numTroops,
-                            default = Some(numTroops), allowAbort = false)
+            val num = askInt("Move how many troops", 0, numTroops, allowAbort = false)
             if (num > 0) {
               movePieces(Pieces(arvnTroops = num), origin, dest)
             }
@@ -299,14 +298,12 @@ object Human {
         askMenu(choices, "Choose destination:", allowAbort = false).head match {
           case "finished" =>
           case dest =>
-            val num = askInt("Move how many police", 0, numPolice,
-                            default = Some(numPolice), allowAbort = false)
+            val num = askInt("Move how many police", 0, numPolice, allowAbort = false)
             if (num > 0) {
               movePieces(Pieces(arvnPolice = num), origin, dest)
             }
+            movePoliceFrom(origin)
         }
-        // Keep trying until no more troops or user is finished
-        movePoliceFrom(origin)
       }
     }
 

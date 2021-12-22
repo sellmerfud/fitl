@@ -233,7 +233,7 @@ object Bot {
   def canAmbushFrom(faction: Faction, needUnderground: Boolean)(sp: Space): Boolean = {
     val GTypes = ambushGuerrillaTypes(faction, needUnderground)
     sp.pieces.has(GTypes) &&
-    (sp.pieces.has(CoinPieces) || sp.isLoC && numAdjacentPieces(sp: Space, CoinPieces) > 0)
+    (sp.pieces.has(CoinPieces) || (sp.isLoC && numAdjacentPieces(sp: Space, CoinPieces) > 0))
   }
 
   // When an ambush Special Activity follows a March Operation
@@ -5082,9 +5082,10 @@ object Bot {
       val targetNumber   = rollDice(3)
 
       val destCandidate = (sp: Space) =>
-        !destsUsed(sp.name) &&
+        !destsUsed(sp.name)     &&
         !sp.isNorthVietnam      &&
-        sp.pieces.has(NVABases)
+        sp.pieces.has(NVABases) &&
+        sp.pieces.totalOf(NVATroops) < targetNumber
 
       val isSouthOrigin = (sp: Space) =>
         isInSouthVietnam(sp.name)        &&
@@ -5118,18 +5119,18 @@ object Bot {
         val candidates = game.spaces filter destCandidate
 
         if (candidates.nonEmpty) {
-          var totalMoved = 0
           val dest       = pickSpacePlaceTroops(candidates).name
+          def troopsAtDest = game.getSpace(dest).pieces.totalOf(NVATroops)
 
-          def moveFromOrigins(): Boolean = if (totalMoved < targetNumber) {
+          def moveFromOrigins(): Boolean = if (troopsAtDest < targetNumber) {
+            val troopsNeeded = targetNumber - troopsAtDest
             getOrigin match {
               case None => true  // No more origins
               case Some(origin) =>
-                val num = eligibleTroops(origin).total min (targetNumber - totalMoved)
+                val num = eligibleTroops(origin).total min troopsNeeded
                 val troops = Pieces(nvaTroops = num)
                 movePieces(troops, origin, dest)
                 destsUsed += dest
-                totalMoved += num
                 eligibleTroops.remove(origin, troops)
                 moveFromOrigins()
             }
@@ -5727,7 +5728,6 @@ object Bot {
             attackSpaces += name
             pause()
             nextAttack(candidates filterNot (_.name == name), useTroops, needActivation = true)
-            true  // Did not fail activation roll
           }
           else
             false  // Failed activation roll
@@ -5922,10 +5922,11 @@ object Bot {
             log(s"\nNVA Infiltrates in ${sp.name}")
               log(separator())
 
-            if (sp.support < Neutral)
-              increaseSupport(sp.name, 1)
 
             loggingControlChanges {
+              if (sp.support < Neutral)
+                increaseSupport(sp.name, 1)
+              
               removeToAvailable(sp.name, vcPiece)
               placePieces(sp.name, Pieces(nvaBases = 1))
               if (nvaType == NVATunnel)
@@ -7711,7 +7712,7 @@ object Bot {
       def doSpecialActivity(): Boolean =
         NVA_Bot.bombardActivity(params)
 
-      if (game.totalCoinControl < 42)
+      if (game.arvnPoints < 42)
         TrungDraw
       else if (!NVA_Bot.atleastTwentyNVATroopsOnMap)
         flipCard(params)
@@ -7786,14 +7787,6 @@ object Bot {
         TrungDraw
       else if (!NVA_Bot.sixTroopsWithCOINTroopsOrBase)
         flipCard(params)
-      else if (params.specialActivityOnly) {
-        val success = NVA_Bot.attackOp(params, actNum, addAmbush = true).nonEmpty ||
-                      NVA_Bot.bombardActivity(params)
-        if (success)
-          TrungComplete(true)
-        else
-          TrungNoOp
-      }
       else {
         val result = NVA_Bot.attackOp(params, actNum, addAmbush = params.addSpecialActivity)
         result match {

@@ -3003,11 +3003,11 @@ object FireInTheLake {
     log("\nARVN Earnings")
     log(separator())
     val newEcon = (game.locSpaces map (_.currentEconValue)).sum
+    setEconValue(newEcon)
     if (game.trackResources(ARVN))
       increaseResources(ARVN, game.usAid + newEcon)
     else
       log("ARVN resources are not being tracked")
-    setEconValue(newEcon)
     pause()
 
     val vcBasesOnMap  = game.totalOnMap(_.pieces.totalOf(VCBases))
@@ -3027,7 +3027,10 @@ object FireInTheLake {
 
     log("\nCasualties and Aid")
     log(separator())
-    decreaseUsAid(game.casualties.total * 3)
+    if (game.casualties.isEmpty)
+      log("There are no pieces in the Casualties Box")
+    else
+      decreaseUsAid(game.casualties.total * 3)
     pause()
   }
 

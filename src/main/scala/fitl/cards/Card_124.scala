@@ -77,10 +77,6 @@ object Card_124 extends EventCard(124, "Tet Offensive",
     game.numCardsInLeaderBox >= 2 &&
     numVCGuerrillasInSouth > 20
 
-  val CanHaveSupport = new Bot.BooleanPriority[Space](
-    "City or Province can have Support", _.canHaveSupport
-  )
-
   val terrorCandidate = (sp: Space) => sp.pieces.has(VCGuerrillas_U)
 
   def terrorizeSpace(name: String): Unit = {
@@ -117,10 +113,22 @@ object Card_124 extends EventCard(124, "Tet Offensive",
     nextTerror(terrorSpaces)
   }
 
+  // When doing Terror prioritize spaces that can actually have
+  // support first, then LocS.  These will get done first
+  // to use up the available terror markers
+  val terrorPreferences = List(
+    new Bot.BooleanPriority[Space](
+      "City or Province can have Support", _.canHaveSupport
+    ),
+    new Bot.BooleanPriority[Space](
+      "LoC", _.isLoC
+    )
+  )
+
   def botTerror(terrorSpaces: List[Space]): Unit = {
     def nextTerror(candidates: List[Space]): Unit = if (candidates.nonEmpty) {
       // Have Bot place terror markers in spaces that can have support first
-      val narrowed = Bot.narrowCandidates(candidates, List(CanHaveSupport))
+      val narrowed = Bot.narrowCandidates(candidates, terrorPreferences)
       val sp = VC_Bot.pickSpaceTowardActiveOpposition(narrowed)
 
       terrorizeSpace(sp.name)

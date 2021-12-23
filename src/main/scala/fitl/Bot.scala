@@ -655,7 +655,7 @@ object Bot {
 
       // Each removed base adds +6 aid
       if (faction == ARVN && killedPieces.totalOf(baseTargets) > 0) {
-        log(s"\nEach insurgent base removed adds +6 Aid")
+        log(s"\nEach insurgent base removed by ARVN Assault adds +6 Aid")
         increaseUsAid(6 * killedPieces.totalOf(baseTargets))
       }
 
@@ -1203,10 +1203,11 @@ object Bot {
   //  Return all pieces that should be removed,
   //  also return a max of one Tunneled Base if its marker should be removed.
   def selectRemoveEnemyInsurgentBasesLast(pieces: Pieces, num: Int, vulnerableTunnels: Boolean = false): (Pieces, Pieces) = {
-    val insurgentBases   = pieces.only(if (vulnerableTunnels) InsurgentBases else InsurgentNonTunnels)
+    val NonTunnelTypes   = if (vulnerableTunnels) InsurgentBases else InsurgentNonTunnels
     val insurgentTunnels = pieces.only(InsurgentTunnels)
     var deadPieces       = Pieces()
     var affectedTunnel   = Pieces()
+    def remainingPieces  = pieces - deadPieces
     def numRemaining     = num - deadPieces.total
 
     def removeForces(types: TraversableOnce[PieceType]): Unit = if (numRemaining > 0) {
@@ -1219,14 +1220,16 @@ object Bot {
     removeForces(ActiveGuerrillas)
 
     // Check for base/tunnel marker removal
-    if (!pieces.has(UndergroundGuerrillas)) {
-      if (numRemaining > 0 && insurgentBases.nonEmpty) {
-        val numBases = numRemaining min insurgentBases.total
-        deadPieces = deadPieces + selectEnemyRemoveReplaceActivate(insurgentBases, num)
-      }
+    if (!remainingPieces.has(InsurgentForces)) {
+      val bases    = remainingPieces.only(NonTunnelTypes)
+      val numBases = numRemaining min bases.total
+      deadPieces = deadPieces + selectEnemyRemoveReplaceActivate(bases, numBases)
 
-      if (numRemaining > 0 && !vulnerableTunnels && insurgentTunnels.nonEmpty)
-        affectedTunnel = selectEnemyRemoveReplaceActivate(insurgentTunnels, 1)
+      if (!vulnerableTunnels && !remainingPieces.has(NonTunnelTypes)) {
+        val tunnels    = remainingPieces.only(InsurgentTunnels)
+        val numTunnels = numRemaining min tunnels.total
+        affectedTunnel = selectEnemyRemoveReplaceActivate(tunnels, 1)
+      }
     }
 
     (deadPieces, affectedTunnel)
@@ -3346,12 +3349,13 @@ object Bot {
             if (!params.event && assaultSpaces.isEmpty)
               logOpChoice(US, Assault)
             performAssault(US, sp.name, params)
+            pause()
             // performAssault will reduce the ARVN resources to pay for the Assault
             if (addARVN) {
               log(s"\nUS adds a follow up ARVN asault in ${sp.name}")
               performAssault(ARVN, sp.name, params)
+              pause()
             }
-            pause()
             assaultSpaces += sp.name
             nextAssault(candidates filterNot (_.name == sp.name), false)
           }

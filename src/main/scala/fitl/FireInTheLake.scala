@@ -2243,7 +2243,7 @@ object FireInTheLake {
     }
 
     val coupCardChance = chanceOfDrawingACoupCard match {
-      case (chance, remaining) =>  f"${chance}%.3f  (${remaining} cards remaining in campaign)"
+      case (chance, remaining) =>  f"${chance}%.3f  (${remaining} cards remaining in set)"
     }
 
     b += "Game Summary"
@@ -3420,7 +3420,7 @@ object FireInTheLake {
       log(s"\nWITHDRAWAL: For every 2 US pieces just removed to Available, VC shifts")
       log("1 population of support by 1 level toward Active Opposition")
       val was = if (numToAvailable == 1) "was" else "were"
-      log(s"${amountOf(numToAvailable, "pieces")} $was removed to Available")
+      log(s"${amountOf(numToAvailable, "piece")} $was removed to Available")
       log(separator())
       if (numVCPopShifts > 0) {
         if (game.isBot(VC))
@@ -3433,6 +3433,7 @@ object FireInTheLake {
       if (numVCPopShifts == 0 || game.isBot(VC))
         pause()
     }
+    pause() // Pause after showing control/scoring changes
   }
 
   // Reset Phase of Coup Round

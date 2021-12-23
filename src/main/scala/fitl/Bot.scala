@@ -506,6 +506,7 @@ object Bot {
           if (sp.pieces.has(underground))
           revealPieces(sp.name, Pieces().set(1, underground))
           removePieces(target.name, deadPieces)
+          pause()
           ambushSpaces = ambushSpaces + sp.name
           nextAmbush(validSpaces map (_.name) filterNot (_ == sp.name))
         }
@@ -1188,7 +1189,7 @@ object Bot {
     val coinForces = pieces.only(CoinForces)
     val numForces  = num min coinForces.total
     val deadForces = selectEnemyRemoveReplaceActivate(coinForces, numForces)
-    val numBases   = ((num - deadForces.total) max 0) min coinBases.total
+    val numBases   = (num - deadForces.total) min coinBases.total
     val deadBases  = selectEnemyRemoveReplaceActivate(coinBases, numBases)
 
     (deadForces + deadBases)
@@ -2288,7 +2289,7 @@ object Bot {
     movedPieces.allPieces
   }
 
-  def selectAirLiftOrigin(currentOrigins: Set[String], alreadyTried: Set[String], addNewOrigin: Boolean, params: Params): Option[String] = {
+  def selectAirLiftOrigin(destName: String, currentOrigins: Set[String], alreadyTried: Set[String], addNewOrigin: Boolean, params: Params): Option[String] = {
     import params.airlift.allowedType
     // Can only move up to 4 ARVNTroop, Irregulars, Rangers
     val otherTypes = (ARVNTroops::Irregulars:::Rangers).toSet filter allowedType
@@ -2300,11 +2301,13 @@ object Bot {
       usTroops
 
     val newcandidates = game.spaces filter { sp =>
+      sp.name != destName                 &&
       !moveDestinations.contains(sp.name) &&
       !currentOrigins(sp.name)            &&
       sp.pieces.has(moveTypes)
     }
     val existingCandidates = spaces(currentOrigins) filter { sp =>
+      sp.name != destName    &&
       !alreadyTried(sp.name) &&
       sp.pieces.has(moveTypes)
     }
@@ -2426,7 +2429,7 @@ object Bot {
         // Use the same (single) origin from previous Transport destinations
         case Transport if transportOrigin.nonEmpty => transportOrigin
 
-        case AirLift => selectAirLiftOrigin(allOrigins, previousOrigins, canAddAirLiftOrigin, params)
+        case AirLift => selectAirLiftOrigin(destName, allOrigins, previousOrigins, canAddAirLiftOrigin, params)
 
         // Select the top priority origin
         case _ => selectMoveOrigin(faction, destName, action, moveTypes, params, previousOrigins)

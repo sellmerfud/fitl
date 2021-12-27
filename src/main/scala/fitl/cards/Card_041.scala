@@ -72,7 +72,7 @@ object Card_041 extends EventCard(41, "Bombing Pause",
       spaceNames(candidates)
     else if (game.isHuman(faction)) {
       val prompt = s"Select 2 spaces to set to Passive Support:"
-      askSimpleMenu(spaceNames(candidates), prompt)
+      askSimpleMenu(spaceNames(candidates), prompt, numChoices = 2)
     }
     else if (faction == US)
       spaceNames(Bot.pickSpaces(2, candidates)(US_Bot.pickSpaceTowardActiveSupport))

@@ -538,13 +538,7 @@ object Bot {
   //  Mo_BodyCount              - Cost=0 AND +3 Aid per guerrilla removed
 
   def performAssault(faction: Faction, name: String, params: Params): Unit = {
-    def validEnemy(types: TraversableOnce[PieceType]): TraversableOnce[PieceType] =
-      params.assault.onlyTarget match {
-        case Some(f) => types filter (t => owner(t) == f)
-        case None    => types
-      }
-
-    def validPieces(pieces: Pieces): Pieces =
+    def validEnemy(pieces: Pieces): Pieces =
       params.assault.onlyTarget match {
         case Some(NVA) => pieces.only(NVAPieces)
         case Some(VC)  => pieces.only(VCPieces)
@@ -556,18 +550,64 @@ object Bot {
     val remove1Underground = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
     val m48Patton          = asUS && capabilityInPlay(M48Patton_Unshaded)
     val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
-    val baseTargets        = if (params.vulnerableTunnels)
-      validEnemy(InsurgentBases)
-    else
-      validEnemy(InsurgentNonTunnels)
-    val sp          = game.getSpace(name)
-    def pieces      = game.getSpace(name).pieces  // Always get fresh instance
-    val baseFirst   = remove1BaseFirst && pieces.has(baseTargets) && !pieces.has(validEnemy(UndergroundGuerrillas))
-    val underground = remove1Underground && pieces.has(validEnemy(UndergroundGuerrillas))
-    val totalLosses = sp.assaultFirepower(faction, params.cubeTreatment)
-    var killedPieces = Pieces()
-    def remaining   = totalLosses - killedPieces.total
+    val baseTargets        = if (params.vulnerableTunnels) InsurgentBases else InsurgentNonTunnels
+    val sp                 = game.getSpace(name)
+    val totalLosses        = sp.assaultFirepower(faction, params.cubeTreatment)
+    val enemyPieces        = validEnemy(sp.pieces)
+    
+    case class EnemyLosses(
+      dead: Pieces          = Pieces(),
+      baseFirst: Boolean    = false,
+      exposedTunnel: Pieces = Pieces()) {
+        val total = dead.total + exposedTunnel.total
+      }
+      
+    def calculateLosses(numLosses: Int): EnemyLosses = {
+      var killedPieces        = Pieces()    
+      def remainingLosses     = (numLosses - killedPieces.total) max 0
+      def remainingEnemy      = enemyPieces - killedPieces
+      val numVulnerableForces = enemyPieces.totalOf(NVATroops::ActiveGuerrillas)
 
+      // Search And Destroy unshaded
+      if (remove1Underground && enemyPieces.has(UndergroundGuerrillas)) {
+        val removed = selectEnemyRemoveReplaceActivate(remainingEnemy.only(UndergroundGuerrillas), 1)
+        killedPieces = killedPieces + removed  // Counts against total hits
+      }
+
+      // Abrams unshaded      
+      val baseFirst = if (remove1BaseFirst && remainingLosses <= numVulnerableForces && remainingEnemy.has(baseTargets)) {
+        val removed = selectEnemyRemoveReplaceActivate(remainingEnemy.only(baseTargets), 1)
+      
+        killedPieces = killedPieces + removed
+        true
+      }
+      else
+        false
+
+      // Remove exposed insurgent pieces, check for tunnel marker removal
+      val (killedExposed, affectedTunnel) = selectRemoveEnemyInsurgentBasesLast(remainingEnemy, remainingLosses, params.vulnerableTunnels)
+      killedPieces = killedPieces + killedExposed
+      
+      EnemyLosses(killedPieces, baseFirst, affectedTunnel)
+    }
+    
+    val regularLosses = calculateLosses(totalLosses)
+    // Trigger the M48 Patton capability if it is in play and would
+    // be effective (max two non-Lowland spaces)
+    val pattonLosses = if (m48Patton && m48PattonSpaces.size < 2 && !sp.isLowland) {
+      calculateLosses(totalLosses + 2)
+    }
+    else
+      EnemyLosses()
+
+    val losses = if (pattonLosses.total > regularLosses.total) {
+      m48PattonSpaces += name      
+      pattonLosses 
+    } 
+    else
+      regularLosses
+    
+    
     // Log all control changes at the end of the assault
     loggingControlChanges {
       log(s"\n$faction assaults in $name")
@@ -581,87 +621,46 @@ object Bot {
       }
 
       log(s"The assault inflicts ${amountOf(totalLosses, "hit")}")
+      if (losses == pattonLosses)
+        log(s"$faction removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
+      
+      if (losses.baseFirst)
+        log(s"$faction removes a base first [$Abrams_Unshaded]")
+      
+      if (losses.dead.has(UndergroundGuerrillas))
+        log(s"$faction removes an underground guerrilla [$SearchAndDestroy_Unshaded]")
 
-      // Abrams unshaded
-      if (remaining > 0 && baseFirst) {
-        log(s"\nRemove a base first [$Abrams_Unshaded]")
-        val removed = selectEnemyRemoveReplaceActivate(pieces.only(baseTargets), 1)
-        removeToAvailable(name, removed)
-        killedPieces = killedPieces + removed
-      }
-
-      // Search and Destory unshaded
-      // Even if the remaining hits is zero, we will remove an underground
-      // guerilla.  But if there are hits remainin, the it counts toward
-      // those hits.
-      val killedUnderground = if (underground) {
-        log(s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]")
-        val removed = selectEnemyRemoveReplaceActivate(pieces.only(validEnemy(UndergroundGuerrillas)), 1)
-        removeToAvailable(name, removed)
-        if (remaining > 0) {
-          killedPieces = killedPieces + removed  // Counts against total hits
-          Pieces()
-        }
-        else
-          removed  // Will be added to killedPieces later
-      }
-      else
-        Pieces()
-
-      // Remove exposed insurgent pieces, check for tunnel marker removal
-      val (killedExposed, affectedTunnel) = selectRemoveEnemyInsurgentBasesLast(validPieces(pieces), remaining, params.vulnerableTunnels)
-      killedPieces = killedPieces + killedExposed
-      // Add any removed underground guerrilla that did NOT count toward remaining hits above
-      killedPieces = killedPieces + killedUnderground
-
-      if (killedPieces.isEmpty && affectedTunnel.isEmpty)
+      if (losses.dead.isEmpty && losses.exposedTunnel.isEmpty)
         log("\nNo insurgemnt pieces were removed in the assault")
       else {
-        removePieces(name, killedPieces)
-        if (affectedTunnel.nonEmpty) {
+        log()
+        removePieces(name, losses.dead)
+        if (losses.exposedTunnel.nonEmpty) {
           val die = d6
           val success = die > 3
           log("\nNext piece to remove would be a tunneled base")
           log(separator())
           log(s"Die roll is: ${die} [${if (success) "Tunnel destroyed!" else "No effect"}]")
           if (success)
-            removeTunnelMarker(name, affectedTunnel)
-        }
-
-        // Trigger the M48 Patton capability if it is in play and would
-        // be effective (max two non-Lowland spaces)
-        val triggerM48Patton = 
-          m48Patton &&
-          m48PattonSpaces.size < 2 &&
-          !sp.isLowland &&
-          vulnerableInsurgents(pieces, params.vulnerableTunnels).nonEmpty
-
-        if (triggerM48Patton) {
-          val vulnerable = vulnerableInsurgents(pieces, params.vulnerableTunnels)
-          val (m48Exposed, m48Tunnel) = selectRemoveEnemyInsurgentBasesLast(vulnerable, 2, params.vulnerableTunnels)
-          log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
-          removePieces(name, m48Exposed)
-          if (m48Tunnel.nonEmpty)
-            removeTunnelMarker(name, m48Tunnel)
-          m48PattonSpaces += name
+            removeTunnelMarker(name, losses.exposedTunnel)
         }
       }
 
       // Body Count momentum
-      if (momentumInPlay(Mo_BodyCount) && killedPieces.totalOf(Guerrillas) > 0) {
+      if (momentumInPlay(Mo_BodyCount) && losses.dead.has(Guerrillas)) {
         log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]")
-        increaseUsAid(3 * killedPieces.totalOf(Guerrillas))
+        increaseUsAid(3 * losses.dead.totalOf(Guerrillas))
       }
 
       // Each removed base adds +6 aid
-      if (faction == ARVN && killedPieces.totalOf(baseTargets) > 0) {
+      if (faction == ARVN && losses.dead.has(baseTargets)) {
         log(s"\nEach insurgent base removed by ARVN Assault adds +6 Aid")
-        increaseUsAid(6 * killedPieces.totalOf(baseTargets))
+        increaseUsAid(6 * losses.dead.totalOf(baseTargets))
       }
 
       // Cobras_Shaded
       //    Eash US assault space, 1 US Troop to Casualties on die roll of 1-3
-      if (asUS && pieces.has(USTroops) && capabilityInPlay(Cobras_Shaded)) {
+      if (asUS && sp.pieces.has(USTroops) && capabilityInPlay(Cobras_Shaded)) {
         val die = d6
         val success = die < 4
         log(s"\nCheck for loss of US Troop [$Cobras_Shaded]")
@@ -3560,7 +3559,6 @@ object Bot {
         val moveTypes = (USTroops::ARVNTroops::Irregulars:::Rangers).toSet[PieceType]
 
         moveDestinations = Vector.empty
-
         movedPieces.reset()
         movePiecesToDestinations(US, AirLift, moveTypes, false, params, maxDests = maxSpaces)(nextAirLiftCandidate)
         val effective = moveDestinations.nonEmpty
@@ -6001,6 +5999,7 @@ object Bot {
             log(s"\nNVA Bombards ${sp.name}")
             log(separator())
             removePieces(sp.name, toRemove)
+            bombardSpaces += sp.name
             pause()
             nextBombard(numBombarded + 1)
           }
@@ -7965,7 +7964,7 @@ object Bot {
           val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
   
           if (canAmbush)
-            ambushActivity(VC, ambushCandidates, op, actNum, params, false)
+            ambushActivity(NVA, ambushCandidates, op, actNum, params, false)
   
           canAmbush || NVA_Bot.bombardActivity(params)
         }

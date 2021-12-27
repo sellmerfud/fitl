@@ -95,9 +95,16 @@ object Card_066 extends EventCard(66, "Ambassador Taylor",
       increaseUsAid(9)
       increaseResources(ARVN, 9)
       action match {
-        case USOOP     => loggingControlChanges(placeOutOfPlayPiecesOnMap(faction, 2, USPieces, SouthVietnam))
-        case PATRONAGE => decreasePatronage(3)
-        case NOTHING   => 
+        case USOOP =>
+          val maxUS = game.outOfPlay.totalOf(USPieces) min 2
+          val num = if (game.isHuman(faction))
+            askInt("Place how many Out of Play US Pieces", 0, maxUS)
+          else
+            maxUS
+          placeOutOfPlayPiecesOnMap(faction, num, USPieces, SouthVietnam)
+        case PATRONAGE =>
+          decreasePatronage(3)
+        case NOTHING => 
       }
     }
   }

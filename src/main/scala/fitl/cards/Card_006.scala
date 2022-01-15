@@ -73,7 +73,7 @@ object Card_006 extends EventCard(6, "Aces",
     val params = Params(
       event     = true,
       maxSpaces = Some(1),
-      airstrike = AirStrikeParams(maxHits = Some(6), noCoin = true),
+      airstrike = AirStrikeParams(maxHits = Some(6), noCoin = true, canDegradeTrail = false),
       onlyIn    = Some(validNames.toSet)
     )
 

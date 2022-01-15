@@ -270,7 +270,7 @@ object Bot {
   }
 
   // Used by events that allow a faction to execute a special activity.
-  // We draw Trung Cards and execute the activity(s) on the cards until 
+  // We draw Trung Cards and execute the activity(s) on the cards until
   // one is effective.
   def eventSpecialActivity(faction: Faction, params: Params, only: Set[SpecialActivity] = AllSpecials): Unit = {
     val available = FactionSpecials(faction) filter only  // Not currently used!
@@ -326,7 +326,7 @@ object Bot {
   // Check for the General Lansdale momentum effect
   // and logs a message if it is in play.
   def generalLandsdale(faction: Faction): Boolean = {
-    if (momentumInPlay(Mo_GeneralLansdale)) {
+    if (faction == US && momentumInPlay(Mo_GeneralLansdale)) {
       log(s"\n$faction cannot assault [Momentum: $Mo_GeneralLansdale]")
       true
     }
@@ -360,7 +360,7 @@ object Bot {
     nextSpace(num, candidates).reverse
   }
 
-  
+
   def pickSpaceWithMostPieces(pieceTypes: TraversableOnce[PieceType])(candidates: List[Space]) = {
     val priorities = List(new Bot.HighestScore[Space](s"Most ${andList(pieceTypes)}", _.pieces.totalOf(pieceTypes)))
     bestCandidate(candidates, priorities)
@@ -544,7 +544,7 @@ object Bot {
         case Some(VC)  => pieces.only(VCPieces)
         case _         => pieces
       }
-    
+
     val asUS               = faction == US || params.cubeTreatment == AllCubesAsUS || params.cubeTreatment == AllTroopsAsUS
     val remove1BaseFirst   = asUS && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
@@ -554,16 +554,16 @@ object Bot {
     val sp                 = game.getSpace(name)
     val totalLosses        = sp.assaultFirepower(faction, params.cubeTreatment)
     val enemyPieces        = validEnemy(sp.pieces)
-    
+
     case class EnemyLosses(
       dead: Pieces          = Pieces(),
       baseFirst: Boolean    = false,
       exposedTunnel: Pieces = Pieces()) {
         val total = dead.total + exposedTunnel.total
       }
-      
+
     def calculateLosses(numLosses: Int): EnemyLosses = {
-      var killedPieces        = Pieces()    
+      var killedPieces        = Pieces()
       def remainingLosses     = (numLosses - killedPieces.total) max 0
       def remainingEnemy      = enemyPieces - killedPieces
       val numVulnerableForces = enemyPieces.totalOf(NVATroops::ActiveGuerrillas)
@@ -574,10 +574,10 @@ object Bot {
         killedPieces = killedPieces + removed  // Counts against total hits
       }
 
-      // Abrams unshaded      
+      // Abrams unshaded
       val baseFirst = if (remove1BaseFirst && remainingLosses <= numVulnerableForces && remainingEnemy.has(baseTargets)) {
         val removed = selectEnemyRemoveReplaceActivate(remainingEnemy.only(baseTargets), 1)
-      
+
         killedPieces = killedPieces + removed
         true
       }
@@ -587,10 +587,10 @@ object Bot {
       // Remove exposed insurgent pieces, check for tunnel marker removal
       val (killedExposed, affectedTunnel) = selectRemoveEnemyInsurgentBasesLast(remainingEnemy, remainingLosses, params.vulnerableTunnels)
       killedPieces = killedPieces + killedExposed
-      
+
       EnemyLosses(killedPieces, baseFirst, affectedTunnel)
     }
-    
+
     val regularLosses = calculateLosses(totalLosses)
     // Trigger the M48 Patton capability if it is in play and would
     // be effective (max two non-Lowland spaces)
@@ -601,13 +601,13 @@ object Bot {
       EnemyLosses()
 
     val losses = if (pattonLosses.total > regularLosses.total) {
-      m48PattonSpaces += name      
-      pattonLosses 
-    } 
+      m48PattonSpaces += name
+      pattonLosses
+    }
     else
       regularLosses
-    
-    
+
+
     // Log all control changes at the end of the assault
     loggingControlChanges {
       log(s"\n$faction assaults in $name")
@@ -623,10 +623,10 @@ object Bot {
       log(s"The assault inflicts ${amountOf(totalLosses, "hit")}")
       if (losses == pattonLosses)
         log(s"$faction removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
-      
+
       if (losses.baseFirst)
         log(s"$faction removes a base first [$Abrams_Unshaded]")
-      
+
       if (losses.dead.has(UndergroundGuerrillas))
         log(s"$faction removes an underground guerrilla [$SearchAndDestroy_Unshaded]")
 
@@ -737,7 +737,7 @@ object Bot {
   }
 
   def assaultWouldRemoveBase(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean)(sp: Space): Boolean = {
-    sp.pieces.totalOf(InsurgentNonTunnels) > 
+    sp.pieces.totalOf(InsurgentNonTunnels) >
       assaultResult(faction, cubeTreatment, vulnerableTunnels)(sp).pieces.totalOf(InsurgentNonTunnels)
   }
 
@@ -1162,7 +1162,7 @@ object Bot {
   }
 
   // When placing enemy pieces for an event.
-  def selectEnemyPlacement(pieces: Pieces, num: Int): Pieces = 
+  def selectEnemyPlacement(pieces: Pieces, num: Int): Pieces =
     selectFriendlyRemoval(pieces: Pieces, num: Int)
 
   def humanPiecesFirst(list: List[PieceType]): List[PieceType] = {
@@ -2254,7 +2254,7 @@ object Bot {
   // If madatory is true, then once it has moved pieces using the Move Priorities if we have
   // not move the mandatory number of pieces, then we will select pieces from the space(s)
   // with the most pieces.
-  // 
+  //
   // Returns the pieces that moved.
   def doEventMoveTo(
     destName: String,
@@ -2276,7 +2276,7 @@ object Bot {
           case Some(names) => spaces(names - destName)
           case None        => game.spaces filter { sp => sp.name != destName && sp.pieces.has(moveTypes) }
         }
-          
+
         if (origins.nonEmpty) {
           val sp = bestCandidate(origins, priorities)
           val piece = selectFriendlyToPlaceOrMove(sp.pieces.only(moveTypes), 1)
@@ -2515,7 +2515,9 @@ object Bot {
 
           case Some(destName) =>
             botDebug(s"\n$faction Bot will attempt $action to $destName")
-            tryOrigin(destName, Set.empty)
+            loggingControlChanges {
+              tryOrigin(destName, Set.empty)
+            }
             val dest = game.getSpace(destName)
 
             // If no pieces could be found to move into the destination then
@@ -2587,12 +2589,19 @@ object Bot {
         sp.pieces.has(UndergroundGuerrillas)
       }
 
+    // This condition is used by the US Bot to determine if it
+    // would select an Assault Operation.
+    // I have made a small adjustment by checking it the
+    // General Lansdale Momentum event is in effect.
+    // Otherwise, when General Lansdale is in effect the US
+    // Bot tends to pass on every turn.
     def usPiecesWith4PlusNVATroopsOrVulnerableBase: Boolean =
-      game.spaces exists { sp =>
+     !momentumInPlay(Mo_GeneralLansdale) &&
+      (game.spaces exists { sp =>
         sp.pieces.has(USPieces) &&
         (sp.pieces.totalOf(NVATroops) > 3 ||
          (sp.pieces.has(InsurgentBases) && !sp.pieces.has(UndergroundGuerrillas)))
-      }
+      })
 
     def spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops: Boolean =
       game.spaces exists { sp =>
@@ -2976,7 +2985,7 @@ object Bot {
         arvnExhausted = !passed
         passed
       }
-      def canAffordARVN = params.free || !game.trackResources(ARVN) || game.arvnResources >= 3  
+      def canAffordARVN = params.free || !game.trackResources(ARVN) || game.arvnResources >= 3
       def canPlaceARVN = canAffordARVN && (!needArvnCheck || checkARVNActivation)
       def canTrain(arvn: Boolean) = trainingSpaces.size < maxTrain && (!arvn || canPlaceARVN)
       def prohibited(sp: Space) = !params.spaceAllowed(sp.name) || trainingSpaces(sp.name) || adviseSpaces(sp.name)
@@ -2985,7 +2994,7 @@ object Bot {
 
       def trainToPlaceCubes(once: Boolean): Unit = {
         val candidates = game.nonLocSpaces filter arvnCandidate
-        if (canTrain(true) && game.availablePieces.has(ARVNCubes) && candidates.nonEmpty) {
+        if (game.availablePieces.has(ARVNCubes) && candidates.nonEmpty && canTrain(true)) {
           val sp      = pickSpacePlaceCubesSpecialForces(troops = true)(candidates)
           val avail   = game.availablePieces.only(ARVNCubes)
           val num     = 6 min avail.total
@@ -3006,7 +3015,7 @@ object Bot {
 
       def trainToPlaceRangers(): Unit = {
         val candidates = game.nonLocSpaces filter arvnCandidate
-        if (canTrain(true) && game.availablePieces.has(Rangers) && candidates.nonEmpty) {
+        if (game.availablePieces.has(Rangers) && candidates.nonEmpty && canTrain(true)) {
           val sp      = pickSpacePlaceCubesSpecialForces(troops = false)(candidates)
           val avail   = game.availablePieces.only(Rangers)
           val num     = 2 min avail.total
@@ -3240,7 +3249,7 @@ object Bot {
 
         if (!params.event)
           logOpChoice(US, Sweep)
-          
+
         movePiecesToDestinations(US, Sweep, cubeTypes , false, params, maxDests = maxSweep)(nextSweepCandidate)
         val maxCobras = 2  // Unshaded cobras can be used in up to 2 spaces
         var numCobras = 0
@@ -3293,7 +3302,7 @@ object Bot {
       else {
         var assaultSpaces = Set.empty[String]
         val paramsMax     = params.maxSpaces getOrElse NO_LIMIT
-        val capMax        = if (capabilityInPlay(Abrams_Shaded)) 2 
+        val capMax        = if (capabilityInPlay(Abrams_Shaded)) 2
                        else if (capabilityInPlay(Cobras_Shaded)) 2
                        else NO_LIMIT
         val maxAssault    = paramsMax min capMax
@@ -3471,7 +3480,7 @@ object Bot {
 
           if (!params.event && adviseSpaces.isEmpty)
             logSAChoice(US, Advise)
-          log(s"\nAdvise in ${sp.name} using ARVN Assault")
+          log(s"\nAdvise in ${sp.name} using ARVN Sweep in place")
           log(separator())
           activateGuerrillasForSweep(sp.name, ARVN, params.cubeTreatment, logHeading = false)
           pause()
@@ -3551,7 +3560,7 @@ object Bot {
             None
         }
 
-        
+
         logSAChoice(US, AirLift)
         //  Since the air lift can be use during a sweep we must preserve the moveDestinations
         val savedMovedDestinations = moveDestinations
@@ -3749,7 +3758,7 @@ object Bot {
               shiftedOnce = true
             }
             val numKills = spaceKills(name)
-            
+
             if (sp.support == ActiveOpposition)
               log(s"\n$name: No shift [Already at Active Opposition]")
             else if (numKills == 0)
@@ -3777,7 +3786,7 @@ object Bot {
         loggingControlChanges {
           if (!momentumInPlay(Mo_WildWeasels) || hitsRemaining == maxHits)
             strikeASpace()
-  
+
           if (hitsRemaining < maxHits) {
             shiftSupportInStrikeSpaces()
             logEndSA(US, AirStrike)
@@ -4389,7 +4398,7 @@ object Bot {
       bestCandidate(candidates, priorities)
     }
 
-    def pickSpaceRemoveReplace(candidates: List[Space]): Space = 
+    def pickSpaceRemoveReplace(candidates: List[Space]): Space =
       pickSpaceRemoveReplaceSpecific(candidates, false, false)
 
     // ARVN Spaces Priorities: Remove or Replace
@@ -4542,7 +4551,7 @@ object Bot {
         }
       }
 
-        if (!params.event)
+      if (!params.event)
         logOpChoice(ARVN, Train)
       trainToPlaceRangers(game.nonLocSpaces filter canTrainRangers) &&
       trainToPlaceCubes(game.nonLocSpaces filter canTrainCubes)
@@ -4647,7 +4656,7 @@ object Bot {
           None  // Cannot afford to do any sweeping!
         else {
           val nextSweepCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
-            val candidates = game.nonLocSpaces filter { sp => 
+            val candidates = game.nonLocSpaces filter { sp =>
               params.spaceAllowed(sp.name) && !sp.isNorthVietnam && !prohibited(sp.name)
             }
 
@@ -4662,7 +4671,7 @@ object Bot {
             else
               None
           }
-          
+
           if (!params.event)
             logOpChoice(ARVN, Sweep)
 
@@ -4846,7 +4855,7 @@ object Bot {
             else {
               val num    = usAid min sp.population
               usAid     -= num
-              patronage += num 
+              patronage += num
               GovernAction(name, false)
             }
           }
@@ -4860,7 +4869,7 @@ object Bot {
       }
 
       if (governSpaces.nonEmpty) {
-        val governActions = getGovernActions()        
+        val governActions = getGovernActions()
         val mandateSpace  = if (capabilityInPlay(MandateOfHeaven_Unshaded)) {
           val patronageSpaces = governActions filterNot (_.addAid)
           patronageSpaces.sortBy(x => game.getSpace(x.name).support.value).map(_.name).headOption
@@ -4895,7 +4904,7 @@ object Bot {
                   decreaseSupport(sp.name, 1)
               }
             }
-  
+
             //  Young turks always applies if in play
             if (isRVNLeader(RVN_Leader_YoungTurks)) {
               log(s"$RVN_Leader_YoungTurks leader effect triggers")
@@ -4908,7 +4917,7 @@ object Bot {
         true
       }
       else
-        false 
+        false
     }
 
     //  -------------------------------------------------------------
@@ -4922,14 +4931,14 @@ object Bot {
     // ArmoredCavalry_Shaded   - Transport Rangers only (NO TROOPS)
     // RVN_Leader_NguyenKhanh  - Transport uses max 1 LOC space - Enforced by getTransportOrigins()
     def transportActivity(params: Params): Boolean = {
-        
+
       if (!params.event && momentumInPlay(Mo_TyphoonKate))
         false  // Typhoon Kate prohibits transport
       else {
         val savedMovedDestinations = moveDestinations
         val savedMovedPieces       = movedPieces
         var flippedARanger         = false
-      
+
         val moveTypes: Set[PieceType] =
           if (capabilityInPlay(ArmoredCavalry_Shaded)) Rangers.toSet else (ARVNTroops::Rangers).toSet
 
@@ -5208,7 +5217,7 @@ object Bot {
       LOC_CanTho_ChauDoc
     )
 
-    // When the trail is at 4 
+    // When the trail is at 4
     // NVA march considers all spaces that are in or adjacent
     // to Laos/Cambodia to be adjacent.
 
@@ -5588,9 +5597,9 @@ object Bot {
 
         // If Easter Offensive pivotal event then we start by marching max troops to
         // LoCs adjacent to Saigon.
-        if (easterOffensive)  
+        if (easterOffensive)
           movePiecesToDestinations(NVA, EasterTroops, Set(NVATroops), false, params)(nextLocAdjacentToSaigonCandidate)
-          
+
         // Never first need activation for LoCs
         if (withLoC)
           movePiecesToDestinations(NVA, March, marchers, false, params, maxDests = params.maxSpaces)(nextLoCCandidate)
@@ -5658,8 +5667,8 @@ object Bot {
       // would be effective in this space and this space
       // has more NVA Troops than any previous effective space.
       if (useTroops && capabilityInPlay(PT76_Shaded)) {
-        val prevTroops = pt76_space map (_.nvaTroops) getOrElse 0 
-        val prevDelta  = pt76_space map (_.delta) getOrElse 0 
+        val prevTroops = pt76_space map (_.nvaTroops) getOrElse 0
+        val prevDelta  = pt76_space map (_.delta) getOrElse 0
         val delta = (numTroops min coinPieces.total) - num
 
         if (delta > 0 && (numTroops > prevTroops || (numTroops == prevTroops && delta > prevDelta)))
@@ -5720,7 +5729,7 @@ object Bot {
       }
       val maxAttacks = params.maxSpaces getOrElse NO_LIMIT
       var attackSpaces   = Set.empty[String]
-      
+
       clearPT76Shaded()
 
       // Return true if we can continue attacking (ie. did not fail and activation roll)
@@ -5931,7 +5940,7 @@ object Bot {
             loggingControlChanges {
               if (sp.support < Neutral)
                 increaseSupport(sp.name, 1)
-              
+
               removeToAvailable(sp.name, vcPiece)
               placePieces(sp.name, Pieces(nvaBases = 1))
               if (nvaType == NVATunnel)
@@ -6418,7 +6427,7 @@ object Bot {
         // prohibited contains all previous march destinations plus failed
         // destinations.
         val nextGenericCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
-          lazy val candidates = game.spaces filter {sp => 
+          lazy val candidates = game.spaces filter {sp =>
             params.spaceAllowed(sp.name) &&
             !prohibited.contains(sp.name)
           }
@@ -6431,7 +6440,7 @@ object Bot {
 
         if (!params.event)
           logOpChoice(VC, March)
-        
+
         movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, params, maxDests = params.maxSpaces)(nextLoCCandidate)
         // First activation check is always false since previos 0-2 spaces were LoCs
         movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, params, maxDests = params.maxSpaces)(nextGenericCandidate)
@@ -6478,7 +6487,7 @@ object Bot {
           log(separator())
           log(s"Die roll ${amountOf(numGs, "Guerrilla")}): $die [${if (success) "Success!" else "Failure"}]")
           attackSpaces += sp.name
-          
+
           if (success) {
             val deadPieces    = selectRemoveEnemyCoinBasesLast(coinPieces, num)
             val attritionNum  = deadPieces.totalOf(USTroops::USBase::Nil) min guerrillas.total
@@ -6960,7 +6969,7 @@ object Bot {
       else {
         // Special activity comes first!
         val didSpecial = params.addSpecialActivity && doSpecialActivity()
-  
+
         // If the special activty was done we return TrungComplete
         // even if the opeation was ineffective
         if (US_Bot.trainOp(params, actNum).nonEmpty || didSpecial)
@@ -6992,7 +7001,7 @@ object Bot {
           TrungComplete(true)
         else
           TrungNoOp
-      }      
+      }
       else {
         US_Bot.assaultOp(params)(doSpecialActivity) match {
           case Some((op, didSpecial)) => TrungComplete(didSpecial)
@@ -7021,7 +7030,7 @@ object Bot {
           US_Bot.patrolOp(params)
         else
           US_Bot.sweepOp(params)
-  
+
         operation match {
           case Some(_) => TrungComplete(params.addSpecialActivity && doSpecial())
           case None    => TrungNoOp
@@ -7079,7 +7088,7 @@ object Bot {
       else {
         // Special activity comes first!
         val didSpecial = params.addSpecialActivity && doSpecialActivity()
-  
+
         // If the special activty was done we return TrungComplete
         // even if the opeation was ineffective
         if (US_Bot.trainOp(params, actNum).nonEmpty || didSpecial)
@@ -7312,7 +7321,7 @@ object Bot {
             val didSpecial = params.addSpecialActivity && doSpecial()
             ARVN_Bot.armoredCavalryAssault()
             TrungComplete(didSpecial)
-  
+
           case None => TrungNoOp
         }
       }
@@ -7322,13 +7331,13 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_ARVN_H extends TrungCard(ARVN, "H", actNum = 3) {
 
-    
+
     // ------------------------------------------------------------
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = ARVN_Bot.transportActivity(params)
-      
+
       if (!ARVN_Bot.fiveArvnTroopsPlusRangersInAnySpace)
         TrungDraw
       else if (params.specialActivityOnly) {
@@ -7381,7 +7390,7 @@ object Bot {
       def doSpecialActivity(): Boolean =
         ARVN_Bot.governActivity(params) ||
         ARVN_Bot.transportActivity(params)
-        
+
       if (!ARVN_Bot.any2PopSpaceWithSupportAndMoreArvnCubesThanUsCubes)
         TrungDraw
       else if (rollDice(3) > game.availablePieces.totalOf(ARVNPieces))
@@ -7425,13 +7434,13 @@ object Bot {
           ARVN_Bot.patrolOp(params)
         else
           ARVN_Bot.sweepOp(params, actNum)
-  
+
         operation match {
           case Some(op) =>
             val didSpecial = params.addSpecialActivity && doSpecial(op)
             ARVN_Bot.armoredCavalryAssault()
             TrungComplete(didSpecial)
-  
+
           case None => TrungNoOp
         }
       }
@@ -7449,7 +7458,7 @@ object Bot {
         ARVN_Bot.governActivity(params) ||
         ARVN_Bot.raidActivity(params)   ||
         ARVN_Bot.transportActivity(params)
-      
+
       if (game.arvnPoints < 42)
         TrungDraw
       else if (!allLocRoutesCanTho_HueBlocked)
@@ -7492,13 +7501,13 @@ object Bot {
           ARVN_Bot.assaultOp(params, actNum)
         else
           ARVN_Bot.trainOp(params, actNum)
-  
+
         operation match {
           case Some(op) =>
             val didSpecial = params.addSpecialActivity && doSpecial(op)
             ARVN_Bot.armoredCavalryAssault()
             TrungComplete(didSpecial)
-  
+
           case None => TrungNoOp
         }
       }
@@ -7557,13 +7566,13 @@ object Bot {
           ARVN_Bot.assaultOp(params, actNum)
         else
           ARVN_Bot.sweepOp(params, actNum)
-  
+
         operation match {
           case Some(_) =>
             val didSpecial = params.addSpecialActivity && doSpecialActivity()
             ARVN_Bot.armoredCavalryAssault()
             TrungComplete(didSpecial)
-  
+
           case None => TrungNoOp
         }
       }
@@ -7625,13 +7634,13 @@ object Bot {
           ARVN_Bot.patrolOp(params)
         else
           ARVN_Bot.sweepOp(params, actNum)
-  
+
         operation match {
           case Some(_) =>
             val didSpecial = params.addSpecialActivity && doSpecialActivity()
             ARVN_Bot.armoredCavalryAssault()
             TrungComplete(didSpecial)
-  
+
           case None => TrungNoOp
         }
       }
@@ -7676,7 +7685,7 @@ object Bot {
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      def doSpecialActivity(): Boolean = 
+      def doSpecialActivity(): Boolean =
         NVA_Bot.infiltrateActivity(params, needDiceRoll = false, replaceVCBase = false)
 
       if (params.specialActivityOnly) {
@@ -7688,7 +7697,7 @@ object Bot {
       else {
         if (NVA_Bot.eightTroopsOutsideSouth) {
           val infiltrated = params.addSpecialActivity && doSpecialActivity()
-  
+
           NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false) match {
             case Some(_) => TrungComplete(infiltrated)
             case None    => TrungNoOp
@@ -7699,7 +7708,7 @@ object Bot {
             case Some(_) =>
               val infiltrated = params.addSpecialActivity && doSpecialActivity()
               TrungComplete(infiltrated)
-  
+
             case None =>
               TrungNoOp
           }
@@ -7762,7 +7771,7 @@ object Bot {
             case Some(_) =>
               val infiltrated = params.addSpecialActivity && doSpecialActivity()
               TrungComplete(infiltrated)
-  
+
             case None =>
               TrungNoOp
           }
@@ -7823,10 +7832,10 @@ object Bot {
             val didSpecial = NVA_Bot.infiltrateActivity(params, needDiceRoll = true, replaceVCBase = true) ||
                              NVA_Bot.bombardActivity(params)
             TrungComplete(didSpecial)
-  
+
           case Some(_) =>
             TrungComplete(false)
-  
+
           case None =>
             TrungNoOp
         }
@@ -7882,7 +7891,7 @@ object Bot {
             case Some(_) =>
               val bombarded = params.addSpecialActivity && NVA_Bot.bombardActivity(params)
               TrungComplete(bombarded)
-  
+
             case None =>
               TrungNoOp
           }
@@ -7891,13 +7900,13 @@ object Bot {
           def doSpecialActivity(): Boolean = {
             val ambushCandidates = marchAmbushCandidates(NVA, needUnderground = true)
             val canAmbush        = ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
-  
+
             if (canAmbush)
               ambushActivity(NVA, ambushCandidates, March, actNum, params, false)
-  
+
             canAmbush || NVA_Bot.bombardActivity(params)
           }
-  
+
           NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true) match {
             case Some(_) => TrungComplete(params.addSpecialActivity && doSpecialActivity())
             case None    => TrungNoOp
@@ -7962,19 +7971,19 @@ object Bot {
         def doSpecialActivity(op: InsurgentOp): Boolean = {
           val ambushCandidates = marchAmbushCandidates(NVA, needUnderground = true)
           val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
-  
+
           if (canAmbush)
             ambushActivity(NVA, ambushCandidates, op, actNum, params, false)
-  
+
           canAmbush || NVA_Bot.bombardActivity(params)
         }
-  
-  
+
+
         val result = if (NVA_Bot.sixTroopsWithCOINPieces)
           NVA_Bot.attackOp(params, actNum, addAmbush = params.addSpecialActivity)
         else
           NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true) map (_ -> false)
-  
+
         result match {
           case Some((Attack, true)) => TrungComplete(true)
           case Some((op, _))        => TrungComplete(params.addSpecialActivity && doSpecialActivity(op))
@@ -8026,7 +8035,7 @@ object Bot {
         sp.pieces.has(NVAGuerrillas_U) && sp.support > Neutral
       val undergroundIn2PlusSpacesWithSupport: Boolean =
         (game.nonLocSpaces count underGroundWithSupport) > 1
-        
+
       if (params.specialActivityOnly) {
         if (doSpecialActivity(undergroundIn2PlusSpacesWithSupport == false))
           TrungComplete(true)
@@ -8036,7 +8045,7 @@ object Bot {
       else {
         if (undergroundIn2PlusSpacesWithSupport) {
           NVA_Bot.terrorOp(params, actNum) match {
-            case Some(_) => 
+            case Some(_) =>
               val didSpecial = params.addSpecialActivity && doSpecialActivity(false)
               TrungComplete(didSpecial)
             case None    =>
@@ -8046,13 +8055,13 @@ object Bot {
         else {
           val didSpecial = params.addSpecialActivity && doSpecialActivity(true)
           val operation = NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false)
-  
+
           if (didSpecial || operation.nonEmpty)
             TrungComplete(didSpecial)
           else
             TrungNoOp
         }
-      }      
+      }
     }
   }
 
@@ -8130,7 +8139,7 @@ object Bot {
           VC_Bot.rallyOp(params, actNum)
         else
           VC_Bot.marchOp(params, actNum)
-  
+
         operation match {
           case Some(op) => TrungComplete(params.addSpecialActivity && doSpecialActivity(op))
           case None     => TrungNoOp
@@ -8191,7 +8200,7 @@ object Bot {
           VC_Bot.attackOp(params, actNum)
         else
           (VC_Bot.terrorOp(params, actNum), false)
-  
+
         operation match {
           case Some(Attack) => TrungComplete(ambushed)
           case Some(Terror) => TrungComplete(params.addSpecialActivity && doSpecialActivity())
@@ -8253,7 +8262,7 @@ object Bot {
           (VC_Bot.terrorOp(params, actNum), false)
         else
           VC_Bot.attackOp(params, actNum)
-  
+
         operation match {
           case Some(Attack) => TrungComplete(ambushed)
           case Some(Terror) => TrungComplete(params.addSpecialActivity && doSpecialActivity())
@@ -8332,7 +8341,7 @@ object Bot {
     //Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      def doSpecialActivity(): Boolean = 
+      def doSpecialActivity(): Boolean =
         VC_Bot.taxActivity(params)
 
       if (rollDice(3) > game.availablePieces.totalOf(VCPieces))

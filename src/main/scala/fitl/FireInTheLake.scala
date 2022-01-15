@@ -436,7 +436,7 @@ object FireInTheLake {
       else {
         (getAdjacent(current) filterNot visited) match {
           case x if x.isEmpty => None
-          case adjacents => 
+          case adjacents =>
             val paths = adjacents.toList.map(a => measure(a, visited ++ adjacents)).flatten.sorted
             paths match {
               case Nil    => None
@@ -1102,7 +1102,7 @@ object FireInTheLake {
   }
 
   // Only if US is doing the Assault!
-  def canUseM48PattonUnshaded(name: String): Boolean = 
+  def canUseM48PattonUnshaded(name: String): Boolean =
     capabilityInPlay(M48Patton_Unshaded) && !game.getSpace(name).isLowland
 
   // TRUE if any underground guerrillas and all active guerrillas and troops would be killed
@@ -1110,7 +1110,7 @@ object FireInTheLake {
   // FALSE if no active pieces or not all active pieces would be killed
   def assaultKillsAllVulnerable(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean, enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
     val enemyPieces = (sp: Space) =>
-      enemies.foldLeft(Pieces()) { 
+      enemies.foldLeft(Pieces()) {
         case (pieces, NVA) => pieces + sp.pieces.only(NVAPieces)
         case (pieces, VC)  => pieces + sp.pieces.only(VCPieces)
         case (pieces, _)   => pieces
@@ -1123,7 +1123,7 @@ object FireInTheLake {
 
   def assaultEffective(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean, enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
     val enemyPieces = (sp: Space) =>
-      enemies.foldLeft(Pieces()) { 
+      enemies.foldLeft(Pieces()) {
         case (pieces, NVA) => pieces + sp.pieces.only(NVAPieces)
         case (pieces, VC)  => pieces + sp.pieces.only(VCPieces)
         case (pieces, _)   => pieces
@@ -1253,7 +1253,7 @@ object FireInTheLake {
     // Can have support/opposition
     def canHaveSupport = !isLoC && population > 0
 
-    def supportValue: Int = 
+    def supportValue: Int =
       support match {
         case PassiveSupport if canHaveSupport => population
         case ActiveSupport  if canHaveSupport => 2 * population
@@ -1711,7 +1711,7 @@ object FireInTheLake {
   case object Tax        extends SpecialActivity("Tax")
   case object Subvert    extends SpecialActivity("Subvert")
 
-  val AllSpecials: Set[SpecialActivity] = 
+  val AllSpecials: Set[SpecialActivity] =
     Set(Advise, AirLift, AirStrike, Govern, Transport, Raid,
         Infiltrate, Bombard, Ambush, Tax, Subvert)
 
@@ -1790,7 +1790,7 @@ object FireInTheLake {
       case AllCubesAsUS                  => Set(USTroops, ARVNTroops, ARVNPolice)
     }
   }
-  
+
   def sweepForceTypes(faction: Faction, cubeTreatment: CubeTreatment): Set[PieceType] = {
     val cubeTypes = sweepCubeTypes(faction, cubeTreatment)
     faction match {
@@ -1817,7 +1817,7 @@ object FireInTheLake {
     rally:   RallyParams         = RallyParams(),
     ambush:  AmbushParams        = AmbushParams(),
     vulnerableTunnels: Boolean   = false,  // Used by events assault/air strike
-    cubeTreatment: CubeTreatment = NormalTroops 
+    cubeTreatment: CubeTreatment = NormalTroops
   ) {
     val limOpOnly = maxSpaces == Some(1)
 
@@ -1925,7 +1925,7 @@ object FireInTheLake {
           actors             = actors filterNot (_.faction == faction),
           passed             = passed - faction,
           eligibleNextTurn   = eligibleNextTurn - faction,
-          ineligibleNextTurn = ineligibleNextTurn - faction) 
+          ineligibleNextTurn = ineligibleNextTurn - faction)
 
     def makeIneligible(faction: Faction): SequenceOfPlay =
         copy(eligibleThisTurn = eligibleThisTurn - faction)
@@ -2304,7 +2304,7 @@ object FireInTheLake {
 
     def addPieces(types: TraversableOnce[PieceType]): Unit = {
       if (avail.has(types))
-        b += separator()        
+        b += separator()
       for (t <- types; name = t.genericPlural; count = avail.totalOf(t))
         b += f"${name}%-15s: ${count}%2d"
     }
@@ -2328,7 +2328,7 @@ object FireInTheLake {
 
     def addPieces(types: TraversableOnce[PieceType]): Unit = {
       if (game.casualties.has(types))
-        b += separator()        
+        b += separator()
       for (t <- types; name = t.genericPlural; count = game.casualties.totalOf(t) if count > 0)
         b += f"${name}%-15s: ${count}%2d"
     }
@@ -2348,13 +2348,13 @@ object FireInTheLake {
 
     def addPieces(types: TraversableOnce[PieceType]): Unit = {
       if (game.outOfPlay.has(types))
-        b += separator()        
+        b += separator()
       for (t <- types; name = t.genericPlural; count = game.outOfPlay.totalOf(t) if count > 0)
         b += f"${name}%-15s: ${count}%2d"
     }
     b += "Out of Play"
     if (game.outOfPlay.isEmpty) {
-      b += separator()      
+      b += separator()
       b += "None"
     }
     else {
@@ -2721,7 +2721,7 @@ object FireInTheLake {
 
     val desc = """|Display the current game state
                   |  show scenario  - name of the current scenario
-                  |  show status    - current score, resources, etc.
+                  |  show summary   - current score, resources, etc.
                   |  show pieces    - available pieces, casualties, out of play pieces
                   |  show events    - capabilities, momentum, pivotal events
                   |  show all       - entire game state
@@ -3207,7 +3207,7 @@ object FireInTheLake {
         pacify(ARVN)
         if (arvnSpaces.isEmpty) {
           log("\nARVN does not pacify any spaces")
-          pause()        
+          pause()
         }
       }
 
@@ -3429,6 +3429,7 @@ object FireInTheLake {
       log(s"\nWITHDRAWAL: For every 2 US pieces just removed to Available, VC shifts")
       log("1 population of support by 1 level toward Active Opposition")
       val was = if (numToAvailable == 1) "was" else "were"
+      log()
       log(s"${amountOf(numToAvailable, "piece")} $was removed to Available")
       log(separator())
       if (numVCPopShifts > 0) {
@@ -3506,7 +3507,7 @@ object FireInTheLake {
       if (eligible.nonEmpty)
         log(s"Move the ${andList(eligible)} ${pluralize(eligible.size, "cylinder")} to the Eligible box")
       if (ineligible.nonEmpty)
-        log(s"Move the ${andList(ineligible)} ${pluralize(ineligible.size, "cylinder")} to the Ineligible box")      
+        log(s"Move the ${andList(ineligible)} ${pluralize(ineligible.size, "cylinder")} to the Ineligible box")
     }
   }
 
@@ -3594,7 +3595,7 @@ object FireInTheLake {
     // For pivot cards, the eventEffection() function
     // returns true if the condition for playing the pivotal
     // event has been met.
-    if (game.sequence.numActors == 0 && !game.isCoupRound && !game.onDeckIsCoup) 
+    if (game.sequence.numActors == 0 && !game.isCoupRound && !game.onDeckIsCoup)
       List(VC, ARVN, NVA, US) filter canPlayPivotal
     else
       Nil
@@ -3645,7 +3646,7 @@ object FireInTheLake {
     }
 
     // Next find all eligible human factions
-    // that could play their pivotal event without  
+    // that could play their pivotal event without
     // being trumped by the Bot.
 
     val pivotHumans = pivotBot match {
@@ -3669,7 +3670,7 @@ object FireInTheLake {
       None
     else
       getPivotalFaction
-    
+
     if (!game.gameOver && pivotFaction.nonEmpty) {
       val faction = pivotFaction.get
 
@@ -4497,7 +4498,7 @@ object FireInTheLake {
       for (name <- candidates; sp = game.getSpace(name))
         removed += (name -> sp.pieces.only(types))
     }
-    else    
+    else
       nextSpace(num)
 
     if (removed.nonEmpty)
@@ -4599,7 +4600,7 @@ object FireInTheLake {
   def askToPlaceBase(spaceName: String, baseType: PieceType): Pieces = {
     // Get number of each type in available box plus on map
     val piecesToPlace = game.piecesToPlace.only(baseType)
-    
+
     if (piecesToPlace.isEmpty || (piecesToPlace.total == 1 && game.getSpace(spaceName).pieces.has(baseType))) {
       println(s"\nThere are no ${baseType.plural} available to be placed.")
       Pieces()
@@ -4812,7 +4813,7 @@ object FireInTheLake {
 
   def pauseIfBot(faction: Faction): Unit = if (game.isBot(faction)) pause()
 
-  // We sometimes want to run some Bot code to 
+  // We sometimes want to run some Bot code to
   // check a what-if situation.  In these cases
   // we do not want anything to be logged to the
   // terminal.
@@ -5242,11 +5243,11 @@ object FireInTheLake {
 
 
   def showCommand(param: Option[String]): Unit = {
-    val options =  "scenario" :: "status" :: "pieces" :: "events" :: "all" :: SpaceNames
+    val options =  "scenario" :: "summary" :: "pieces" :: "events" :: "all" :: SpaceNames
 
     askOneOf("Show: ", options, param, allowNone = true, allowAbort = false) foreach {
       case "scenario" => printSummary(scenarioSummary)
-      case "status"   => printSummary(statusSummary)
+      case "summary"  => printSummary(statusSummary)
       case "pieces"   => printPiecesSummary()
       case "events"   => printSummary(eventSummary)
       case "all"      => printGameState()
@@ -5434,7 +5435,7 @@ object FireInTheLake {
     val agitate = if (game.isBot(VC)) List("agitate") else Nil
     val options = (
       List("resources", "aid", "patronage", "econ", "trail", "uspolicy", "casualties",
-      "on deck card", "out of play", "capabilities", "momentum", "rvnLeaders", "pivotal", 
+      "on deck card", "out of play", "capabilities", "momentum", "rvnLeaders", "pivotal",
       "eligibility", "trung", "bot log") ::: agitate
     ).sorted ::: SpaceNames
 
@@ -5460,7 +5461,7 @@ object FireInTheLake {
       case name           => adjustSpace(name)
     }
 
-    // We throw an Adjustment exception to return to 
+    // We throw an Adjustment exception to return to
     // the mainLoop().
     // This allows us to check if the adjustment allows a
     // faction to play their pivotal event.
@@ -5704,7 +5705,7 @@ object FireInTheLake {
       }
     }
   }
-  
+
   def adjustRvnLeaders(): Unit = {
     val LeaderCards = RVN_Leaders filterNot (_ == RVN_Leader_DuongVanMinh)
 
@@ -6088,7 +6089,7 @@ object FireInTheLake {
       val available = game.availablePieces.except(forbidden)
       val pieceChoices: List[(Option[PieceType], String)] = AllPieceTypes flatMap { t =>
         if (!forbidden(t) &&
-           pieces.has(t) || available.has(normalizedType(t)) && 
+           pieces.has(t) || available.has(normalizedType(t)) &&
            (!isBase(t) || pieces.only(BasePieces).except(t).total < 2))
           Some(Some(t) -> t.plural)
         else

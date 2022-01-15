@@ -128,7 +128,7 @@ object Card_119 extends EventCard(119, "My Lai",
         setSupport(name, ActiveOpposition)
         placePieces(name, piecesToPlace(sp.canTakeBase))
       }
-      increaseUsAid(6)
+      decreaseUsAid(6)
     }
   }
 }

@@ -2167,7 +2167,7 @@ object FireInTheLake {
 
   var game: GameState = _           // Global variable that holds the current game state.
 
-  def autoVictory(faction: Faction): Boolean = game.isBot(faction) &&
+  def autoVictory(faction: Faction): Boolean = (game.isBot(faction) || game.humanFactions.size > 1) &&
     (faction match {
       case US   => game.usScore   > 0
       case NVA  => game.nvaScore  > 0
@@ -2258,9 +2258,9 @@ object FireInTheLake {
     b += separator()
     if (game.trackResources(ARVN))
       b += f"ARVN Resources : ${game.arvnResources}%2d"
-    if (game.isHuman(NVA))
+    if (game.trackResources(NVA))
       b += f"NVA  Resources : ${game.nvaResources}%2d"
-    if (game.isHuman(VC))
+    if (game.trackResources(VC))
       b += f"VC   Resources : ${game.vcResources}%2d"
     else
       b += f"VC   Agitate   : ${game.vcResources}%2d"
@@ -2903,7 +2903,9 @@ object FireInTheLake {
       log(s"\nVictory Phase")
       log(separator(char = '='))
       val leader = game.scores.head
-      if (game.isBot(leader.faction) && leader.score > 0) {
+      //  During Victory phase a Bot can always win
+      //  Human can win only if not a solataire game
+      if (leader.score > 0 && (game.isBot(leader.faction) || game.humanFactions.size > 1)) {
         val coupRound = game.coupCardsPlayed + 1
         showScores(s"Game over in the ${ordinal(coupRound)} Coup! round")
 

@@ -2008,6 +2008,7 @@ object FireInTheLake {
     humanFactions: Set[Faction],
     cardsPerCampaign: Int,    // Including the Coup! card
     totalCoupCards: Int,   // Total number in the current scenario
+    humanWinInVictoryPhase: Boolean,
     spaces: List[Space],
     arvnResources: Int                = 0,  // 0 - 75
     nvaResources: Int                 = 0,
@@ -2039,6 +2040,7 @@ object FireInTheLake {
     log: Vector[String]               = Vector.empty) {  // Log of the cuurent game segment
 
 
+    lazy val botFactions = Faction.ALL -- humanFactions
     lazy val allPiecesOnMap = spaces.foldLeft(Pieces()) { (total, space) => total + space.pieces }
     lazy val availablePieces = ForcePool - allPiecesOnMap.normalized - casualties.normalized - outOfPlay.normalized
     // piecesToPlace are either on the map or available (not casualties or out of play)
@@ -2167,7 +2169,7 @@ object FireInTheLake {
 
   var game: GameState = _           // Global variable that holds the current game state.
 
-  def autoVictory(faction: Faction): Boolean = (game.isBot(faction) || game.humanFactions.size > 1) &&
+  def autoVictory(faction: Faction): Boolean = (game.isBot(faction) || game.humanWinInVictoryPhase) &&
     (faction match {
       case US   => game.usScore   > 0
       case NVA  => game.nvaScore  > 0
@@ -2522,10 +2524,15 @@ object FireInTheLake {
             }
           }
 
+          val humanCanWinEarly = if (humanFactions.nonEmpty)
+            askYorN(s"\nAllow human ${pluralize(humanFactions.size, "faction")} to win in Victory phase of Coup round? (y/n) ");
+          else
+            false
+
           println()
           gameName = Some(askGameName("Enter a name for your new game: "))
 
-          game = initialGameState(scenario, humanFactions, usePeriodEvents)
+          game = initialGameState(scenario, humanFactions, usePeriodEvents, humanCanWinEarly)
 
           log()
           log("Start of Game")
@@ -2553,7 +2560,7 @@ object FireInTheLake {
   }
 
 
-  def initialGameState(scenario: Scenario, humanFactions: Set[Faction], usePeriodCapabilities: Boolean) = {
+  def initialGameState(scenario: Scenario, humanFactions: Set[Faction], usePeriodCapabilities: Boolean, humanCanWinEarly: Boolean) = {
     val trungDeck = shuffle(TrungDeck filterNot (card => humanFactions(card.faction)))
     var spaces    = DefaultSpaces
 
@@ -2571,6 +2578,7 @@ object FireInTheLake {
       humanFactions,
       scenario.cardsPerCampaign,
       scenario.totalCoupCards,
+      humanCanWinEarly,
       spaces,
       scenario.arvnResources,
       scenario.nvaResources,
@@ -2905,7 +2913,7 @@ object FireInTheLake {
       val leader = game.scores.head
       //  During Victory phase a Bot can always win
       //  Human can win only if not a solataire game
-      if (leader.score > 0 && (game.isBot(leader.faction) || game.humanFactions.size > 1)) {
+      if (leader.score > 0 && (game.isBot(leader.faction) || game.humanWinInVictoryPhase)) {
         val coupRound = game.coupCardsPlayed + 1
         showScores(s"Game over in the ${ordinal(coupRound)} Coup! round")
 
@@ -3487,7 +3495,7 @@ object FireInTheLake {
     if (game.isBot(VC) && game.agitateTotal == 0)
       initAgitateTotal()
 
-    if (game.humanFactions.size != 4) {
+    if (game.botFactions.nonEmpty) {
       game = game.copy(trungDeck = shuffle(game.trungDeck))
       log("\nThe Trung deck has been reshuffled")
   }

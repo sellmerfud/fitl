@@ -1397,9 +1397,8 @@ object Human {
 
         val canRemove = (maxPieces - totalRemoved) min hitsRemaining
         if (choices.size == 1) {
-          val degradeMsg = if (hasDegraded) "" else " and you cannot degrade the trail"
-          println(s"\n ${amountOf(hitsRemaining, "hit")} remaining")
-          println(s"There are no strike targets $degradeMsg")
+          val degradeMsg = if (hasDegraded) " and you cannot degrade the trail again" else ""
+          println(s"There are no strike targets$degradeMsg")
         }
         else
           askMenu(choices, s"\nAir Strike: (${amountOf(hitsRemaining, "hit")} remaining, remove up to ${amountOf(canRemove, "piece")})").head match {

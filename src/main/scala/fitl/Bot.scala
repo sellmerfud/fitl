@@ -320,6 +320,7 @@ object Bot {
     decreaseResources(ARVN, (numTerror + numShift) * cost)
     removeTerror(sp.name, numTerror)
     increaseSupport(sp.name, numShift)
+    pause()
     numTerror + numShift
   }
 

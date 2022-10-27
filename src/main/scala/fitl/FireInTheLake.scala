@@ -3938,6 +3938,7 @@ object FireInTheLake {
     log(s"\nRolling d3 to set the Agitate Total: $agitateTotal")
     log(separator())
     setAgitateTotal(agitateTotal)
+    pause()
   }
 
   // If VC is a Bot, the we store the agitate total in vcResources

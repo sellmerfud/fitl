@@ -3673,9 +3673,12 @@ object Bot {
             if (capabilityInPlay(TopGun_Shaded))
               log(s"Die roll ($TopGun_Shaded): $die [${if (success) "Success!" else "Failure"}]")
 
+
+            // Hits applied even if Top Gun die roll failed
+            hitsRemaining -= 2
+            
             if (success) {
               degradeTrail(numBoxes)
-              hitsRemaining -= 2
 
               if (adsid) {
                 log(s"Momentum: $Mo_ADSID reduces NVA resources at trail change")

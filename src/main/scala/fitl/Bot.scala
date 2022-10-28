@@ -2476,6 +2476,7 @@ object Bot {
                   log(separator())
                   removeToAvailable(destName, Pieces().set(1, underground.getTypes.head))
                 }
+                log()  // Add blank line separator
               }
             }
             //  The dest space can no longer be considered for
@@ -3424,7 +3425,7 @@ object Bot {
         sp.pieces.totalOf(InsurgentForces) < 2
 
       def useSpecialForces(sp: Space): Unit = {
-        log(s"\nAdvise in ${sp.name} using ARVN Special Forces")
+        log(s"\nAdvise in ${sp.name} using Special Forces")
         log(separator())
         val forceType    = if (sp.pieces.has(Rangers_U)) Rangers_U else Irregulars_U
         val specialForce = Pieces().set(1, forceType)
@@ -3498,6 +3499,7 @@ object Bot {
           if (!params.event && adviseSpaces.isEmpty)
             logSAChoice(US, Advise)
           useSpecialForces(sp)
+          pause()
           adviseSpaces += sp.name
           removeEnemies()
         }
@@ -3511,6 +3513,7 @@ object Bot {
           if (!params.event && adviseSpaces.isEmpty)
             logSAChoice(US, Advise)
           arvnAssault(sp)
+          pause()
           adviseSpaces += sp.name
           doArvnAssaults()
         }

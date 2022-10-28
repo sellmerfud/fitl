@@ -2188,46 +2188,56 @@ object FireInTheLake {
     b.toList
   }
 
+
   // Calculate percentage chance that the next card drawn will
   // be a Coup card.
-  // Returns: percentage
-  //          number of cards remaining in current campaign
-  def chanceOfDrawingACoupCard: (Double, Int) = {
-    def countCoup(cardNum: Int) = if (eventDeck(cardNum).isCoup) 1 else 0
+  //
+  // Returns
+  // ( chance of next card being Coup!,
+  //   campaign pile that next card belongs to,
+  //   number of remaining cards in that campaign
+  //   Coup! card status of current campaign (resolved, current, on deck, unresolved)
+  // )
+  
+  def chanceOfDrawingACoupCard: (Double, Int, Int, String) = {
     val coupCardShowing = game.isCoupRound || game.onDeckIsCoup
-
+    
+    //  Special case for the start of a game when less than three
+    //  cards have been drawn.
     if (game.cardsDrawn < 3) {
       val cardsRemaining = game.cardsPerCampaign - game.cardsDrawn
       val chance = if (coupCardShowing) 0.0 else 1.0 / cardsRemaining
-      (chance, cardsRemaining)
+      val coupStatus = (game.isCoupRound, game.onDeckIsCoup) match {
+        case (true, _)     => "Is current card"
+        case (false, true) => "Is upcoming card"
+        case _             => "Has not yet been seen"
+      }
+      
+      (chance, 1, cardsRemaining, coupStatus)
     }
     else {
-      val cardsPlayed     = game.cardsDrawn - 2
-      val lastPlayedPile  = (cardsPlayed - 1) / game.cardsPerCampaign + 1
-      val currentCardPile = (cardsPlayed / game.cardsPerCampaign) + 1
-      val nextCardPile    = (game.cardsDrawn / game.cardsPerCampaign) + 1
-
-      if (nextCardPile == lastPlayedPile) {
-        val cardsInCurrent = game.cardsDrawn % game.cardsPerCampaign
-        val cardsRemaining = game.cardsPerCampaign - cardsInCurrent
-        val chance         = if (game.coupCardsPlayed >= nextCardPile || coupCardShowing)
-          0.0
-        else
-          1.0 / cardsRemaining
-        (chance, cardsRemaining)
+      //  A 'Pile' relates to each pile of cards containing a Coup!
+      //  card as defined by the current scenario.
+      val cardsPlayed         = game.cardsDrawn - 2
+      val lastPlayedPile      = (cardsPlayed - 1) / game.cardsPerCampaign + 1
+      val currentCardPile     = cardsPlayed / game.cardsPerCampaign + 1
+      val upcomingCardPile    = (cardsPlayed + 1) / game.cardsPerCampaign + 1
+      val topOfDeckPile       = (game.cardsDrawn / game.cardsPerCampaign) + 1
+      val numCoupSeen         = game.coupCardsPlayed +
+                                (if (game.isCoupRound)  1 else 0) +
+                                (if (game.onDeckIsCoup) 1 else 0)
+      val currentCoupResolved = lastPlayedPile == game.coupCardsPlayed && topOfDeckPile == lastPlayedPile
+      val cardsRemainingPile  = game.cardsPerCampaign - (game.cardsDrawn % game.cardsPerCampaign)
+      val chance              = if (topOfDeckPile > numCoupSeen) 1.0 / cardsRemainingPile else 0.0
+    
+      val coupStatus = (game.isCoupRound, game.onDeckIsCoup, currentCoupResolved) match {
+        case (true,   _,    _)    => s"${ordinal(currentCardPile)} Coup! is the current card"
+        case (false, true,  _)    => s"${ordinal(upcomingCardPile)} Coup! is the upcoming card"
+        case (false, false, true) => s"${ordinal(topOfDeckPile)} Coup! has been resolved"
+        case _                    => s"${ordinal(topOfDeckPile)} Coup! has not yet been seen"
       }
-      else if (nextCardPile == currentCardPile) {
-        val cardsRemaining = game.cardsPerCampaign - 2
-        val chance = if (coupCardShowing) 0.0 else 1.0 / cardsRemaining
-        (chance, cardsRemaining)
-      }
-      else if (game.onDeckCard == 0)
-          (1.0 / game.cardsPerCampaign, game.cardsPerCampaign)
-      else {
-        val cardsRemaining = game.cardsPerCampaign - 1
-        val chance = if (game.onDeckIsCoup) 0.0 else 1.0 / cardsRemaining
-        (chance, cardsRemaining)
-      }
+    
+      (chance, topOfDeckPile, cardsRemainingPile, coupStatus)
     }
   }
 
@@ -2246,13 +2256,12 @@ object FireInTheLake {
       f"${label}%s${score.points}%2d   (${score.score}%3d)  $auto_display"
     }
 
+    val (coupChance, nextCardCampaign, cardsRemaining, coupStatus) = chanceOfDrawingACoupCard
+       
     val coupCardChance = if (game.isFinalCampaign && game.isCoupRound)
-      s"0%  (Final Coup! round)"
+      s"0.00%  (Final Coup! round)"
     else
-      chanceOfDrawingACoupCard match {
-        case (0.0, remaining)    =>  s"0%  (${remaining} cards remaining from previous campaign)"
-        case (chance, remaining) =>  f"${chance*100}%.2f%%  (${remaining} cards remaining in current campaign)"
-      }
+      f"${coupChance*100}%.2f%%  (${amountOf(cardsRemaining, "card")} remaining in ${ordinal(nextCardCampaign)} pile)"
 
     b += "Game Summary"
     b += separator()
@@ -2294,7 +2303,9 @@ object FireInTheLake {
 
     b += separator()
     b += s"Campaign       : ${ordinal(game.coupCardsPlayed+1)} of ${game.totalCoupCards} ${if (game.isFinalCampaign) " -- Final campaign" else ""}"
-    b += s"Cards/Campaign : ${game.cardsPerCampaign}"
+    b += f"Cards/Pile     : ${game.cardsPerCampaign}%2d"
+    b += f"Cards drawn    : ${game.cardsDrawn}%2d"
+    b += s"Coup card      : $coupStatus"
     b += f"Coup chance    : $coupCardChance"
 
     b.toList
@@ -3125,7 +3136,6 @@ object FireInTheLake {
           else
             Bot.ARVN_Bot.pickSpaceTowardPassiveSupport(candidates)
           botPoints -= Bot.pacifySpace(sp.name, faction, coupRound = true, coupPoints = botPoints, params.free, params.maxLevels)
-          pause()
           recordSpace(faction, sp.name)
           pacify(faction)
         }

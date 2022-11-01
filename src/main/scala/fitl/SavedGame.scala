@@ -36,7 +36,7 @@ package fitl
 import java.io.IOException
 import FUtil.Pathname
 import FireInTheLake.{ GameState, SequenceOfPlay, Space, Pieces, Faction, Action, SpaceType,
-                       Actor, Capability, GameSegment, PieceType, SupportType }
+                       Actor, Capability, GameSegment, PieceType, SupportType, SOFTWARE_VERSION }
 import Bot.{ TrungCard, trungFromId }
 
 object SavedGame {
@@ -58,8 +58,9 @@ object SavedGame {
   
   private def toJson(gameState: GameState): String = {
     val top = Map(
-      "version"    -> CurrentFileVersion,
-      "game-state" -> gameStateToMap(gameState)
+      "file-version" -> CurrentFileVersion,
+      "bot-version"  -> SOFTWARE_VERSION,
+      "game-state"   -> gameStateToMap(gameState)
     )
     Json.build(top)
   }
@@ -82,13 +83,13 @@ object SavedGame {
 
   private def fromJson(jsonValue: String): GameState = {
     val top = asMap(Json.parse(jsonValue))
-    if (!top.contains("version"))
-      throw new IllegalArgumentException(s"Invalid save file - No version number")
+    if (!top.contains("file-version"))
+      throw new IllegalArgumentException(s"Invalid save file - No file version number")
     
     if (!top.contains("game-state"))
       throw new IllegalArgumentException(s"Invalid save file - No game-state")
 
-    asInt(top("version")) match {
+    asInt(top("file-version")) match {
       case 1 => gameFromVersion1(asMap(top("game-state")))
       case v => throw new IllegalArgumentException(s"Invalid save file version: $v")
     }

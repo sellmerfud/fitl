@@ -20,5 +20,5 @@ package VERSION:
 
 @setvers VERSION:
   ruby -p -i -e 'gsub(/(version\s*:=\s*)("\d+\.\d+")/, "\\1\"{{VERSION}}\"")' build.sbt
-  ruby -p -i -e 'gsub(/fitl_2.12-(\d+\.\d+)\.jar/, "fire-in-the-lake_2.12-{{VERSION}}.jar")' src/other/fitl src/other/fitl.cmd
-
+  ruby -p -i -e 'gsub(/fire-in-the-lake_2.12-(\d+\.\d+)\.jar/, "fire-in-the-lake_2.12-{{VERSION}}.jar")' src/other/fitl src/other/fitl.cmd
+  ruby -p -i -e 'gsub(/(val\s+SOFTWARE_VERSION\s*=\s*)("\d+\.\d+")/, "\\1\"{{VERSION}}\"")' src/main/scala/fitl/FireInTheLake.scala

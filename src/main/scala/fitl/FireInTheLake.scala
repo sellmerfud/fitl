@@ -51,6 +51,7 @@ import Bot.{ TrungCard, TrungDeck }
 
 object FireInTheLake {
 
+  val SOFTWARE_VERSION = "0.1"
   val INTEGER = """(\d+)""".r
 
   def d6 = nextInt(6) + 1
@@ -2491,6 +2492,8 @@ object FireInTheLake {
   case object Adjustment  extends Exception
 
   def main(args: Array[String]): Unit = {
+    println(s"\nFire in the Lake: Trung Bot Software (version $SOFTWARE_VERSION - BETA)")
+    println(separator())
     try {
       gamesDir.mkpath()
 
@@ -2705,8 +2708,7 @@ object FireInTheLake {
       }
       val choices = ("--new-game--" -> "Start a new game") :: gameChoices ::: List("--quit-game--" -> "Quit")
       println()
-      println("Which game would you like to play:")
-      askMenu(choices, allowAbort = false).head match {
+      askMenu(choices, "Which game would you like to play:", allowAbort = false).head match {
         case "--new-game--"  => None
         case "--quit-game--" => throw ExitGame
         case name            => Some(name)

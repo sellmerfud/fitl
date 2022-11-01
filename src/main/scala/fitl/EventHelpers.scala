@@ -63,12 +63,12 @@ object EventHelpers {
   def removePiecesFromMap(
     faction: Faction,
     numToRemove: Int,
-    pieceTypes: TraversableOnce[PieceType],
+    pieceTypes: Iterable[PieceType],
     friendly: Boolean,
-    validSpaces: TraversableOnce[String],
+    validSpaces: Iterable[String],
     usToAvailable: Boolean = false): Set[String] = {
-    val validNames = validSpaces.toSet
-    val pieceNames = (pieceTypes map (_.genericPlural)).toList.distinct
+    val validNames = validSpaces.to(Set)
+    val pieceNames = (pieceTypes map (_.genericPlural)).to(List).distinct
     val desc = if (pieceNames.size > 3) "pieces" else andList(pieceNames)
     var spacesUsed = Set.empty[String]
 
@@ -85,7 +85,7 @@ object EventHelpers {
           val sp       = game.getSpace(name)
           val pieces   = sp.pieces.only(pieceTypes) - removed(sp.name)
           val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
-          val toRemove = askPieces(pieces, num, pieceTypes.toSeq)
+          val toRemove = askPieces(pieces, num, pieceTypes.to(Seq))
           if (toRemove.nonEmpty)
             removed += (name -> (removed(name) + toRemove))
           nextHumanRemoval(numRemaining - num)
@@ -167,12 +167,12 @@ object EventHelpers {
   def removePiecesToOutOfPlay(
     faction: Faction,
     numToRemove: Int,
-    pieceTypes: TraversableOnce[PieceType],
+    pieceTypes: Iterable[PieceType],
     friendly: Boolean,
-    validSpaces: TraversableOnce[String]): Set[String] = {
-    val validNames = validSpaces.toSet
+    validSpaces: Iterable[String]): Set[String] = {
+    val validNames = validSpaces.to(Set)
     val hasPieces = (sp: Space) => validNames(sp.name) && sp.pieces.has(pieceTypes)
-    val desc = andList((pieceTypes.toList map (_.genericPlural)).distinct)
+    val desc = andList((pieceTypes.to(List) map (_.genericPlural)).distinct)
     var spacesUsed = Set.empty[String]
 
     def humanRemoval(): Unit = {
@@ -187,7 +187,7 @@ object EventHelpers {
           val sp       = game.getSpace(name)
           val pieces   = sp.pieces.only(pieceTypes)
           val num      = askInt(s"Remove how many pieces from $name", 0, numRemaining min pieces.total)
-          val toRemove = askPieces(pieces, num, pieceTypes.toSeq)
+          val toRemove = askPieces(pieces, num, pieceTypes.to(Seq))
           if (toRemove.nonEmpty)
             removed += (name -> (removed(name) + toRemove))
           nextHumanRemoval(numRemaining - num)
@@ -248,12 +248,12 @@ object EventHelpers {
 
   // Place pieces from available
   // Returns the set of spaces where pieces were placed
-  def placePiecesOnMap(faction: Faction, numToPlace: Int, pieceTypes: TraversableOnce[PieceType],
-                          validSpaces: TraversableOnce[String]): Set[String] = {
-    val validNames = validSpaces.toSet
+  def placePiecesOnMap(faction: Faction, numToPlace: Int, pieceTypes: Iterable[PieceType],
+                          validSpaces: Iterable[String]): Set[String] = {
+    val validNames = validSpaces.to(Set)
     val isValid = (sp: Space) => validNames(sp.name)
     val canTakeBase  = (sp: Space) => isValid(sp) && sp.totalBases < 2
-    val desc = andList((pieceTypes.toList map (_.genericPlural)).distinct)
+    val desc = andList((pieceTypes.to(List) map (_.genericPlural)).distinct)
     var spacesUsed = Set.empty[String]
 
     def nextHumanPlacement(numRemaining: Int): Unit = if (numRemaining > 0) {
@@ -329,10 +329,10 @@ object EventHelpers {
 
   // Place pieces from Casualties
   // Returns the set of spaces where pieces were placed
-  def placeCasualtyPiecesOnMap(faction: Faction, numToPlace: Int, pieceTypes: TraversableOnce[PieceType],
-                                validSpaces: TraversableOnce[String]): Set[String] = {
+  def placeCasualtyPiecesOnMap(faction: Faction, numToPlace: Int, pieceTypes: Iterable[PieceType],
+                                validSpaces: Iterable[String]): Set[String] = {
     val actualNum = numToPlace min game.casualties.totalOf(pieceTypes)
-    val validNames = validSpaces.toSet
+    val validNames = validSpaces.to(Set)
     val isValid = (sp: Space) => validNames(sp.name)
     val canTakeBase  = (sp: Space) => isValid(sp) && sp.totalBases < 2
     val desc = andList((game.casualties.only(pieceTypes).getTypes map (_.genericPlural)).distinct)
@@ -415,10 +415,10 @@ object EventHelpers {
 
   // Place pieces from Out Of Play
   // Returns the set of spaces where pieces were placed
-  def placeOutOfPlayPiecesOnMap(faction: Faction, numToPlace: Int, pieceTypes: TraversableOnce[PieceType],
-                                validSpaces: TraversableOnce[String]): Set[String] = {
+  def placeOutOfPlayPiecesOnMap(faction: Faction, numToPlace: Int, pieceTypes: Iterable[PieceType],
+                                validSpaces: Iterable[String]): Set[String] = {
     val actualNum = numToPlace min game.outOfPlay.totalOf(pieceTypes)
-    val validNames = validSpaces.toSet
+    val validNames = validSpaces.to(Set)
     val isValid = (sp: Space) => validNames(sp.name)
     val canTakeBase  = (sp: Space) => isValid(sp) && sp.totalBases < 2
     val desc = andList((game.outOfPlay.only(pieceTypes).getTypes map (_.genericPlural)).distinct)
@@ -506,7 +506,7 @@ object EventHelpers {
     numToMove: Int,
     mandatory: Boolean,
     destName: String,
-    pieceTypes: TraversableOnce[PieceType],
+    pieceTypes: Iterable[PieceType],
     onlyFrom: Option[Set[String]] = None): Unit = {
     val hasPieces = (sp: Space) => {
       onlyFrom match {
@@ -544,7 +544,7 @@ object EventHelpers {
         nextHumanMove(num)
       }
       else
-        Bot.doEventMoveTo(destName, faction, numToMove, mandatory, pieceTypes.toSet, onlyFrom)
+        Bot.doEventMoveTo(destName, faction, numToMove, mandatory, pieceTypes.to(Set), onlyFrom)
     }
   }
 

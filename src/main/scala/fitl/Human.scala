@@ -50,14 +50,14 @@ object Human {
   private val NO_LIMIT = 1000;          // When space selection is unlimited.
   private var pt76_shaded_used = false  // NVA attack in one space
 
-  def logOpChoice(faction: Faction, op: Operation, notes: TraversableOnce[String] = Nil): Unit = {
+  def logOpChoice(faction: Faction, op: Operation, notes: Iterable[String] = Nil): Unit = {
     log(s"\n$faction chooses $op operation")
     log(separator(char = '='))
     for (note <- notes)
       log(note)
   }
 
-  def logSAChoice(faction: Faction, sa: SpecialActivity, notes: TraversableOnce[String] = Nil): Unit = {
+  def logSAChoice(faction: Faction, sa: SpecialActivity, notes: Iterable[String] = Nil): Unit = {
     log(s"\n$faction chooses $sa special activity")
     log(separator(char = '='))
     for (note <- notes)
@@ -184,7 +184,7 @@ object Human {
                             canRevealTunnel: Boolean,
                             vulnerableTunnels: Boolean = false,
                             onlyTarget: Option[Faction] = None): Pieces = {
-    def validEnemy(types: TraversableOnce[PieceType]): TraversableOnce[PieceType] =
+    def validEnemy(types: Iterable[PieceType]): Iterable[PieceType] =
       onlyTarget match {
         case Some(f) => types filter (t => owner(t) == f)
         case None    => types
@@ -208,7 +208,7 @@ object Human {
         case 0 =>
         case num =>
           val prompt = s"\nRemove active guerrillas"
-          val toRemove = askPieces(pieces, num, validEnemy(ActiveGuerrillas).toSeq, Some(prompt))
+          val toRemove = askPieces(pieces, num, validEnemy(ActiveGuerrillas).to(Seq), Some(prompt))
           removeToAvailable(name, toRemove)
           removed = removed + toRemove
       }
@@ -218,7 +218,7 @@ object Human {
           case 0 =>
           case num =>
             val prompt = s"\nRemove bases"
-            val toRemove = askPieces(pieces, num, baseTargets.toSeq, Some(prompt))
+            val toRemove = askPieces(pieces, num, baseTargets.to(Seq), Some(prompt))
             removeToAvailable(name, toRemove)
             removed = removed + toRemove
         }
@@ -231,7 +231,7 @@ object Human {
           log(s"Die roll is: ${die} [${if (success) "Tunnel destroyed!" else "No effect"}]")
           if (success) {
             val prompt = "\nRemove tunnel marker"
-            val tunnel = askPieces(pieces, 1, validEnemy(InsurgentTunnels).toSeq, Some(prompt))
+            val tunnel = askPieces(pieces, 1, validEnemy(InsurgentTunnels).to(Seq), Some(prompt))
             removeTunnelMarker(name, tunnel)
           }
         }
@@ -2957,7 +2957,7 @@ object Human {
     val asUS = faction == US || params.cubeTreatment == AllCubesAsUS || params.cubeTreatment == AllTroopsAsUS
     val remove1BaseFirst   = asUS && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
-    def validEnemy(types: TraversableOnce[PieceType]): TraversableOnce[PieceType] =
+    def validEnemy(types: Iterable[PieceType]): Iterable[PieceType] =
       params.assault.onlyTarget match {
         case Some(f) => types filter (t => owner(t) == f)
         case None    => types
@@ -2994,7 +2994,7 @@ object Human {
       // Abrams unshaded
       if (remaining > 0 && baseFirst) {
         log(s"\nRemove a base first [$Abrams_Unshaded]")
-        val removed = askPieces(pieces, 1, baseTargets.toSeq)
+        val removed = askPieces(pieces, 1, baseTargets.to(Seq))
         removeToAvailable(name, removed)
         killedPieces = killedPieces + removed
       }
@@ -3005,7 +3005,7 @@ object Human {
       // those hits.
       val killedUnderground = if (underground) {
         log(s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]")
-        val removed = askPieces(pieces, 1, validEnemy(UndergroundGuerrillas).toSeq)
+        val removed = askPieces(pieces, 1, validEnemy(UndergroundGuerrillas).to(Seq))
         removeToAvailable(name, removed)
         if (remaining > 0) {
           killedPieces = killedPieces + removed  // Counts against total hits

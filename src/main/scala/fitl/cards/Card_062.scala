@@ -40,7 +40,6 @@ import fitl.EventHelpers._
 import fitl.Bot
 import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 import fitl.Human
-import org.scalactic.Or
 
 // Unshaded Text
 // Lon Nol deposes Sihanouk: US free Air Lifts into and US or ARVN free Sweeps

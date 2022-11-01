@@ -145,7 +145,7 @@ object Bot {
     def marchActNum = if (game.trail == TrailMax) 1 else actNum
   }
 
-  def logOpChoice(faction: Faction, op: Operation, notes: TraversableOnce[String] = Nil): Unit = {
+  def logOpChoice(faction: Faction, op: Operation, notes: Iterable[String] = Nil): Unit = {
     log(s"\n$faction chooses $op operation")
     log(separator(char = '='))
     for (note <- notes)
@@ -156,7 +156,7 @@ object Bot {
       log(s"\nNo spaces found for $faction $op")
   }
 
-  def logSAChoice(faction: Faction, sa: SpecialActivity, notes: TraversableOnce[String] = Nil): Unit = {
+  def logSAChoice(faction: Faction, sa: SpecialActivity, notes: Iterable[String] = Nil): Unit = {
     log(s"\n$faction chooses $sa special activity")
     log(separator(char = '='))
     for (note <- notes)
@@ -362,7 +362,7 @@ object Bot {
   }
 
 
-  def pickSpaceWithMostPieces(pieceTypes: TraversableOnce[PieceType])(candidates: List[Space]) = {
+  def pickSpaceWithMostPieces(pieceTypes: Iterable[PieceType])(candidates: List[Space]) = {
     val priorities = List(new Bot.HighestScore[Space](s"Most ${andList(pieceTypes)}", _.pieces.totalOf(pieceTypes)))
     bestCandidate(candidates, priorities)
   }
@@ -413,7 +413,7 @@ object Bot {
 
   // When removing friendly pieces the Bots will always remove from the space with the most
   // eligible pieces.
-  def pickSpaceRemoveFriendlyPieces(candidates: List[Space], pieceTypes: TraversableOnce[PieceType]): Space = {
+  def pickSpaceRemoveFriendlyPieces(candidates: List[Space], pieceTypes: Iterable[PieceType]): Space = {
     val priorities = List(new HighestScore[Space]("Most pieces", _.pieces.totalOf(pieceTypes)))
 
     bestCandidate(candidates, priorities)
@@ -744,7 +744,7 @@ object Bot {
 
   // Returns the number of the requested pieces types that are in
   // spaces adjecent to the given space.
-  def numAdjacentPieces(sp: Space, pieceTypes: TraversableOnce[PieceType]): Int = {
+  def numAdjacentPieces(sp: Space, pieceTypes: Iterable[PieceType]): Int = {
     spaces(getAdjacent(sp.name)).foldLeft(0) { (sum, sp) => sum + sp.pieces.totalOf(pieceTypes) }
   }
 
@@ -1210,7 +1210,7 @@ object Bot {
     def remainingPieces  = pieces - deadPieces
     def numRemaining     = num - deadPieces.total
 
-    def removeForces(types: TraversableOnce[PieceType]): Unit = if (numRemaining > 0) {
+    def removeForces(types: Iterable[PieceType]): Unit = if (numRemaining > 0) {
       val candidates = pieces.only(types)
       val num = numRemaining min candidates.total
       deadPieces = deadPieces + selectEnemyRemoveReplaceActivate(candidates, num)
@@ -4281,7 +4281,7 @@ object Bot {
       game.nonLocSpaces exists arvnAssaultWouldAddCoinControl
 
     // Return true if an assault on one of the spaces
-    def arvnAssaultWouldUnblockCanTo_HueRouteSpace(candidates: TraversableOnce[Space]): Boolean =
+    def arvnAssaultWouldUnblockCanTo_HueRouteSpace(candidates: Iterable[Space]): Boolean =
       candidates exists assaultInWouldUnblockAlongCanTho_HueRoute(ARVN, NormalTroops, vulnerableTunnels = false)
 
     def arvnAssaultWouldAddControlOrUnblockCanTo_Hue: Boolean = {
@@ -8183,7 +8183,7 @@ object Bot {
       }
       else {
         VC_Bot.rallyOp(params, actNum) match {
-          case Some(_) => TrungComplete(params.addSpecialActivity && doSpecialActivity)
+          case Some(_) => TrungComplete(params.addSpecialActivity && doSpecialActivity())
           case None    => TrungNoOp
         }
       }

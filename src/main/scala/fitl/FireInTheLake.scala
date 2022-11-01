@@ -776,7 +776,7 @@ object FireInTheLake {
 
   def areEnemies(us: Faction, them: Faction) = isCoin(us) != isCoin(them)
 
-  def includesEnemyBase(faction: Faction, pieceTypes: TraversableOnce[PieceType]) = {
+  def includesEnemyBase(faction: Faction, pieceTypes: Iterable[PieceType]) = {
     pieceTypes exists { ptype => isBase(ptype) && areEnemies(faction, owner(ptype)) }
   }
 
@@ -889,7 +889,7 @@ object FireInTheLake {
 
     override def toString() = if (isEmpty) "none" else descriptions.mkString(", ")
 
-    def totalOf(pieceTypes: TraversableOnce[PieceType]): Int =
+    def totalOf(pieceTypes: Iterable[PieceType]): Int =
       pieceTypes.foldLeft(0) { (num, piece) => num + totalOf(piece) }
 
     // Return true of this Pieces instance contains at least all of the specified pieces.
@@ -899,7 +899,7 @@ object FireInTheLake {
     def has(pt: PieceType): Boolean = totalOf(pt) > 0
 
     // Return true if this Pieces instance has at least one of any of the given piece types
-    def has(pts: TraversableOnce[PieceType]): Boolean = totalOf(pts) > 0
+    def has(pts: Iterable[PieceType]): Boolean = totalOf(pts) > 0
 
     def totalOf(pieceType: PieceType): Int = pieceType match {
       case USTroops        => usTroops
@@ -985,12 +985,12 @@ object FireInTheLake {
       case VCTunnel        => copy(vcTunnels       = (vcTunnels - num) max 0)
     }
 
-    def only(pieceTypes: TraversableOnce[PieceType]): Pieces =
+    def only(pieceTypes: Iterable[PieceType]): Pieces =
       pieceTypes.foldLeft(Pieces()) { (pieces, t) => pieces.add(totalOf(t), t) }
 
     def only(pieceType: PieceType): Pieces = Pieces().add(totalOf(pieceType), pieceType)
 
-    def except(pieceTypes: TraversableOnce[PieceType]): Pieces =
+    def except(pieceTypes: Iterable[PieceType]): Pieces =
       pieceTypes.foldLeft(this) { (pieces, t) => pieces.set(0, t) }
 
     def except(pieceType: PieceType): Pieces = except(Seq(pieceType))
@@ -1046,7 +1046,7 @@ object FireInTheLake {
   }
 
   object Pieces {
-    def fromTypes(collection: TraversableOnce[PieceType]) =
+    def fromTypes(collection: Iterable[PieceType]) =
       collection.foldLeft(Pieces()) { (pieces, t) => pieces.add(1, t) }
   }
 
@@ -2316,7 +2316,7 @@ object FireInTheLake {
     val b = new ListBuffer[String]
     val avail = game.availablePieces
 
-    def addPieces(types: TraversableOnce[PieceType]): Unit = {
+    def addPieces(types: Iterable[PieceType]): Unit = {
       if (avail.has(types))
         b += separator()
       for (t <- types; name = t.genericPlural; count = avail.totalOf(t))
@@ -2340,7 +2340,7 @@ object FireInTheLake {
   def casualtiesSummary: Seq[String] = {
     val b = new ListBuffer[String]
 
-    def addPieces(types: TraversableOnce[PieceType]): Unit = {
+    def addPieces(types: Iterable[PieceType]): Unit = {
       if (game.casualties.has(types))
         b += separator()
       for (t <- types; name = t.genericPlural; count = game.casualties.totalOf(t) if count > 0)
@@ -2360,7 +2360,7 @@ object FireInTheLake {
   def outOfPlaySummary: Seq[String] = {
     val b = new ListBuffer[String]
 
-    def addPieces(types: TraversableOnce[PieceType]): Unit = {
+    def addPieces(types: Iterable[PieceType]): Unit = {
       if (game.outOfPlay.has(types))
         b += separator()
       for (t <- types; name = t.genericPlural; count = game.outOfPlay.totalOf(t) if count > 0)
@@ -2448,8 +2448,8 @@ object FireInTheLake {
     b.toList
   }
 
-  def spaceNames(spaces: TraversableOnce[Space]): List[String] = (spaces map (_.name)).toList.sorted(SpaceNameOrdering)
-  def spaces(names: TraversableOnce[String]): List[Space] = (names map game.getSpace).toList.sortBy(_.name)(SpaceNameOrdering)
+  def spaceNames(spaces: Iterable[Space]): List[String] = (spaces map (_.name)).to(List).sorted(SpaceNameOrdering)
+  def spaces(names: Iterable[String]): List[Space] = (names map game.getSpace).to(List).sortBy(_.name)(SpaceNameOrdering)
 
   // We assume that the current working directory
   // set as the installed directory and thus the game directory
@@ -3517,7 +3517,7 @@ object FireInTheLake {
 
   def updateFactionEligibility(makeAllEligible: Boolean): Unit = {
     val oldSequence = game.sequence
-    val newSequence = if (makeAllEligible) SequenceOfPlay() else oldSequence.updateEligibility
+    val newSequence = if (makeAllEligible) SequenceOfPlay() else oldSequence.updateEligibility()
     val eligible    = (newSequence.eligibleThisTurn filterNot oldSequence.eligibleThisTurn).toList.sorted
     val ineligible  = (newSequence.ineligibleThisTurn filterNot oldSequence.ineligibleThisTurn).toList.sorted
 
@@ -4412,11 +4412,11 @@ object FireInTheLake {
     (inPlace.toList ::: adjacent).sorted
   }
 
-  def askPieceType(prompt: String, pieceTypes: TraversableOnce[PieceType], generic: Boolean = true): PieceType = {
+  def askPieceType(prompt: String, pieceTypes: Iterable[PieceType], generic: Boolean = true): PieceType = {
     val choices = if (generic) pieceTypes map (t => t -> t.genericSingular)
                   else         pieceTypes map (t => t -> t.singular)
 
-      askMenu(choices.toList, prompt).head
+      askMenu(choices.to(List), prompt).head
     }
 
 
@@ -4445,7 +4445,7 @@ object FireInTheLake {
           wrap("  ", available.descriptions) foreach println
           println()
 
-          def nextType(types: TraversableOnce[PieceType]): Unit = {
+          def nextType(types: Iterable[PieceType]): Unit = {
             val numRemaining = numPieces - selected.total
             if (numRemaining != 0) {
               // If we have to include all remainig pieces, don't bother asking
@@ -4546,14 +4546,14 @@ object FireInTheLake {
   //  -  Assumes that Active pieces are never included in the list of types!!
   //  -  Do not use this function for USTroops
   //  -  See askToPlaceBase() for placing bases
-  def askPiecesToPlace(spaceName: String, types: TraversableOnce[PieceType], maxToPlace: Int): Pieces = {
+  def askPiecesToPlace(spaceName: String, types: Iterable[PieceType], maxToPlace: Int): Pieces = {
     // Get number of each type in available box plus on map
     val piecesToPlace = game.piecesToPlace.only(types)
     val maxPieces     = maxToPlace min piecesToPlace.total
-    val availMap      = (types map (t => t -> piecesToPlace.total)).toMap
-    val availTypes    = types.toList filter (availMap(_) > 0)
+    val availMap      = (types map (t => t -> piecesToPlace.total)).to(Map)
+    val availTypes    = types.to(List) filter (availMap(_) > 0)
     if (availTypes.isEmpty) {
-      println(s"\nThere are no ${orList(types.toList)} available to be placed.")
+      println(s"\nThere are no ${orList(types.to(List))} available to be placed.")
       Pieces()
     }
     else {
@@ -4581,7 +4581,7 @@ object FireInTheLake {
                 case 1 => println(s"\nThere is only 1 ${pieceType.genericSingular} in the available box")
                 case n => println(s"\nThere are only ${amountOf(n, pieceType.genericSingular)} in the available box")
               }
-              println
+              println()
               if (askYorN("Do you wish to voluntarily remove pieces to make up the difference? (y/n) ")) {
                 val numToRemove = askInt("How many pieces do you wish to remove from the map", 0, num - numAvail)
                 voluntaryRemoval(numToRemove, pieceType, prohibited = Set(spaceName))
@@ -4751,7 +4751,7 @@ object FireInTheLake {
   //    List("apples")                      => "apples"
   //    List("apples", "oranges")           => "apples and oranges"
   //    List("apples", "oranges", "grapes") => "apples, oranges and grapes"
-  def andList(x: TraversableOnce[Any]) = x.toSeq match {
+  def andList(x: Iterable[Any]) = x.to(Seq) match {
     case Seq()     => ""
     case Seq(a)    => a.toString
     case Seq(a, b) => s"${a.toString} and ${b.toString}"
@@ -4820,7 +4820,7 @@ object FireInTheLake {
           s.append(v)
         else {
           b += s.toString
-          s.clear
+          s.clear()
           s.append(margin).append(v)
         }
       }
@@ -4829,7 +4829,7 @@ object FireInTheLake {
     b.toList
   }
 
-  def pause() {
+  def pause(): Unit = {
     if (!loggingSuspended)
       readLine("\n>>>>> [ Press Enter to continue... ] <<<<<")
   }
@@ -4922,7 +4922,7 @@ object FireInTheLake {
     for (fromSp <- from.spaces.sorted) {
       val toSp = to.getSpace(fromSp.name)
       val terrorName = if (fromSp.isLoC) "Sabotage markers" else "Terror markers"
-      b.clear
+      b.clear()
       showMarker("Support", fromSp.support, toSp.support)
       showMarker("Control",  fromSp.control, toSp.control)
       showMarker(terrorName, fromSp.terror, toSp.terror)
@@ -4935,7 +4935,7 @@ object FireInTheLake {
       }
     }
 
-    b.clear
+    b.clear()
     b += ""
     for (f <- List(ARVN, NVA, VC))
       if (game.trackResources(f))
@@ -5290,7 +5290,7 @@ object FireInTheLake {
     printPiecesSummary()
     printSummary(eventSummary)
     printSummary(sequenceSummary)
-    println
+    println()
     for (name <- SpaceNames; line <- spaceSummary(name))
       println(line)
   }

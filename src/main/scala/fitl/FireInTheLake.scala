@@ -3586,10 +3586,12 @@ object FireInTheLake {
 
     cmd match {
       case ActCmd  =>
+        logSummary(sequenceSummary, echo = false)
         Human.act()
         log(s"\nFinished with $faction turn")
 
       case BotCmd  =>
+        logSummary(sequenceSummary, echo = false)
         Bot.act()
         log(s"\nFinished with $faction turn")
 
@@ -4856,8 +4858,9 @@ object FireInTheLake {
 
 
   // Print the line to the console and save it in the game's history.
-  def log(line: String = "", force: Boolean = false): Unit = if (!loggingSuspended || force) {
-    println(line)
+  def log(line: String = "", force: Boolean = false, echo: Boolean = true): Unit = if (!loggingSuspended || force) {
+    if (echo)
+      println(line)
     game = game.copy(log = game.log :+ line)
   }
 
@@ -4869,9 +4872,9 @@ object FireInTheLake {
     summary foreach println
   }
 
-  def logSummary(summary: Seq[String]): Unit = {
-    log()
-    summary foreach (log(_))
+  def logSummary(summary: Seq[String], echo: Boolean = true): Unit = {
+    log(echo = echo)
+    summary foreach (msg => log(msg, echo = echo))
   }
 
   def padLeft(x: Any, width: Int) = "%%-%ds".format(width).format(x.toString)

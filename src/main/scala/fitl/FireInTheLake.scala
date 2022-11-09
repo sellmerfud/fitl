@@ -3495,9 +3495,10 @@ object FireInTheLake {
       hidePieces(name, active)
     }
 
+    // Remove any momentum cards from play
     if (game.momentum.nonEmpty)  {
-      log("Place the following momentum cards in the discard pile:")
-      wrap("", game.momentum) foreach { c => log(c) }
+      log()
+      game.momentum foreach removeMomentumFromPlay
     }
 
     // All factions are eligible after a Coup round
@@ -4061,7 +4062,7 @@ object FireInTheLake {
   def removeMomentumFromPlay(mo: String): Unit = {
     game = game.copy(momentum = game.momentum filterNot (_ == mo))
     removeOngoingEvent(mo)
-    log(s"\nRemove Momentum: '$mo' from play")
+    log(s"Remove Momentum: '$mo' from play")
 
   }
 

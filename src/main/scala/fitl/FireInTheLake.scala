@@ -591,9 +591,9 @@ object FireInTheLake {
           getTravelOrigins(travelSpaces.tail, usedLoC, origins + name)
         else {
           val adjacentSpaces = if (nguyen_khanh && (usedLoC || sp.isLoC))
-            getAdjacentNonLOCs(name) - NorthVietnam
+            getAdjacentNonLOCs(name) - NorthVietnam - destName
           else if (sp.isLoC)
-            getAdjacent(name) - NorthVietnam
+            getAdjacent(name) - NorthVietnam - destName
           else // it is a city, can only travel here from a LoC
             getAdjacentLOCs(name)
 

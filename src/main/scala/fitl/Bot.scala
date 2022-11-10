@@ -107,6 +107,13 @@ object Bot {
 
 
   def getMoveDestinations = moveDestinations
+  
+  // Add the dest to our list of destinations, but
+  // do not allow duplicates.
+  def addMoveDestination(destName: String): Unit = {
+    if (!moveDestinations.contains(destName))
+      moveDestinations = moveDestinations :+ destName
+  }
 
   // Used to implement the Eligibility Tables
   case class ActionEntry(val action: Action, desc: String, test: (Faction) => Boolean)
@@ -2481,7 +2488,8 @@ object Bot {
             }
             //  The dest space can no longer be considered for
             //  a destination or for an origin
-            moveDestinations = moveDestinations :+ destName
+            addMoveDestination(destName)
+            
             if (action == Transport)
               transportOrigin = Some(originName)
             allOrigins += originName
@@ -2533,7 +2541,7 @@ object Bot {
               // add the destName to the moveDestinations
               // to allow the Sweep operation to perform a
               // Sweep in Place.
-              moveDestinations = moveDestinations :+ destName
+              addMoveDestination(destName)
               log(s"\n$faction selects $destName to Sweep in Place")
             }
 

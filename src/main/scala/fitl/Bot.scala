@@ -3524,6 +3524,7 @@ object Bot {
       doArvnSweeps()
       removeEnemies()
       doArvnAssaults()
+      // US Bot only increases US Aid if the ARVN faction is Human
       if (game.isHuman(ARVN))
         increaseUsAid(6)
 

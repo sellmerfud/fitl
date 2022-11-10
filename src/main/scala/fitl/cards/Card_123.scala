@@ -69,11 +69,11 @@ object Card_123 extends EventCard(123, "Vietnamization",
     log(separator(char = '='))
     if (game.trackResources(ARVN)) {
       increaseResources(ARVN, 12)
-      increaseUsAid(12)
     }
     else
-      log("ARVN resources and US Aid are not being used used")
+      log("ARVN resources are not being used used")
 
+    increaseUsAid(12)
     log("\nAll Out of Play ARVN pieces to Available")
     log(separator(char = '='))
     if (game.outOfPlay.has(ARVNPieces))

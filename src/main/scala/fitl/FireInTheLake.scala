@@ -2779,12 +2779,13 @@ object FireInTheLake {
   object HistoryCmd extends Command {
     val name = "history"
     val desc = """|Display game history
-                  |  history            - Shows the log from the beginning of the most recent save point
-                  |  history n          - Shows the log from the beginning of the nth most recent save point
-                  |  history all        - Shows the entire log
-                  |  history  >file     - Same as above but writes the history to a file
-                  |  history n >file    - Same as above but writes the history to a file
-                  |  history all >file  - Same as above but writes the history to a file""".stripMargin
+                  |  history            - Shows the log starting from the most recent save point (Same as history -1)
+                  |  history -n         - Shows the log starting from the nth most recent save point
+                  |  history n          - Shows the log starting from the nth save point
+                  |  history x y        - Shows the log from save point x to save point y
+                  |                       Negative values will count back from the most recent
+                  |  history all        - Shows the entire log (Same as history 0)
+                  |  You may add >file to the end of any history command to write the history to disk.""".stripMargin
 
   }
 
@@ -5327,27 +5328,28 @@ object FireInTheLake {
 
   // Display some or all of the game log.
   // usage:
-  //   history            ##  Shows the log from the beginning of most recent save point
-  //   history n          ##  Shows the log from the beginning of the nth the most recent save point
-  //   history all        ##  Shows the entire log
-  //   history  >file     ##  Same as above but log to a file instead of the terminal
-  //   history n >file
-  //   history all >file
+  // history            - Shows the log starting from the most recent save point (Same as history -1)
+  // history -n         - Shows the log starting from the nth most recent save point
+  // history n          - Shows the log starting from the nth save point
+  // history x y        - Shows the log from save point x to save point y
+  //                      Negative values will count back from the most recent
+  // history all        - Shows the entire log (Same as history 0)
+  // You may add >file to the end of any history command to write the history to disk.""".stripMargin
   def showHistory(input: Option[String]): Unit = {
     case class Error(msg: String) extends Exception
     try {
       def redirect(tokens: List[String]): Option[Pathname] = {
         tokens match {
           case Nil => None
-          case x::xs  if !(x startsWith ">") => None
+          case x::_  if !(x startsWith ">") => None
           case ">":: Nil => throw Error("No filename specified after '>'")
-          case ">"::file::xs => Some(Pathname(file))
-          case file::xs => Some(Pathname(file drop 1))
+          case ">"::file::_ => Some(Pathname(file))
+          case file::_ => Some(Pathname(file drop 1))
         }
       }
 
-      def printSegment(save_number: Int, path: Option[Pathname]): Unit = {
-        if (save_number < game.history.size) {
+      def printSegment(save_number: Int, last_save_number: Int, path: Option[Pathname]): Unit = {
+        if (save_number <= last_save_number) {
           val header   = s"\n>>> History of save point $save_number <<<"
           val log_path = gamesDir/gameName.get/getLogName(save_number)
 
@@ -5371,28 +5373,33 @@ object FireInTheLake {
                   stream.write(msg + lineSeparator)
               }
           }
-          printSegment(save_number + 1, path)
+          printSegment(save_number + 1, last_save_number, path)
         }
       }
 
-      val tokens = (input getOrElse "" split "\\s+").toList map (_.toLowerCase) dropWhile (_ == "")
-      val (param, redirect_path) = if (tokens.isEmpty)
-        (None, None)
-      else if (tokens.head startsWith ">")
-        (None, redirect(tokens))
-      else
-        (tokens.headOption, redirect(tokens.tail))
-
-      // The messages for history since the last save point is in game.log
-      // The messages for history for previous save points are in log-n files
-      val NUM = """(\d+)""".r
-      val start_num = param match {
-        case None                     => game.history.size - 1
-        case Some(NUM(n))             => (game.history.size - n.toInt) max 0
-        case Some("all" | "al" | "a") => 0
-        case Some(p)                  => throw Error(s"Invalid parameter: $p")
+      val maxIndex = game.history.size - 1
+      val INDEX    = """(-?\d+)""".r
+      val ALL      = """\(a|al|all\)""".r
+      val REDIR    = """>.*""".r
+      val tokens   = (input getOrElse "" split "\\s+").toList map (_.toLowerCase) dropWhile (_ == "")
+      
+      def indexVal(str: String): Int = str.toInt match {
+        case x if x < 0 => (game.history.size + x) max 0
+        case x          => x min maxIndex 
+      }
+      
+      val (startIndex, endIndex, redirect_path) = tokens match {
+        case Nil                    => (maxIndex, maxIndex, None)
+        case INDEX(x)::INDEX(y)::xs => (indexVal(x), indexVal(y), redirect(xs))
+        case INDEX(x)::xs           => (indexVal(x), maxIndex, redirect(xs))
+        case ALL()::xs              => (0, maxIndex, redirect(xs))
+        case REDIR()::_             => (maxIndex, maxIndex, redirect(tokens))
+        case p::_                   => throw Error(s"Invalid parameter: $p")
       }
 
+      if (startIndex > endIndex)
+        throw Error("The second save point cannot preceed the first save point")
+      
       // Delete any previous file before we start appending to it.
       redirect_path foreach { p =>
         if (p.isDirectory)
@@ -5400,7 +5407,7 @@ object FireInTheLake {
         p.delete()
       }
 
-      printSegment(start_num, redirect_path)
+      printSegment(startIndex, endIndex, redirect_path)
 
       redirect_path foreach { p =>
         println(s"\nHistory was written to file: $p")

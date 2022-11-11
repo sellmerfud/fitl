@@ -2074,10 +2074,15 @@ object FireInTheLake {
         actingFaction foreach { faction =>
           b += s"${faction} is up"
         }
-        if (sequence.actors.nonEmpty)
-          b ++= sequence.actors map (_.toString)
-        if (sequence.passed.nonEmpty)
-          b += s"${andList(sequence.passed)} passed"
+                
+        for (f <- eventDeck(currentCard).factionOrder) {
+          sequence.actors find (_.faction == f) foreach { actor =>
+            b += actor.toString
+          }
+          sequence.passed.find(_ == f) foreach { faction =>
+            b += s"$faction passed"
+          }
+        }
       }
       b.toList
     }

@@ -2309,6 +2309,15 @@ object FireInTheLake {
     b += s"Coup card      : $coupStatus"
     b += f"Coup chance    : $coupCardChance"
 
+    if (game.humanFactions.nonEmpty) {
+      val desc = if (game.humanWinInVictoryPhase)
+        "Allowed during Victory phase of any Coup! round"
+      else
+        "Not allowed until final Coup! round"
+      b += separator()
+      b += s"Human Victory  : $desc"      
+    }
+
     b.toList
   }
 
@@ -5463,7 +5472,7 @@ object FireInTheLake {
     val options = (
       List("resources", "aid", "patronage", "econ", "trail", "uspolicy", "casualties",
       "on deck card", "out of play", "capabilities", "momentum", "rvnLeaders", "pivotal",
-      "eligibility", "trung", "bot log") ::: agitate
+      "eligibility", "trung", "bot log", "human win") ::: agitate
     ).sorted ::: SpaceNames
 
     val choice = askOneOf("[Adjust] (? for list): ", options, param, allowNone = true, allowAbort = false)
@@ -5485,6 +5494,7 @@ object FireInTheLake {
       case "eligibility"  => adjustEligibility()
       case "trung"        => adjustTrungDeck()
       case "bot log"      => adjustBotDebug()
+      case "human win"    => adjustHumanWinInVictoryPhase()
       case name           => adjustSpace(name)
     }
 
@@ -6036,6 +6046,14 @@ object FireInTheLake {
     saveGameState("Bot Debug Logging")
   }
 
+  def adjustHumanWinInVictoryPhase(): Unit = {
+    val newValue = !game.humanWinInVictoryPhase
+    val desc = adjustmentDesc("Allow Human Win in Victory Phase", game.humanWinInVictoryPhase, newValue)
+    game = game.copy(humanWinInVictoryPhase = newValue)
+    log(desc)
+    saveGameState("Adjust Human Win in Victory Phase")
+    
+  }
 
   // case class Space(
   // name:       String,

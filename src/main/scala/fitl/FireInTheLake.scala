@@ -2547,8 +2547,20 @@ object FireInTheLake {
             }
           }
 
+          if (humanFactions.size == 1) {
+            println()
+            println("When playing solitaire the human faction normally may only win during the final Coup! round.")
+            println("For an easier game you can allow the human faction to win during any Coup! round.")
+          }
+          else if (humanFactions.size > 1) {
+            println()
+            println("When playing with multiple human factions, normally any faction may win during")
+            println("the Victory phase of any Coup! round.")
+            println("For a harder game you can force the human factions to win only during the final Coup! round.")
+          }
+          
           val humanCanWinEarly = if (humanFactions.nonEmpty)
-            askYorN(s"\nAllow human ${pluralize(humanFactions.size, "faction")} to win in Victory phase of Coup round? (y/n) ");
+            askYorN(s"\nAllow human ${pluralize(humanFactions.size, "faction")} to win in Victory phase of any Coup round? (y/n) ");
           else
             false
 

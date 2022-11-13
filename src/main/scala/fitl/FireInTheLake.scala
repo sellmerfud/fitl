@@ -2782,8 +2782,8 @@ object FireInTheLake {
                   |  history            - Shows the log starting from the most recent save point (Same as history -1)
                   |  history -n         - Shows the log starting from the nth most recent save point
                   |  history n          - Shows the log starting from the nth save point
-                  |  history x y        - Shows the log from save point x to save point y
-                  |                       Negative values will count back from the most recent
+                  |  history -n num     - Shows num log entries starting from the nth most recent save point
+                  |  history n num      - Shows num log entries starting from the nth save point
                   |  history all        - Shows the entire log (Same as history 0)
                   |  You may add >file to the end of any history command to write the history to disk.""".stripMargin
 
@@ -5331,8 +5331,8 @@ object FireInTheLake {
   // history            - Shows the log starting from the most recent save point (Same as history -1)
   // history -n         - Shows the log starting from the nth most recent save point
   // history n          - Shows the log starting from the nth save point
-  // history x y        - Shows the log from save point x to save point y
-  //                      Negative values will count back from the most recent
+  // history n num      - Shows num log entries starting from the nth save point
+  // history -n num     - Shows num log entries starting from the nth most recent save point
   // history all        - Shows the entire log (Same as history 0)
   // You may add >file to the end of any history command to write the history to disk.""".stripMargin
   def showHistory(input: Option[String]): Unit = {
@@ -5378,8 +5378,8 @@ object FireInTheLake {
       }
 
       val maxIndex = game.history.size - 1
-      val INDEX    = """(-?\d+)""".r
-      val ALL      = """\(a|al|all\)""".r
+      val NUM      = """(-?\d+)""".r
+      val ALL      = """al{0,2}""".r
       val REDIR    = """>.*""".r
       val tokens   = (input getOrElse "" split "\\s+").toList map (_.toLowerCase) dropWhile (_ == "")
       
@@ -5388,18 +5388,19 @@ object FireInTheLake {
         case x          => x min maxIndex 
       }
       
-      val (startIndex, endIndex, redirect_path) = tokens match {
-        case Nil                    => (maxIndex, maxIndex, None)
-        case INDEX(x)::INDEX(y)::xs => (indexVal(x), indexVal(y), redirect(xs))
-        case INDEX(x)::xs           => (indexVal(x), maxIndex, redirect(xs))
-        case ALL()::xs              => (0, maxIndex, redirect(xs))
-        case REDIR()::_             => (maxIndex, maxIndex, redirect(tokens))
-        case p::_                   => throw Error(s"Invalid parameter: $p")
+      val (startIndex, count, redirect_path) = tokens match {
+        case Nil                => (maxIndex, 0, None)
+        case NUM(x)::NUM(y)::xs => (indexVal(x), y.toInt, redirect(xs))
+        case NUM(x)::xs         => (indexVal(x), 0, redirect(xs))
+        case ALL()::xs          => (0, 0, redirect(xs))
+        case REDIR()::_         => (maxIndex, 0, redirect(tokens))
+        case p::_               => throw Error(s"Invalid parameter: $p")
       }
-
-      if (startIndex > endIndex)
-        throw Error("The second save point cannot preceed the first save point")
-      
+      val endIndex = count match {
+        case c if c < 1 => maxIndex
+        case c          => (startIndex + (c - 1)) min maxIndex
+      }
+            
       // Delete any previous file before we start appending to it.
       redirect_path foreach { p =>
         if (p.isDirectory)

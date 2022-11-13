@@ -115,6 +115,11 @@ object Bot {
       moveDestinations = moveDestinations :+ destName
   }
 
+  //  Return the number of moveable pieces in the given space
+  def notYetMoved(space: Space, moveTypes: Set[PieceType]): Int = {
+    space.pieces.totalOf(moveTypes) - movedPieces(space.name).totalOf(moveTypes)    
+  }
+
   // Used to implement the Eligibility Tables
   case class ActionEntry(val action: Action, desc: String, test: (Faction) => Boolean)
 
@@ -914,11 +919,21 @@ object Bot {
   val AdjacentToMostNVATroopsYetToMarch = new HighestScore[Space](
     "Adjacent to most NVA Troops yet to March",
     sp => {
-        // Get all adjacent spaces that have not yet been selecte as march destinations
+        // Get all adjacent spaces that have not yet been selected as march destinations
+        // And return the number of unmoved troops adjacent
+        
         val adjacent = NVA_Bot.getNVAAdjacent(sp.name) filterNot moveDestinations.contains
-        adjacent.foldLeft(0) { (totalTroops, name) =>
-          totalTroops + game.getSpace(name).pieces.totalOf(NVATroops)
-        }
+        // Note:  We were considering total troops yet to move in all spaces adjacent
+        //        to the target space.  
+        //        The designer stated (on BGG) that you should select based on the "one" space
+        //        with the most unmoved troops that is adjacent to the target space
+        //        Link: https://boardgamegeek.com/thread/2969461/article/41151414#41151414
+        
+        // adjacent.foldLeft(0) { (totalTroops, name) => totalTroops + notYetMoved(game.getSpace(name)) }
+        
+        val ajacentTroopNums = adjacent.map { name => notYetMoved(game.getSpace(name), Set(NVATroops)) }
+        
+        ajacentTroopNums.toList.sorted.lastOption getOrElse 0
     }
   )
 
@@ -2205,7 +2220,7 @@ object Bot {
     moveTypes: Set[PieceType],
     params: Params,
     previousOrigins: Set[String]): Option[String] = {
-
+    
     val candidateNames: Set[String] = action match {
       case EventMove(Some(origins)) => origins - destName
       case EventMove(None)          => spaceNames(game.spaces filterNot (_.name == destName)).toSet // Any space
@@ -2218,13 +2233,13 @@ object Bot {
       case March                    => getAdjacent(destName) filter params.march.canMarchFrom
     }
 
-    val isOrigin = (sp: Space) =>
-      sp.pieces.has(moveTypes) &&
-      !(moveDestinations.contains(sp.name) || previousOrigins(sp.name))
-
+    val isOrigin = (sp: Space) => {
+      notYetMoved(sp, moveTypes) > 0 && !(moveDestinations.contains(sp.name) || previousOrigins(sp.name))
+    }
+    
     val candidates = spaces(candidateNames) filter isOrigin
     val priorities = List(
-      new HighestScore[Space]( "Most Moveable Pieces", _.pieces.totalOf(moveTypes))
+      new HighestScore[Space]( "Most Moveable Pieces", sp => notYetMoved(sp, moveTypes))
     )
 
     botDebug(s"\nSelect origin space with moveable: [${andList(moveTypes.toList)}]")

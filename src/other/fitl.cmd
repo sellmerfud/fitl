@@ -9,7 +9,7 @@ rem Set the current working directory to the directory where this script is runn
 rem This is important so that all of our relative path references work correctly.
 pushd %~dp0
 
-set CLASSPATH=lib\fire-in-the-lake_2.13-0.3.jar;^
+set CLASSPATH=lib\fire-in-the-lake_2.13-0.4.jar;^
 lib\scala-library-2.13.10.jar;^
 lib\scala-parser-combinators_2.13-2.1.1.jar;
 

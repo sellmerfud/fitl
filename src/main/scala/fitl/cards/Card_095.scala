@@ -71,7 +71,7 @@ object Card_095 extends EventCard(95, "Westmoreland",
     sp.sweepActivations(US, NormalTroops) > 0
 
   val canAssault = (sp: Space) =>
-    assaultEffective(US, NormalTroops, vulnerableTunnels = false)(sp)
+    assaultEffective(US, NormalTroops, false)(sp)
 
   val canAssultOrSweep = (sp: Space) => canAssault(sp) || canSweep(sp)
   

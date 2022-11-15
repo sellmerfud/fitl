@@ -91,7 +91,7 @@ object Card_099 extends EventCard(99, "Masher/White Wing",
         val sweepSpaces = Human.executeSweep(actor, params)
         if (sweepSpaces.nonEmpty) {
           val name          = sweepSpaces.head
-          val assaultParams = params.copy(assault = AssaultParams(removeTwoExtra = canUseM48PattonUnshaded(name)))
+          val assaultParams = params.copy(assault = AssaultParams(removeTwoExtra = canUseM48PattonUnshaded(US, name)))
           Human.performAssault(actor, sweepSpaces.head, assaultParams)
         }
       }

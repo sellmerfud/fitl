@@ -90,7 +90,7 @@ object Card_044 extends EventCard(44, "la Drang",
 
         val arvnEffective = assaultEffective(ARVN, NormalTroops, vulnerableTunnels = false)(game.getSpace(name))
         if (arvnEffective && askYorN(s"\nFollow up with ARVN assault in $name? (y/n) ")) {
-          log(s"\nUS adds a free follow up ARVN asault in $name")
+          log(s"\nUS adds a free follow up ARVN assault in $name")
           Human.performAssault(ARVN, name, params)
         }
       }
@@ -111,7 +111,7 @@ object Card_044 extends EventCard(44, "la Drang",
         Bot.performAssault(faction, sp.name, params)
 
         if (assaultEffective(ARVN, NormalTroops, vulnerableTunnels = false)(game.getSpace(sp.name))) {
-          log(s"\nUS adds a free follow up ARVN asault in $name")
+          log(s"\nUS adds a free follow up ARVN assault in $name")
           Bot.performAssault(ARVN, sp.name, params)
         }
       }

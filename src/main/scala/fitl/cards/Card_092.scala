@@ -70,8 +70,13 @@ object Card_092 extends EventCard(92, "SEALORDS",
     !sp.isLoC &&
     (sp.sweepActivations(faction, NormalTroops) > 0)
 
-  def canAssault(faction: Faction)(sp: Space) =
-    assaultEffective(faction, NormalTroops, vulnerableTunnels = false)(sp)
+  def canAssault(faction: Faction)(sp: Space) = {
+    val numPatton = if (game.isBot(faction))
+      Bot.m48PattonCount
+    else
+      Human.m48PattonCount
+    assaultEffective(faction, NormalTroops, false, numPatton)(sp)
+  }
 
   def canAssultOrSweep(faction: Faction)(sp: Space) =
     canAssault(faction)(sp) || canSweep(faction)(sp)
@@ -133,6 +138,8 @@ object Card_092 extends EventCard(92, "SEALORDS",
         nextCandidate(rest)
     }
 
+    Bot.resetM48PattonSpaces()
+    Human.resetM48PattonSpaces()
     loggingControlChanges {
       nextCandidate(spaceNames(adjacentToCanTho filter unshadedCandidate))
     }

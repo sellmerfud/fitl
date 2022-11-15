@@ -1083,7 +1083,7 @@ object FireInTheLake {
 
   // If there are no US Troops present then COIN firepower
   // is zero.  This is because COIN firepower is used to determine
-  // the number of pieces removed during a US Assault (with added ARVN asault)
+  // the number of pieces removed during a US Assault (with added ARVN assault)
   // If no US Troops are present, then there can be no US Assault.
   def coinFirepower(cubeTreatment: CubeTreatment)(sp: Space) = {
     val usPower = usFirepower(cubeTreatment)(sp)
@@ -1102,9 +1102,8 @@ object FireInTheLake {
     }
   }
 
-  // Only if US is doing the Assault!
-  def canUseM48PattonUnshaded(name: String): Boolean =
-    capabilityInPlay(M48Patton_Unshaded) && !game.getSpace(name).isLowland
+  def canUseM48PattonUnshaded(faction: Faction, name: String): Boolean =
+    faction == US && capabilityInPlay(M48Patton_Unshaded) && !game.getSpace(name).isLowland
 
   // TRUE if any underground guerrillas and all active guerrillas and troops would be killed
   // TRUE if no underground guerrillas and all active guerrillas, troops and bases would be killed
@@ -1122,14 +1121,19 @@ object FireInTheLake {
     (vulnerable > 0) && (firepower >= vulnerable)
   }
 
-  def assaultEffective(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean, enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
+  def assaultEffective(faction: Faction,
+                       cubeTreatment: CubeTreatment,
+                       vulnerableTunnels: Boolean,
+                       pattonSpaces: Int = 0,
+                       enemies: Set[Faction] = Set(NVA, VC))(sp: Space): Boolean = {
     val enemyPieces = (sp: Space) =>
       enemies.foldLeft(Pieces()) {
         case (pieces, NVA) => pieces + sp.pieces.only(NVAPieces)
         case (pieces, VC)  => pieces + sp.pieces.only(VCPieces)
         case (pieces, _)   => pieces
       }
-    val firepower       = assaultFirepower(faction, cubeTreatment)(sp)
+    val pattonExtra     = if (pattonSpaces < 2 && canUseM48PattonUnshaded(faction, sp.name)) 2 else 0
+    val firepower       = assaultFirepower(faction, cubeTreatment)(sp) + pattonExtra
     val enemy           = enemyPieces(sp)
     val asUSAssault     = faction == US || cubeTreatment == AllCubesAsUS || cubeTreatment == AllTroopsAsUS
     val killUnderground = asUSAssault && capabilityInPlay(SearchAndDestroy_Unshaded) && enemy.has(UndergroundGuerrillas)
@@ -3134,7 +3138,7 @@ object FireInTheLake {
       noteIf(cadres, "VC to Agigate must remove 2 VC guerrillas per space")
     ).flatten
 
-    val agitateCost    = if (params.free) 0 else 1
+    val agitateCost    = if (params.free) 0 else if (nguyenCaoKy) 4 else 1
     var botPoints      = rollDice(2)  // When both US and ARVN are Bots
     var agitateSpaces  = Set.empty[String]
     val cadresUnshaded = capabilityInPlay(Cadres_Unshaded)
@@ -3150,11 +3154,19 @@ object FireInTheLake {
 
     def isCandidate(faction: Faction)(sp: Space) = !pacifySpaces(sp.name) && pacifyCandidate(faction)(sp)
 
-    def canPacify(faction: Faction) =
+    def canPacify(faction: Faction) = {      
+      val haveResources = if (game.trackResources(ARVN)) {
+        val lowerLimit = if (faction == US) game.econ else 0
+        (game.arvnResources - pacifyCost) >= lowerLimit
+      }
+      else
+        botPoints > 0
+      
       pacifySpaces.size < 4 &&
-      (faction == US || !mandate || arvnSpaces.isEmpty) &&
-      (if (game.trackResources(ARVN)) game.arvnResources >= pacifyCost else botPoints > 0)
-
+      haveResources &&
+      (faction == US || arvnSpaces.isEmpty || mandate == false )
+    }
+    
     def pacify(faction: Faction): Unit = {
       val candidates = game.nonLocSpaces filter isCandidate(faction)
 

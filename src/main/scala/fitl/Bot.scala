@@ -106,6 +106,10 @@ object Bot {
   private var movedPieces      = new MovingGroups()
 
 
+  def resetM48PattonSpaces(): Unit = m48PattonSpaces = Set.empty
+  def m48PattonCount = m48PattonSpaces.size
+  def canAddM48Patton(faction: Faction, name: String) = m48PattonCount < 2 && canUseM48PattonUnshaded(faction, name)
+  
   def getMoveDestinations = moveDestinations
   
   // Add the dest to our list of destinations, but
@@ -543,7 +547,7 @@ object Bot {
   //             already been satisfied and that if this is an ARVN asasult
   //             that requires resources that the resources are available!
   //
-  //  Abrams_Unshaded           - 1 US asault space may remove 1 non-Tunnel base first (not last)
+  //  Abrams_Unshaded           - 1 US assault space may remove 1 non-Tunnel base first (not last)
   //  M48Patton_Unshaded        - In two non-Lowland US assault spaces, remove 2 extra enemy pieces
   //  Cobras_Shaded             - Each US assault space, 1 US Troop to Casualties on die roll of 1-3
   //  SearchAndDestroy_Unshaded - Each US assault space may remove 1 underground guerrilla
@@ -603,22 +607,21 @@ object Bot {
 
       EnemyLosses(killedPieces, baseFirst, affectedTunnel)
     }
-
+    
     val regularLosses = calculateLosses(totalLosses)
     // Trigger the M48 Patton capability if it is in play and would
     // be effective (max two non-Lowland spaces)
-    val pattonLosses = if (m48Patton && m48PattonSpaces.size < 2 && !sp.isLowland) {
+    val pattonLosses = if (canAddM48Patton(faction, name))
       calculateLosses(totalLosses + 2)
-    }
     else
       EnemyLosses()
 
-    val losses = if (pattonLosses.total > regularLosses.total) {
+    val (losses, usedPatton) = if (pattonLosses.total > regularLosses.total) {
       m48PattonSpaces += name
-      pattonLosses
+      (pattonLosses, true)
     }
     else
-      regularLosses
+      (regularLosses, false)
 
 
     // Log all control changes at the end of the assault
@@ -634,7 +637,7 @@ object Bot {
       }
 
       log(s"The assault inflicts ${amountOf(totalLosses, "hit")}")
-      if (losses == pattonLosses)
+      if (usedPatton)
         log(s"$faction removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
 
       if (losses.baseFirst)
@@ -744,7 +747,9 @@ object Bot {
   }
 
   def assaultResult(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean)(sp: Space): Space = {
-    val num            = assaultFirepower(faction, cubeTreatment)(sp) min vulnerableInsurgents(sp.pieces, vulnerableTunnels).total
+    val pattonExtra     = if (canAddM48Patton(faction, sp.name)) 2 else 0
+    val firepower       = assaultFirepower(faction, cubeTreatment)(sp) + pattonExtra
+    val num             = firepower min vulnerableInsurgents(sp.pieces, vulnerableTunnels).total
     val (deadPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, num)
     sp.copy(pieces = sp.pieces - deadPieces)
   }
@@ -3010,7 +3015,7 @@ object Bot {
         arvnExhausted = !passed
         passed
       }
-      def canAffordARVN = params.free || !game.trackResources(ARVN) || game.arvnResources >= 3
+      def canAffordARVN = params.free || !game.trackResources(ARVN) || (game.arvnResources - 3) >= game.econ
       def canPlaceARVN = canAffordARVN && (!needArvnCheck || checkARVNActivation)
       def canTrain(arvn: Boolean) = trainingSpaces.size < maxTrain && (!arvn || canPlaceARVN)
       def prohibited(sp: Space) = !params.spaceAllowed(sp.name) || trainingSpaces(sp.name) || adviseSpaces(sp.name)
@@ -3314,7 +3319,7 @@ object Bot {
     //  2. Assault in all spaces with US Troops
     //
     //  Mo_GeneralLansdale        - Assault prohibited
-    //  Abrams_Unshaded           - 1 US asault space may remove 1 non-Tunnel base first (not last)
+    //  Abrams_Unshaded           - 1 US assault space may remove 1 non-Tunnel base first (not last)
     //  Abrams_Shaded             - US may select max 2 spaces per Assault
     //  M48Patton_Unshaded        - In two non-Lowland US assault spaces, remove 2 extra enemy pieces
     //  Cobras_Shaded             - Each US assault space, 1 US Troop to Casualties on die roll of 1-3
@@ -3322,6 +3327,7 @@ object Bot {
     //  SearchAndDestroy_Shaded   - Each US and ARVN assault Province shifts support one level toward Active Opposition
     //  Mo_BodyCount              - Cost=0 AND +3 Aid per guerrilla removed
     def assaultOp(params: Params)(doSpecialActivity: () => Boolean): Option[(CoinOp, Boolean)] = {
+      val NVATargets = Set(NVATroops, NVABase)
       if (generalLandsdale(US))
         None
       else {
@@ -3334,9 +3340,8 @@ object Bot {
 
         val wouldKillNVATroopsOrBase = (sp: Space) => {
           !assaultSpaces(sp.name)  && {
-            val targets = Set(NVATroops, NVABase)
             val result = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
-            sp.pieces.totalOf(targets) > result.pieces.totalOf(targets)
+            sp.pieces.totalOf(NVATargets) > result.pieces.totalOf(NVATargets)
           }
         }
 
@@ -3349,10 +3354,15 @@ object Bot {
 
 
         val assaultWithArvn = (sp: Space) => {
-          if (!assaultSpaces(sp.name) && assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp)) {
+          if (!assaultSpaces(sp.name) && assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels, m48PattonCount)(sp)) {
             val afterUS = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
-            assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(afterUS) &&
-           (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
+            if (assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(afterUS)) {
+              val afterARVN = assaultResult(ARVN, params.cubeTreatment, params.vulnerableTunnels)(afterUS)
+              val deadNVA   = sp.pieces.totalOf(NVATargets) > afterARVN.pieces.totalOf(NVATargets)
+              capabilityInPlay(SearchAndDestroy_Shaded) == false || deadNVA
+            }
+            else
+              false
           }
           else
             false
@@ -3371,50 +3381,56 @@ object Bot {
 
         val assaultWithTroops = (sp: Space) =>
           !assaultSpaces(sp.name)  &&
-          assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
+          assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels, m48PattonCount)(sp) &&
           (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
 
 
-        def nextAssault(candidates: List[Space], addARVN: Boolean = false): Unit = {
+        def nextAssault(selector: (Space) => Boolean, addARVN: Boolean): Unit = {
+          //  We must reassess candidates each time because the m48PattonCount can change
+          val candidates = game.spaces filter selector
+          
           if (assaultSpaces.size < maxAssault && candidates.nonEmpty) {
-            val sp = pickSpaceRemoveReplace(candidates)
+            // Different priorities when adding an ARVN assault
+            val sp = if (addARVN)
+              bestCandidate(candidates, arvnAssaultPriorities)
+            else
+              pickSpaceRemoveReplace(candidates)
 
             if (!params.event && assaultSpaces.isEmpty)
               logOpChoice(US, Assault)
+            
             performAssault(US, sp.name, params)
             pause()
+            
             // performAssault will reduce the ARVN resources to pay for the Assault
             if (addARVN) {
-              log(s"\nUS adds a follow up ARVN asault in ${sp.name}")
+              log(s"\nUS adds a follow up ARVN assault in ${sp.name}")
               performAssault(ARVN, sp.name, params)
               pause()
             }
             assaultSpaces += sp.name
-            nextAssault(candidates filterNot (_.name == sp.name), false)
+            
+            //  The Bot will only assault one space with an added ARVN assault
+            if (!addARVN)
+              nextAssault(selector, false)
           }
         }
 
         //  First candidates where all vulnerable enemies would be removed
-        val candidatesRemoveAll = game.spaces filter assaultRemovesAllVulnerable
-        nextAssault(candidatesRemoveAll)
+        nextAssault(assaultRemovesAllVulnerable, false)
 
         val didSpecial = params.addSpecialActivity && doSpecialActivity()
 
         // Add an attack with add ARVN assault
-        val candidatesWithARVN = game.spaces filter assaultWithArvn
         val canAffordARVN = momentumInPlay(Mo_BodyCount) ||  // Make ARVN Assault free
                             params.free                  ||
                             !game.trackResources(ARVN)   ||
-                            game.arvnResources >= 3
-        if (params.cubeTreatment == NormalTroops && candidatesWithARVN.nonEmpty && canAffordARVN) {
-          // Only one space with the most ARVN kills
-          val sp = bestCandidate(candidatesWithARVN, arvnAssaultPriorities)
-          nextAssault(sp::Nil, addARVN = true)
-        }
+                            (game.arvnResources - 3) >= game.econ
+        if (params.cubeTreatment == NormalTroops && canAffordARVN)
+          nextAssault(assaultWithArvn, true)
 
         // Assault in all remaining spaces with US Troops where effective
-        val candidatesGeneric = game.spaces filter assaultWithTroops
-        nextAssault(candidatesGeneric)
+        nextAssault(assaultWithTroops, false)
 
         if (assaultSpaces.nonEmpty || didSpecial)
           Some(Assault -> didSpecial)

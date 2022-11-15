@@ -49,6 +49,7 @@ object Human {
 
   private val NO_LIMIT = 1000;          // When space selection is unlimited.
   private var pt76_shaded_used = false  // NVA attack in one space
+  private var m48PattonSpaces = List.empty[String]
 
   def logOpChoice(faction: Faction, op: Operation, notes: Iterable[String] = Nil): Unit = {
     log(s"\n$faction chooses $op operation")
@@ -73,7 +74,12 @@ object Human {
   def initTurnVariables(specialActivity: Boolean): Unit = {
     Special.init(specialActivity)
     pt76_shaded_used = false
+    resetM48PattonSpaces()
   }
+
+  // Number of spaces assaulted with M48 Patton
+  def m48PattonCount = m48PattonSpaces.size
+  def resetM48PattonSpaces(): Unit = m48PattonSpaces = List.empty
 
   // Aid in keeping track of when a special activity can be taken
   object Special {
@@ -3063,7 +3069,7 @@ object Human {
   }
 
   // Abrams_Unshaded
-  //    1 US asault space may remove 1 non-Tunnel base first (not last)
+  //    1 US assault space may remove 1 non-Tunnel base first (not last)
   // Abrams_Shaded
   //    US may select max 2 spaces per Assault
   // M48Patton_Unshaded
@@ -3081,6 +3087,7 @@ object Human {
   //    Assault prohibited
   //    This is handled in executeCoinOp()
 
+  
   def executeAssault(faction: Faction, params: Params): Unit = {
     val specialActivities = if (faction == US)
       AirLift::AirStrike::Nil
@@ -3095,21 +3102,21 @@ object Human {
     val sdUnshaded          = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
     val sdShaded            = asUS && capabilityInPlay(SearchAndDestroy_Shaded)
     var assaultSpaces       = List.empty[String]
-    var m48PattonSpaces     = List.empty[String]
     var addedARVNAssault    = false
     
+    def canAddPatton(name: String) = m48PattonCount < 2 && canUseM48PattonUnshaded(faction, name)
+    
     val isCandidate = (sp: Space) => {
+      
       params.spaceAllowed(sp.name) &&           // If event limits command to certain spaces
       !assaultSpaces.contains(sp.name) &&       // Not already selected
-      assaultEffective(faction, params.cubeTreatment, vulnerableTunnels = false)(sp)
+      assaultEffective(faction, params.cubeTreatment, vulnerableTunnels = false, m48PattonCount)(sp)
     }
 
     def canSpecial = Special.allowed
 
     def assaultIn(name: String): Unit = {
-      val assaultParams = if (m48Patton &&
-                              m48PattonSpaces.size < 2 &&
-                              !game.getSpace(name).isLowland &&
+      val assaultParams = if (canAddPatton(name) &&
                               askYorN(s"Remove 2 extra pieces in this Assault [$M48Patton_Unshaded]? (y/n) ")) {
         log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
         m48PattonSpaces = name :: m48PattonSpaces
@@ -3124,10 +3131,10 @@ object Human {
                         addedARVNAssault == false &&
                         game.getSpace(name).pieces.hasExposedInsurgents &&
                         game.getSpace(name).pieces.has(ARVNCubes) &&
-                        (bodyCount || game.arvnResources >= 3)
+                        (bodyCount || (game.arvnResources - 3) >= game.econ)
 
       if (canFollowup && askYorN(s"Follow up with ARVN assault in $name? (y/n) ")) {
-        log(s"\nUS adds a follow up ARVN asault in $name")
+        log(s"\nUS adds a follow up ARVN assault in $name")
         performAssault(ARVN, name, params)
       }
       assaultSpaces = assaultSpaces :+ name

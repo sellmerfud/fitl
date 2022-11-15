@@ -67,7 +67,7 @@ object Card_075 extends EventCard(75, "Sihanouk",
   def canSweep(faction: Faction)(sp: Space) = sp.sweepActivations(faction, NormalTroops) > 0
 
   def canAssault(faction: Faction)(sp: Space) = 
-    assaultEffective(faction, NormalTroops, vulnerableTunnels = false)(sp)
+    assaultEffective(faction, NormalTroops, false)(sp)
 
 
   // The move priorities for US/ARVN state to keep all cubes

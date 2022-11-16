@@ -508,6 +508,7 @@ object EventHelpers {
     destName: String,
     pieceTypes: Iterable[PieceType],
     onlyFrom: Option[Set[String]] = None): Unit = {
+
     val hasPieces = (sp: Space) => {
       onlyFrom match {
         case Some(validNames) =>

@@ -69,7 +69,7 @@ object Card_021 extends EventCard(21, "Americal", DualEvent,
   def executeUnshaded(faction: Faction): Unit = {
     // Move up to 2 US Troops EACH from the map and Out of Play
     // All Troops moved must go to either Available or to a single space on the map.
-    // US alwasy does the removal regardless of who is executing the event.
+    // US always does the removal regardless of who is executing the event.
     val (destName: Option[String], oopTroops: Pieces, numMapTroops: Int) = if (game.isHuman(US)) {
       val destChoices = List("available" -> "Available", "map" -> "A space on the map")
       val destName = askMenu(destChoices, "\nChoose destination for US Troops:").head match {

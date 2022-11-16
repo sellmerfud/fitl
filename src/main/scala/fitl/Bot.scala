@@ -2280,7 +2280,7 @@ object Bot {
   // If mandatory is false, then it will move up to the given number but will not move
   // pieces away from spaces as determined by the Move Priorities.
   // If madatory is true, then once it has moved pieces using the Move Priorities if we have
-  // not move the mandatory number of pieces, then we will select pieces from the space(s)
+  // not moved the mandatory number of pieces, then we will select pieces from the space(s)
   // with the most pieces.
   //
   // Returns the pieces that moved.
@@ -2293,15 +2293,25 @@ object Bot {
     onlyFrom: Option[Set[String]] = None): Pieces = {
     val params = Params()
     initTurnVariables()
+    var destProduced = false
+    
     movePiecesToDestinations(faction, EventMove(onlyFrom), moveTypes, false, params, maxPieces = num, maxDests = Some(1)) {
-      (_, _, _) => Some(destName)
+      
+      (_, _, prohibited) => {
+        if (destProduced || prohibited(destName))
+          None
+        else {
+          destProduced = true
+          Some(destName)
+        }
+      }
     }
 
     if (mandatory && movedPieces.allPieces.total < num) {
       def nextMandatoryMove(numRemaning: Int): Unit = if (numRemaning > 0) {
         val priorities = List(new HighestScore[Space]("Most moveable pieces", _.pieces.totalOf(moveTypes)))
         val origins = onlyFrom match {
-          case Some(names) => spaces(names - destName)
+          case Some(names) => spaces(names - destName) filter (sp => sp.pieces.has(moveTypes))
           case None        => game.spaces filter { sp => sp.name != destName && sp.pieces.has(moveTypes) }
         }
 

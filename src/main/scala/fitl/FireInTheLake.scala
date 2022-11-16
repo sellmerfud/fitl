@@ -2510,7 +2510,18 @@ object FireInTheLake {
   case object Adjustment  extends Exception
 
   def main(args: Array[String]): Unit = {
-    println(s"\nFire in the Lake: Trung Bot Software (version $SOFTWARE_VERSION - BETA)")
+    val versionSuffix = if (SOFTWARE_VERSION.startsWith("0")) " - BETA" else ""
+    val versionDisplay = s"Fire in the Lake: Trung Bot Software (version $SOFTWARE_VERSION$versionSuffix)"
+    val versionFlags = Set("-v", "-version", "--version", "version")
+    
+    if (args.nonEmpty && versionFlags.contains(args(0).toLowerCase)) {
+      println(versionDisplay)
+      System.exit(0)      
+    }
+    
+    println()
+    println(versionDisplay)
+    
     println(separator())
     try {
       gamesDir.mkpath()

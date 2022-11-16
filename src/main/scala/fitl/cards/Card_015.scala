@@ -72,9 +72,14 @@ object Card_015 extends EventCard(15, "Medevac",
 
   def unshadedEffective(faction: Faction): Boolean = true
 
-  def executeUnshaded(faction: Faction): Unit = playMomentum(Mo_Medevac_Unshaded)
+  def executeUnshaded(faction: Faction): Unit = {
+    playMomentum(Mo_Medevac_Unshaded)
+  }
 
   def shadedEffective(faction: Faction): Boolean = true
 
-  def executeShaded(faction: Faction): Unit = playMomentum(Mo_Medevac_Shaded)
+  def executeShaded(faction: Faction): Unit = {
+    remainEligibleNextTurn(faction)
+    playMomentum(Mo_Medevac_Shaded)
+  }
 }

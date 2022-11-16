@@ -60,7 +60,10 @@ object Card_115 extends EventCard(115, "Typhoon Kate",
 
 
   def unshadedEffective(faction: Faction): Boolean = true
-  def executeUnshaded(faction: Faction): Unit = playMomentum(Mo_TyphoonKate)
+  def executeUnshaded(faction: Faction): Unit = {
+    remainEligibleNextTurn(faction)
+    playMomentum(Mo_TyphoonKate)
+  }
 
   // Single event - These functions are not used
   def shadedEffective(faction: Faction): Boolean = false

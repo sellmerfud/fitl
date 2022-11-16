@@ -102,7 +102,6 @@ object Card_053 extends EventCard(53, "Sappers",
     if (selectedSpaces.isEmpty)
       log("There are no spaces in South Vietnam with NVA Troops")
     else {
-
       println()
       loggingControlChanges {
         for (name <- selectedSpaces) {
@@ -111,8 +110,9 @@ object Card_053 extends EventCard(53, "Sappers",
           removePieces(name, Pieces(nvaTroops = num))
         }
       }
-      remainEligibleNextTurn(faction)
     }
+    
+    remainEligibleNextTurn(faction)
   }
 
   val hasUSBase = (sp: Space) => sp.isProvince && sp.pieces.has(USBase)

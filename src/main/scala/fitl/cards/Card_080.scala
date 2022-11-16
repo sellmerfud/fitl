@@ -154,6 +154,7 @@ object Card_080 extends EventCard(80, "Light at the End of the Tunnel",
           placePieces(NorthVietnam, troops)
         }
       }
+      remainEligibleNextTurn(faction)      
     }
   }
 

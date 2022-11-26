@@ -58,9 +58,9 @@ object SavedGame {
   
   private def toJson(gameState: GameState): String = {
     val top = Map(
-      "file-version" -> CurrentFileVersion,
-      "bot-version"  -> SOFTWARE_VERSION,
-      "game-state"   -> gameStateToMap(gameState)
+      "file-version"     -> CurrentFileVersion,
+      "software-version" -> SOFTWARE_VERSION,
+      "game-state"       -> gameStateToMap(gameState)
     )
     Json.build(top)
   }

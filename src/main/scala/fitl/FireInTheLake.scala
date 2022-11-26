@@ -2307,7 +2307,7 @@ object FireInTheLake {
     if (game.cardsDrawn > 0) {
       b += s"Current card   : ${eventDeck(game.currentCard).fullString}"
       if (game.onDeckCard > 0) {
-        b += s"On Deck card   : ${eventDeck(game.onDeckCard).fullString}"
+        b += "On Deck card   : None (Last Coup round)"
       }
     }
 
@@ -2879,18 +2879,30 @@ object FireInTheLake {
       // moved to the eligible box
       if (!game.isCoupRound)
         updateFactionEligibility(false)
-      println("\nDraw event card")
-      println(separator())
-      val nextCard = askCardNumber("Enter the number of the next On Deck Event card: ")
-      game = game.copy(currentCard     = game.onDeckCard,
-                       onDeckCard      = nextCard,
-                       prevCardWasCoup = game.isCoupRound,
-                       cardsDrawn      = game.cardsDrawn + 1)
+      
+      if ((game.coupCardsPlayed == game.totalCoupCards - 1 && game.onDeckCard > 0 && eventDeck(game.onDeckCard).isCoup)) {
+        //  Last Coup card is on deck, so no need to draw a card
+        game = game.copy(currentCard     = game.onDeckCard,
+                         onDeckCard      = 0,
+                         prevCardWasCoup = game.isCoupRound)
+      }
+      else {        
+        println("\nDraw event card")
+        println(separator())
+        val nextCard = askCardNumber("Enter the number of the next On Deck Event card: ")
+        game = game.copy(currentCard     = game.onDeckCard,
+                         onDeckCard      = nextCard,
+                         prevCardWasCoup = game.isCoupRound,
+                         cardsDrawn      = game.cardsDrawn + 1)
+      }
     }
 
     log()
     log(s"Current card: ${eventDeck(game.currentCard)}")
-    log(s"On Deck card: ${eventDeck(game.onDeckCard)}")
+    if (game.onDeckCard == 0)
+      log("On Deck card: None (Last Coup round)")
+    else
+      log(s"On Deck card: ${eventDeck(game.onDeckCard)}")
   }
 
 
@@ -3790,9 +3802,7 @@ object FireInTheLake {
           // to the current card.
           // Otherwise if no more factions can act on the current card
           // prompt prompt for a new Event card.
-          if (game.inMonsoon && game.isFinalCampaign)
-            game = game.copy(currentCard = game.onDeckCard, onDeckCard = 0)
-          else if (game.sequence.exhausted)
+          if (game.sequence.exhausted)
             drawNextCard()
 
           // Now create a save point to capture the action

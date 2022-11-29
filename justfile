@@ -15,7 +15,7 @@ package VERSION:
     find target/$PKG -name .DS_Store -exec rm {} \+
     rm -f target/${PKG}.zip
     (cd target; zip -rq ${PKG}.zip $PKG)
-    cp target/${PKG}.zip /Users/curt/Dropbox/fitl/
+    cp target/${PKG}.zip /Users/curt/Library/CloudStorage/Dropbox/fitl/
   else
     echo target/$PKG does not exist
     exit 1

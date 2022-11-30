@@ -196,33 +196,33 @@ object Bot {
     def compare(diceValue: Int, targetValue: Int): Boolean = diceValue >= targetValue
   }
   
-
+  def logCheck(result: Boolean, display: String): Boolean = {
+    if (game.logTrung || game.botDebug) {
+      val yesNo = if (result) "[Yes]" else "[No]"
+      log(s"Trung check: $display $yesNo")
+    }
+    result
+  }
+  
   //  Function to make a comparison against the dice roll of a number of d6.
   //  This is used so we can log the dice roll
   def trungDiceCheck(numd6: Int, targetValue: Int, compareOp: CompareOp, desc: String): Boolean = {
     val diceValue = rollDice(3)
-    
-    val result = compareOp.compare(diceValue, targetValue)
+    val result    = compareOp.compare(diceValue, targetValue)
 
-    if (game.botTrungDice || game.botDebug) {
-      val display = if (result) "[Success]" else "[Failure]"
-      log(s"\nTrung check: ${numd6}d6 $compareOp $desc ($targetValue): $diceValue $display")
-    }
-    
-    result
+    logCheck(result, s"${numd6}d6 $compareOp $desc ($targetValue): $diceValue")
   }
 
   def trungD3Check(targetValue: Int, compareOp: CompareOp, desc: String): Boolean = {
     val dieValue = d3
-    
-    val result = compareOp.compare(dieValue, targetValue)
+    val result   = compareOp.compare(dieValue, targetValue)
 
-    if (game.botTrungDice || game.botDebug) {
-      val display = if (result) "[Success]" else "[Failure]"
-      log(s"\nTrung check: d3 $compareOp $desc ($targetValue): $dieValue $display")
-    }
-    
-    result
+    logCheck(result, s"d3 $compareOp $desc ($targetValue): $dieValue")
+  }
+
+  def usPoints_GE_42: Boolean = {
+    val result = game.usPoints >= 42
+    logCheck(result, "Support + Available >= 42?")
   }
 
   def logOpChoice(faction: Faction, op: Operation, notes: Iterable[String] = Nil): Unit = {
@@ -2670,28 +2670,34 @@ object Bot {
   // ================================================================
   object US_Bot {
 
-    def any2PlusPopNotAtActiveSupportWithCoinControlUsPieces: Boolean =
-      game.nonLocSpaces exists { sp =>
+    def any2PlusPopNotAtActiveSupportWithCoinControlUsPieces: Boolean = {
+      val result = game.nonLocSpaces exists { sp =>
         sp.population >= 2          &&
         sp.support != ActiveSupport &&
         sp.coinControlled           &&
         sp.pieces.has(USPieces)
       }
+      logCheck(result, "Any 2+ Pop space not at Active Support has COIN Control and US pieces?")
+    }
 
-    def any2PopNotAtActiveSupportWithCoinControlUsTroops: Boolean =
-      game.nonLocSpaces exists { sp =>
+    def any2PopNotAtActiveSupportWithCoinControlUsTroops: Boolean = {
+      val result = game.nonLocSpaces exists { sp =>
         sp.population == 2          &&
         sp.support != ActiveSupport &&
         sp.coinControlled           &&
         sp.pieces.has(USTroops)
       }
+      logCheck(result, "Any 2-Pop space not at Active Support has COIN Control and US Troops?")
+    }
 
-    def twoOrMoreSpacesWithSupportAndUndergroundGuerrillas: Boolean =
-      game.nonLocSpaces exists { sp =>
+    def twoOrMoreSpacesWithSupportAndUndergroundGuerrillas: Boolean = {
+      val result = game.nonLocSpaces exists { sp =>
         sp.canHaveSupport           &&
         sp.support > Neutral        &&
         sp.pieces.has(UndergroundGuerrillas)
       }
+      logCheck(result, "2 or more spaces with Support and Underground Guerrillas?")
+    }
 
     // This condition is used by the US Bot to determine if it
     // would select an Assault Operation.
@@ -2699,34 +2705,48 @@ object Bot {
     // General Lansdale Momentum event is in effect.
     // Otherwise, when General Lansdale is in effect the US
     // Bot tends to pass on every turn.
-    def usPiecesWith4PlusNVATroopsOrVulnerableBase: Boolean =
-     !momentumInPlay(Mo_GeneralLansdale) &&
+    def usPiecesWith4PlusNVATroopsOrVulnerableBase: Boolean = {
+     val result = !momentumInPlay(Mo_GeneralLansdale) &&
       (game.spaces exists { sp =>
         sp.pieces.has(USPieces) &&
         (sp.pieces.totalOf(NVATroops) > 3 ||
          (sp.pieces.has(InsurgentBases) && !sp.pieces.has(UndergroundGuerrillas)))
       })
+      logCheck(result, "US pieces in space with 4+ NVA Troops or vulnerable Base?")
+    }
 
-    def spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops: Boolean =
-      game.spaces exists { sp =>
+    def spaceWhereCoinFPLessThanNVATroopsAndUSBaseOrTroops: Boolean = {
+      val result = game.spaces exists { sp =>
         coinFirepower(NormalTroops)(sp) < sp.pieces.totalOf(NVATroops) &&
         sp.pieces.has(USTroops::USBase::Nil)
       }
+      logCheck(result, "Any space were COIN FP < NVA Troops where US Troops or US Base?")
+    }
+      
+    def usPolicyIsLBJ: Boolean = {
+      logCheck(game.usPolicy == USPolicy_LBJ, "US Policy is LBJ?")
+    }
+    
     // All routes from Can Tho to Hue blocked and Shaded M-48 not in effect
-    def allLocRoutesCanTho_HueBlockedAndNoShadedM48: Boolean =
-      !capabilityInPlay(M48Patton_Shaded) && !getPatrolDestinations(CanTho).contains(Hue)
+    def allLocRoutesCanTho_HueBlockedAndNoShadedM48: Boolean = {
+      val result = !capabilityInPlay(M48Patton_Shaded) && !getPatrolDestinations(CanTho).contains(Hue)
+      logCheck(result, "All LOC routes from Can Tho to Hue blocked and Shaded M48 not in effect?")
+    }
 
-    def usPiecesWithVulnerableEnemies: Boolean =
-      game.spaces exists { sp =>
+    def usPiecesWithVulnerableEnemies: Boolean = {
+      val result = game.spaces exists { sp =>
         sp.pieces.has(USPieces) && vulnerableInsurgents(sp.pieces, false).nonEmpty
       }
+      logCheck(result, "US pieces in any space with vulnerable enemies?")
+    }
 
     def allUSBasesinSouthWithUSTroopsNoNVATroops: Boolean = {
       val candidates = game.nonLocSpaces filter { sp =>
         isInSouthVietnam(sp.name) && sp.pieces.has(USBase)
       }
 
-      candidates forall (sp => sp.pieces.has(USTroops) && !sp.pieces.has(NVATroops))
+      val result = candidates forall (sp => sp.pieces.has(USTroops) && !sp.pieces.has(NVATroops))
+      logCheck(result, "All US Bases in South Vietnam in spaces with US Troops and no NVA Troops?")
     }
 
     // US Spaces Priorities: Shift Toward Active Support
@@ -4393,33 +4413,43 @@ object Bot {
     val arvnAssaultWouldAddCoinControl = (sp: Space) =>
       !sp.coinControlled && assaultResult(ARVN, NormalTroops, vulnerableTunnels = false)(sp).coinControlled
 
-    def arvnAssaultWouldAddCoinControlToASpace: Boolean =
-      game.nonLocSpaces exists arvnAssaultWouldAddCoinControl
+    def arvnAssaultWouldAddCoinControlToASpace: Boolean = {
+      val result = game.nonLocSpaces exists arvnAssaultWouldAddCoinControl
+      logCheck(result, "ARVN Assault would add COIN Control?")
+    }
 
     // Return true if an assault on one of the spaces
-    def arvnAssaultWouldUnblockCanTo_HueRouteSpace(candidates: Iterable[Space]): Boolean =
-      candidates exists assaultInWouldUnblockAlongCanTho_HueRoute(ARVN, NormalTroops, vulnerableTunnels = false)
+    def arvnAssaultWouldUnblockCanTo_HueRouteSpace(candidates: Iterable[Space]): Boolean = {
+      val result = candidates exists assaultInWouldUnblockAlongCanTho_HueRoute(ARVN, NormalTroops, vulnerableTunnels = false)
+      logCheck(result, "ARVN Assault would unblock LoC route between Can Tho and Hue?")
+    }
 
     def arvnAssaultWouldAddControlOrUnblockCanTo_Hue: Boolean = {
       arvnAssaultWouldAddCoinControlToASpace ||
       arvnAssaultWouldUnblockCanTo_HueRouteSpace(game.patrolSpaces)
     }
 
-    def fiveArvnTroopsPlusRangersInAnySpace: Boolean =
-      game.spaces exists { sp => sp.pieces.totalOf(ARVNTroops::Rangers) >= 5 }
+    def fiveArvnTroopsPlusRangersInAnySpace: Boolean = {
+      val result = game.spaces exists { sp => sp.pieces.totalOf(ARVNTroops::Rangers) >= 5 }
+      logCheck(result, "5+ ARVN Troops + Rangers in any one space?")
+    }
 
-    def any2PopSpaceWithSupportAndMoreArvnCubesThanUsCubes: Boolean =
-      game.nonLocSpaces exists { sp =>
+    def any2PopSpaceWithSupportAndMoreArvnCubesThanUsCubes: Boolean = {
+      val result = game.nonLocSpaces exists { sp =>
         sp.population == 2 &&
         sp.pieces.totalOf(ARVNCubes) > sp.pieces.totalOf(USTroops)
       }
+      logCheck(result, "Any 2-Pop space with Support where ARVN cubes exceed US cubes?")
+    }
 
-    def nvaBaseOrNvaControlAt2PlusPop: Boolean =
-      game.nonLocSpaces exists { sp =>
+    def nvaBaseOrNvaControlAt2PlusPop: Boolean = {
+      val result = game.nonLocSpaces exists { sp =>
         sp.population >= 2 &&
         (sp.pieces.has(NVABases) || sp.nvaControlled)
       }
-
+      logCheck(result, "NVA Base or NVA Control in any 2+ Pop space?")
+    }
+    
     // If Transport special activity was used,  then Armored Cavalry (unshaded)
     // allows ARVN to free assault in one Transport destination
     // Will only trigger if an transport special activity has take place.
@@ -5357,39 +5387,37 @@ object Bot {
     }
 
     def sixTroopsWithCOINTroopsOrBase: Boolean = {
-      game.spaces exists { sp =>
+      val result = game.spaces exists { sp =>
         sp.pieces.totalOf(NVATroops) >= 6 &&
         (sp.pieces.has(CoinTroops) || sp.pieces.has(CoinBases))
       }
+      logCheck(result, "6+ NVA Troops in any space with COIN Troops or COIN Base?")
     }
 
     def sixTroopsWithCOINPieces: Boolean = {
-      game.spaces exists { sp =>
+      val result = game.spaces exists { sp =>
         sp.pieces.totalOf(NVATroops) >= 6 &&
         sp.pieces.has(CoinPieces)
       }
+      logCheck(result, "6+ NVA Troops in any space with COIN Pieces?")
     }
 
     def eightTroopsOutsideSouth: Boolean = {
-      game.spaces exists { sp =>
+      val result = game.spaces exists { sp =>
         sp.pieces.totalOf(NVATroops) >= 8 &&
         isOutsideSouth(sp.name)
       }
-    }
-
-    def numSupportWithUndergroundGuerrillas: Int = {
-      game.spaces count { sp =>
-        sp.support > Neutral &&
-        sp.pieces.has(NVAGuerrillas_U)
-      }
+      logCheck(result, "8+ NVA Troops in a space outside the South?")
     }
 
     def pop2WithoutCoinControl: Boolean = {
-      game.spaces exists (sp => sp.isLoC || !sp.coinControlled)
+      val result = game.spaces exists (sp => sp.population == 2 && !sp.coinControlled)
+      logCheck(result, "Any 2-Pop space without COIN Control?")
     }
 
     def atleastTwentyNVATroopsOnMap: Boolean = {
-      game.totalOnMap(_.pieces.totalOf(NVATroops)) >= 20
+      val result = game.totalOnMap(_.pieces.totalOf(NVATroops)) >= 20
+      logCheck(result, "20+ NVA Troops on the map?")
     }
 
     val MostUndergroundGuerrillas = List(
@@ -6167,21 +6195,51 @@ object Bot {
       hasG && ((sp.isLoC && sp.printedEconValue > 0) || (!sp.coinControlled && sp.population > 0))
     }
 
-    def undergroundAtNoActiveOpposition = game.spaces exists { sp =>
-      (sp.isLoC || sp.support != ActiveOpposition) && sp.pieces.has(VCGuerrillas_U)
+    def patronage_GE_17: Boolean = {
+      logCheck(game.patronage >= 17, "Patronage >= 17?")
+    }
+    
+    def fifteenPlusVCGuerrilasOnMap: Boolean = {
+      val numVCGuerrillas = (sp: Space) => sp.pieces.totalOf(VCGuerrillas)
+      val vcGuerrillasOnMap = game totalOnMap numVCGuerrillas
+      
+      logCheck(vcGuerrillasOnMap >= 15, "15+ VC Guerrillas on the map?")
     }
 
-    def pop2SpaceWithoutGuerrillas = game.spaces exists { sp =>
-        !sp.isLoC && sp.population >= 2 && sp.pieces.totalOf(VCGuerrillas) == 0
+    def threePlusGuerrillasInSpace: Boolean = {
+      val result = game.spaces exists (_.pieces.totalOf(VCGuerrillas) > 2)
+      logCheck(result, "3+ VC Guerrillas in any space?")
+    } 
+    
+    def undergroundAtNoActiveOpposition: Boolean = {
+      val result = game.spaces exists { sp =>
+        (sp.isLoC || sp.support != ActiveOpposition) && sp.pieces.has(VCGuerrillas_U)
+      }
+      logCheck(result, "Underground VC Guerrillas in space not at Active Opposition?")
     }
 
-    def threePlusGuerrillasWithUSTroopsNoVCBase = {
+    def pop2SpaceWithoutGuerrillas: Boolean = {
+      val result = game.spaces exists { sp =>
+          !sp.isLoC && sp.population >= 2 && sp.pieces.totalOf(VCGuerrillas) == 0
+      }
+      logCheck(result, "Any 2+ Pop space without VC Guerrillas?")
+    }
+
+    def undergroundWithUSTroops: Boolean = {
+      val result = game.spaces exists { sp=>
+        sp.pieces.has(VCGuerrillas_U) && sp.pieces.has(USTroops)
+      }
+      logCheck(result, "Underground VC Guerrillas in space with US Troops?")
+    }
+
+
+    def threePlusGuerrillasWithUSTroopsNoVCBase: Boolean = {
       val test = (sp: Space) => {
         sp.pieces.totalOf(VCGuerrillas) > 2 &&
         sp.pieces.has(USTroops)             &&
         !sp.pieces.has(VCBases)
        }
-       game.spaces exists test
+       logCheck(game.spaces exists test, "3+ VC Guerrillas in any spaces with US Troops and no VC Base?")
     }
 
     val MostUndergroundGuerrillas = List(
@@ -7083,7 +7141,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity(params)) ||
+        (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
         US_Bot.adviseActivity(params) ||
         US_Bot.airLiftActivity(params)
       }
@@ -7144,7 +7202,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecial(): Boolean = {
-        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity(params)) ||
+        (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
         US_Bot.airLiftActivity(params)
       }
 
@@ -7180,7 +7238,7 @@ object Bot {
         US_Bot.airStrikeActivity(params)
       }
 
-      if (game.arvnPoints < 42)
+      if (!usPoints_GE_42)
         TrungDraw
       else if (!US_Bot.usPiecesWith4PlusNVATroopsOrVulnerableBase)
         flipCard(params)
@@ -7203,7 +7261,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity(params)) ||
+        (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
         US_Bot.adviseActivity(params) ||
         US_Bot.airLiftActivity(params)
       }
@@ -7263,7 +7321,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity(params)) ||
+        (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
         US_Bot.airLiftActivity(params)
       }
 
@@ -7318,7 +7376,7 @@ object Bot {
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
         US_Bot.adviseActivity(params) ||
-        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity(params)) ||
+        (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
         US_Bot.airLiftActivity(params)
       }
 
@@ -7345,7 +7403,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (game.usPolicy == USPolicy_LBJ && US_Bot.airStrikeActivity(params)) ||
+        (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
         US_Bot.airLiftActivity(params)
       }
 
@@ -7589,7 +7647,7 @@ object Bot {
         ARVN_Bot.raidActivity(params)   ||
         ARVN_Bot.transportActivity(params)
 
-      if (game.arvnPoints < 42)
+      if (!usPoints_GE_42)
         TrungDraw
       else if (!allLocRoutesCanTho_HueBlocked)
         flipCard(params)
@@ -7857,7 +7915,7 @@ object Bot {
       def doSpecialActivity(): Boolean =
         NVA_Bot.bombardActivity(params)
 
-      if (game.arvnPoints < 42)
+      if (!usPoints_GE_42)
         TrungDraw
       else if (!NVA_Bot.atleastTwentyNVATroopsOnMap)
         flipCard(params)
@@ -7980,7 +8038,7 @@ object Bot {
       def doSpecialActivity(): Boolean =
         NVA_Bot.infiltrateActivity(params, needDiceRoll = false, replaceVCBase = true)
 
-      if (game.usPoints < 42)  // Support + available US Troops and Bases
+      if (!usPoints_GE_42)  // Support + available US Troops and Bases
         TrungDraw
       else if (!NVA_Bot.threeD6_LE_AvailNVATroops)
         flipCard(params)
@@ -8202,14 +8260,12 @@ object Bot {
     def executeFront(params: Params): TrungResult = {
 
       def doSpecialActivity(): Boolean = {
-        val canSubvert = game.patronage >= 17 && (game.spaces exists VC_Bot.canSubvertSpace)
+        val canSubvert = VC_Bot.patronage_GE_17 && (game.spaces exists VC_Bot.canSubvertSpace)
 
         (canSubvert && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }
 
-      val threePlusGuerrillas = game.spaces exists (_.pieces.totalOf(VCGuerrillas) > 2)
-
-      if (!threePlusGuerrillas)
+      if (!VC_Bot.threePlusGuerrillasInSpace)
         TrungDraw
       else if (!VC_Bot.undergroundAtNoActiveOpposition)
         flipCard(params)
@@ -8275,10 +8331,8 @@ object Bot {
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
         def canTax           = (game.spaces exists VC_Bot.canTaxSpace) && VC_Bot.twoD6GTAgitateTotal
-        val canSubvert       = game.spaces exists VC_Bot.canSubvertSpace
 
         (canTax && VC_Bot.taxActivity(params)) || VC_Bot.subvertActivity(params)
-
       }
 
       if (!VC_Bot.undergroundAtNoActiveOpposition)
@@ -8336,14 +8390,10 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (game.patronage >= 17 && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
+        (VC_Bot.patronage_GE_17 && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }
 
-      val undergroundWithUSTroops = game.spaces exists { sp=>
-        sp.pieces.has(VCGuerrillas_U) && sp.pieces.has(USTroops)
-      }
-
-      if (!undergroundWithUSTroops)
+      if (!VC_Bot.undergroundWithUSTroops)
         TrungDraw
       else if (!VC_Bot.threeD6_LE_AvailVCPieces)
         flipCard(params)
@@ -8428,12 +8478,11 @@ object Bot {
       def doSpecialActivity(): Boolean = {
         val ambushCandidates = marchAmbushCandidates(VC, needUnderground = true)
         val canAmbush        = ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
-        val canSubvert       = game.patronage >= 17
 
         if (canAmbush)
           ambushActivity(VC, ambushCandidates, March, actNum, params, false)
 
-        canAmbush || (canSubvert && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
+        canAmbush || (VC_Bot.patronage_GE_17 && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }
 
       if (params.specialActivityOnly) {
@@ -8488,9 +8537,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        val canSubvert       = game.patronage >= 17
-
-        (canSubvert && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
+        (VC_Bot.patronage_GE_17 && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }
 
       if (params.specialActivityOnly) {
@@ -8515,15 +8562,10 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        val canSubvert       = game.patronage >= 17
-
-        (canSubvert && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
+        (VC_Bot.patronage_GE_17 && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }
 
-      val numVCGuerrillas = (sp: Space) => sp.pieces.totalOf(VCGuerrillas)
-      val vcGuerrillasOnMap = game totalOnMap numVCGuerrillas
-
-      if (vcGuerrillasOnMap < 15)
+      if (!VC_Bot.fifteenPlusVCGuerrilasOnMap)
         TrungDraw
       else if (params.specialActivityOnly) {
         // No need to check the flip card condition
@@ -8536,7 +8578,7 @@ object Bot {
       else {
         val specialDone = params.addSpecialActivity && doSpecialActivity()
 
-        if (game.spaces exists (sp => numVCGuerrillas(sp) >= 3)) {
+        if (VC_Bot.threePlusGuerrillasInSpace) {
           val operation = VC_Bot.marchOp(params, actNum)
           if (specialDone || operation.nonEmpty)
             TrungComplete(specialDone)

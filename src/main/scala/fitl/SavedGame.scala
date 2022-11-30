@@ -238,6 +238,7 @@ object SavedGame {
       "gameOver"               -> gameState.gameOver,
       "peaceTalks"             -> gameState.peaceTalks,
       "botDebug"               -> gameState.botDebug,
+      "botTrungDice"           -> gameState.botTrungDice,
       "history"                -> (gameState.history map gameSegmentToMap)
     )
   }
@@ -276,6 +277,7 @@ object SavedGame {
       asBoolean(data("gameOver")),
       asBoolean(data("peaceTalks")),
       asBoolean(data("botDebug")),
+      asBoolean(data.get("botTrungDice") getOrElse false),
       (asList(data("history")) map (s => gameSegmentFromMap(asMap(s)))).toVector
     )
   }

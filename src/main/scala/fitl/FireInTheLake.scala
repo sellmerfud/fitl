@@ -2041,6 +2041,7 @@ object FireInTheLake {
     gameOver: Boolean                 = false,
     peaceTalks: Boolean               = false,
     botDebug: Boolean                 = false,
+    botTrungDice: Boolean             = true, // Log bot dice in Trung decisions
     history: Vector[GameSegment]      = Vector.empty,
     log: Vector[String]               = Vector.empty) {  // Log of the cuurent game segment
 
@@ -5530,30 +5531,31 @@ object FireInTheLake {
     val options = (
       List("resources", "aid", "patronage", "econ", "trail", "uspolicy", "casualties",
       "on deck card", "out of play", "capabilities", "momentum", "rvnLeaders", "pivotal",
-      "eligibility", "trung", "bot log", "human win") ::: agitate
+      "eligibility", "trung", "bot log", "bot trung dice", "human win") ::: agitate
     ).sorted ::: SpaceNames
 
     val choice = askOneOf("[Adjust] (? for list): ", options, param, allowNone = true, allowAbort = false)
     choice foreach {
-      case "resources"    => adjustResources()
-      case "agitate"      => adjustAgitate()
-      case "aid"          => adjustAid()
-      case "patronage"    => adjustPatronage()
-      case "econ"         => adjustEcon()
-      case "trail"        => adjustTrail()
-      case "uspolicy"     => adjustUSPolicy()
-      case "casualties"   => adjustCasualties()
-      case "out of play"  => adjustOutOfPlay()
-      case "on deck card" => adjustOnDeckCard()
-      case "capabilities" => adjustCapabilities()
-      case "momentum"     => adjustMomentum()
-      case "rvnLeaders"   => adjustRvnLeaders()
-      case "pivotal"      => adjustPivotalCards()
-      case "eligibility"  => adjustEligibility()
-      case "trung"        => adjustTrungDeck()
-      case "bot log"      => adjustBotDebug()
-      case "human win"    => adjustHumanWinInVictoryPhase()
-      case name           => adjustSpace(name)
+      case "resources"      => adjustResources()
+      case "agitate"        => adjustAgitate()
+      case "aid"            => adjustAid()
+      case "patronage"      => adjustPatronage()
+      case "econ"           => adjustEcon()
+      case "trail"          => adjustTrail()
+      case "uspolicy"       => adjustUSPolicy()
+      case "casualties"     => adjustCasualties()
+      case "out of play"    => adjustOutOfPlay()
+      case "on deck card"   => adjustOnDeckCard()
+      case "capabilities"   => adjustCapabilities()
+      case "momentum"       => adjustMomentum()
+      case "rvnLeaders"     => adjustRvnLeaders()
+      case "pivotal"        => adjustPivotalCards()
+      case "eligibility"    => adjustEligibility()
+      case "trung"          => adjustTrungDeck()
+      case "bot log"        => adjustBotDebug()
+      case "bot trung dice" => adjustBotTrungDice()
+      case "human win"      => adjustHumanWinInVictoryPhase()
+      case name             => adjustSpace(name)
     }
 
     // We throw an Adjustment exception to return to
@@ -6102,6 +6104,15 @@ object FireInTheLake {
     game = game.copy(botDebug = newValue)
     log(desc)
     saveGameState("Bot Debug Logging")
+  }
+  
+  //  Whether or not to log dice rolls in Trung decisions
+  def adjustBotTrungDice(): Unit = {
+    val newValue = !game.botTrungDice
+    val desc = adjustmentDesc("Bot Trung Dice Logging", game.botTrungDice, newValue)
+    game = game.copy(botTrungDice = newValue)
+    log(desc)
+    saveGameState("Bot Trung Dice Logging")
   }
 
   def adjustHumanWinInVictoryPhase(): Unit = {

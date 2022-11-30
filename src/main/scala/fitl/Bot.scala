@@ -161,6 +161,70 @@ object Bot {
     def marchActNum = if (game.trail == TrailMax) 1 else actNum
   }
 
+
+  sealed trait CompareOp {
+    def compare(diceValue: Int, targetValue: Int): Boolean
+  }
+
+  object CMP_EQ extends CompareOp {
+    override def toString() = "=="
+    def compare(diceValue: Int, targetValue: Int): Boolean = diceValue == targetValue
+  }
+  
+  object CMP_NE extends CompareOp {
+    override def toString() = "!="
+    def compare(diceValue: Int, targetValue: Int): Boolean = diceValue != targetValue
+  }
+  
+  object CMP_LT extends CompareOp {
+    override def toString() = "<"
+    def compare(diceValue: Int, targetValue: Int): Boolean = diceValue < targetValue
+  }
+  
+  object CMP_LE extends CompareOp {
+    override def toString() = "<="
+    def compare(diceValue: Int, targetValue: Int): Boolean = diceValue <= targetValue
+  }
+  
+  object CMP_GT extends CompareOp {
+    override def toString() = ">"
+    def compare(diceValue: Int, targetValue: Int): Boolean = diceValue > targetValue
+  }
+  
+  object CMP_GE extends CompareOp {
+    override def toString() = ">="
+    def compare(diceValue: Int, targetValue: Int): Boolean = diceValue >= targetValue
+  }
+  
+
+  //  Function to make a comparison against the dice roll of a number of d6.
+  //  This is used so we can log the dice roll
+  def trungDiceCheck(numd6: Int, targetValue: Int, compareOp: CompareOp, desc: String): Boolean = {
+    val diceValue = rollDice(3)
+    
+    val result = compareOp.compare(diceValue, targetValue)
+
+    if (game.botTrungDice || game.botDebug) {
+      val display = if (result) "[Success]" else "[Failure]"
+      log(s"\nTrung check: ${numd6}d6 $compareOp $desc ($targetValue): $diceValue $display")
+    }
+    
+    result
+  }
+
+  def trungD3Check(targetValue: Int, compareOp: CompareOp, desc: String): Boolean = {
+    val dieValue = d3
+    
+    val result = compareOp.compare(dieValue, targetValue)
+
+    if (game.botTrungDice || game.botDebug) {
+      val display = if (result) "[Success]" else "[Failure]"
+      log(s"\nTrung check: d3 $compareOp $desc ($targetValue): $dieValue $display")
+    }
+    
+    result
+  }
+
   def logOpChoice(faction: Faction, op: Operation, notes: Iterable[String] = Nil): Unit = {
     log(s"\n$faction chooses $op operation")
     log(separator(char = '='))
@@ -4316,6 +4380,8 @@ object Bot {
       }
     }
 
+    def threeD6_LE_AvailARVN = trungDiceCheck(3, game.availablePieces.totalOf(ARVNPieces), CMP_LE, s"Available ARVN pieces")
+
     //  Used during ARVN operations
     //  If we are tracking ARVN resources, then after passing an activation
     //  roll we must also make sure that there are sufficient ARVN resources
@@ -5134,6 +5200,10 @@ object Bot {
   // ================================================================
   object NVA_Bot {
 
+    def threeD6_LE_AvailNVATroops = trungDiceCheck(3, game.availablePieces.totalOf(NVATroops), CMP_LE, s"Available NVA Troops")
+    def twoD6_LE_AvailNVAGuerrillas = trungDiceCheck(2, game.availablePieces.totalOf(NVAGuerrillas), CMP_LE, s"Available NVA Guerrillas")
+    def d3_GE_Trail = trungD3Check(game.trail, CMP_GE, "the Trail")
+    
     // Coup Round Redeployment
     // o Keep NVA pieces to exceed COIN+VC if possible
     //   otherwise keep keep Insurgent pieces to equal or exceed COIN pieces
@@ -5950,7 +6020,6 @@ object Bot {
           params.spaceAllowed(sp.name) &&
           !infiltrateSpaces(sp.name) &&
           sp.pieces.has(NVABases)
-        val diceSuccess = rollDice(3) <= game.availablePieces.totalOf(NVATroops)
 
         def placeTroops(): Unit = {
           val troopCandidates = game.nonLocSpaces filter canPlaceTroops
@@ -5979,7 +6048,7 @@ object Bot {
           }
         }
 
-        if (!needDiceRoll || diceSuccess) {
+        if (!needDiceRoll || NVA_Bot.threeD6_LE_AvailNVATroops) {
           val baseCandidates = game.nonLocSpaces filter canReplaceBase
 
           // First try to replace a VC base if requested
@@ -6086,6 +6155,9 @@ object Bot {
   // VC Specific code
   // ================================================================
   object VC_Bot {
+
+    def threeD6_LE_AvailVCPieces = trungDiceCheck(3, game.availablePieces.totalOf(VCPieces), CMP_LE, s"Available VC pieces")
+    def twoD6GTAgitateTotal      = trungDiceCheck(2, game.agitateTotal, CMP_GT, s"Agitate Total")
 
     val canSubvertSpace = (sp: Space) => sp.pieces.has(VCGuerrillas_U) && sp.pieces.has(ARVNCubes)
     val canTaxSpace = (sp: Space) => {
@@ -7333,7 +7405,8 @@ object Bot {
         ARVN_Bot.raidActivity(params)
       }
 
-      if (rollDice(3) > game.availablePieces.totalOf(ARVNPieces))
+
+      if (!ARVN_Bot.threeD6_LE_AvailARVN)
         TrungDraw
       else if (!ARVN_Bot.arvnAssaultWouldAddControlOrUnblockCanTo_Hue)
         flipCard(params)
@@ -7421,7 +7494,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       // Special Activity (Transport) is selected on the Front of the card!
-      val operation = if (rollDice(3) <= game.availablePieces.totalOf(ARVNPieces))
+      val operation = if (ARVN_Bot.threeD6_LE_AvailARVN)
         ARVN_Bot.trainOp(params, actNum)
       else
         ARVN_Bot.assaultOp(params, actNum)
@@ -7450,7 +7523,7 @@ object Bot {
 
       if (!ARVN_Bot.any2PopSpaceWithSupportAndMoreArvnCubesThanUsCubes)
         TrungDraw
-      else if (rollDice(3) > game.availablePieces.totalOf(ARVNPieces))
+      else if (!ARVN_Bot.threeD6_LE_AvailARVN)
         flipCard(params)
       else if (params.specialActivityOnly) {
         if (doSpecialActivity())
@@ -7584,7 +7657,7 @@ object Bot {
 
       if (!ARVN_Bot.nvaBaseOrNvaControlAt2PlusPop)
         TrungDraw
-      else if (rollDice(3) > game.availablePieces.totalOf(ARVNPieces))
+      else if (!ARVN_Bot.threeD6_LE_AvailARVN)
         flipCard(params)
       else if (params.specialActivityOnly) {
         if (doSpecialActivity())
@@ -7649,7 +7722,7 @@ object Bot {
 
       if (game.nvaPoints < 14)
         TrungDraw
-      else if (rollDice(3) > game.availablePieces.totalOf(ARVNPieces))
+      else if (!ARVN_Bot.threeD6_LE_AvailARVN)
         flipCard(params)
       else if (params.specialActivityOnly) {
         if (doSpecialActivity())
@@ -7715,7 +7788,7 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      if (rollDice(3) > game.availablePieces.totalOf(NVATroops))
+      if (!NVA_Bot.threeD6_LE_AvailNVATroops)
         TrungDraw
       else if (!NVA_Bot.sixTroopsWithCOINTroopsOrBase)
         flipCard(params)
@@ -7823,7 +7896,7 @@ object Bot {
           TrungNoOp
       }
       else {
-        if (rollDice(2) <= game.availablePieces.totalOf(NVAGuerrillas)) {
+        if (NVA_Bot.twoD6_LE_AvailNVAGuerrillas) {
           NVA_Bot.rallyOp(params, actNum) match {
             case Some(_) =>
               val infiltrated = params.addSpecialActivity && doSpecialActivity()
@@ -7852,10 +7925,7 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      val guerrilasCheck = rollDice(2) <= game.availablePieces.totalOf(NVAGuerrillas)
-      val trailCheck     = d3 >= game.trail
-
-      if (!guerrilasCheck && !trailCheck)
+      if (!NVA_Bot.twoD6_LE_AvailNVAGuerrillas && !NVA_Bot.d3_GE_Trail)
         TrungDraw
       else if (!NVA_Bot.sixTroopsWithCOINTroopsOrBase)
         flipCard(params)
@@ -7912,7 +7982,7 @@ object Bot {
 
       if (game.usPoints < 42)  // Support + available US Troops and Bases
         TrungDraw
-      else if (rollDice(3) > game.availablePieces.totalOf(NVATroops))
+      else if (!NVA_Bot.threeD6_LE_AvailNVATroops)
         flipCard(params)
       else if (params.specialActivityOnly) {
         if (doSpecialActivity())
@@ -7984,12 +8054,9 @@ object Bot {
         NVA_Bot.infiltrateActivity(params, needDiceRoll = true, replaceVCBase = true) ||
         NVA_Bot.bombardActivity(params)
 
-      val guerrillaCheck = rollDice(2) <= game.availablePieces.totalOf(NVAGuerrillas)
-      val trailCheck     = d3 >= game.trail
-
       if (!NVA_Bot.pop2WithoutCoinControl)
         TrungDraw
-      else if (!guerrillaCheck && !trailCheck)
+      else if (!NVA_Bot.twoD6_LE_AvailNVAGuerrillas && !NVA_Bot.d3_GE_Trail)
         flipCard(params)
       else if (params.specialActivityOnly) {
         if (doSpecialActivity())
@@ -8168,8 +8235,7 @@ object Bot {
       def doSpecialActivity(op: InsurgentOp): Boolean = {
         val ambushCandidates = marchAmbushCandidates(VC, needUnderground = true)
         val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
-        val agitateRoll      = rollDice(2)
-        val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
+        def canTax           = (game.spaces exists VC_Bot.canTaxSpace) && VC_Bot.twoD6GTAgitateTotal
 
         if (canAmbush)
           ambushActivity(VC, ambushCandidates, op, actNum, params, false)
@@ -8180,11 +8246,6 @@ object Bot {
       // ------------------------------------------------------------
       // Back Operation
       // ------------------------------------------------------------
-      val dice = rollDice(3)
-      botDebug(s"Dice roll: $dice, available VC pieces: ${game.availablePieces.totalOf(VCPieces)}")
-
-      val condition = dice <= game.availablePieces.totalOf(VCPieces)
-
       if (params.specialActivityOnly) {
         if (doSpecialActivity(Rally))
           TrungComplete(true)
@@ -8192,7 +8253,7 @@ object Bot {
           TrungNoOp
       }
       else {
-        val operation = if (dice <= game.availablePieces.totalOf(VCPieces))
+        val operation = if (VC_Bot.threeD6_LE_AvailVCPieces)
           VC_Bot.rallyOp(params, actNum)
         else
           VC_Bot.marchOp(params, actNum)
@@ -8213,8 +8274,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        val agitateRoll      = rollDice(2)
-        val canTax           = (agitateRoll > game.agitateTotal) && (game.spaces exists VC_Bot.canTaxSpace)
+        def canTax           = (game.spaces exists VC_Bot.canTaxSpace) && VC_Bot.twoD6GTAgitateTotal
         val canSubvert       = game.spaces exists VC_Bot.canSubvertSpace
 
         (canTax && VC_Bot.taxActivity(params)) || VC_Bot.subvertActivity(params)
@@ -8223,7 +8283,7 @@ object Bot {
 
       if (!VC_Bot.undergroundAtNoActiveOpposition)
         TrungDraw
-      else if (rollDice(3) > game.availablePieces.totalOf(VCPieces))
+      else if (!VC_Bot.threeD6_LE_AvailVCPieces)
         flipCard(params)
       else if (params.specialActivityOnly) {
         if (doSpecialActivity())
@@ -8285,7 +8345,7 @@ object Bot {
 
       if (!undergroundWithUSTroops)
         TrungDraw
-      else if (rollDice(3) > game.availablePieces.totalOf(VCPieces))
+      else if (!VC_Bot.threeD6_LE_AvailVCPieces)
         flipCard(params)
       else if (params.specialActivityOnly) {
         if (doSpecialActivity())
@@ -8337,7 +8397,7 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (rollDice(2) > game.agitateTotal && VC_Bot.taxActivity(params)) || VC_Bot.subvertActivity(params)
+        (VC_Bot.twoD6GTAgitateTotal && VC_Bot.taxActivity(params)) || VC_Bot.subvertActivity(params)
       }
 
       // ------------------------------------------------------------
@@ -8345,7 +8405,7 @@ object Bot {
       // ------------------------------------------------------------
       if (!VC_Bot.pop2SpaceWithoutGuerrillas)
         TrungDraw
-      else if (rollDice(3) > game.availablePieces.totalOf(VCPieces))
+      else if (!VC_Bot.threeD6_LE_AvailVCPieces)
         flipCard(params)
       else if (params.specialActivityOnly) {
         if (doSpecialActivity())
@@ -8401,7 +8461,7 @@ object Bot {
       def doSpecialActivity(): Boolean =
         VC_Bot.taxActivity(params)
 
-      if (rollDice(3) > game.availablePieces.totalOf(VCPieces))
+      if (!VC_Bot.threeD6_LE_AvailVCPieces)
         TrungDraw
       else if (!VC_Bot.threePlusGuerrillasWithUSTroopsNoVCBase)
         flipCard(params)

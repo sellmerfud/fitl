@@ -4735,16 +4735,16 @@ object FireInTheLake {
     }
 
     if (origGame.usPoints != newGame.usPoints)
-      logChange(s"Move the 'Support + Avail US' marker to ${newGame.usPoints}")
+      logChange(s"Move the 'Support + Avail US' marker from ${origGame.usPoints} to ${newGame.usPoints}")
 
     if (origGame.arvnPoints != newGame.arvnPoints)
-      logChange(s"Move the 'COIN Control + Patronage' marker to ${newGame.arvnPoints}")
+      logChange(s"Move the 'COIN Control + Patronage' marker from ${origGame.arvnPoints} to ${newGame.arvnPoints}")
 
     if (origGame.nvaPoints != newGame.nvaPoints)
-      logChange(s"Move the 'NVA Control + NVA Bases' marker to ${newGame.nvaPoints}")
+      logChange(s"Move the 'NVA Control + NVA Bases' marker from ${origGame.nvaPoints} to ${newGame.nvaPoints}")
 
     if (origGame.vcPoints != newGame.vcPoints)
-      logChange(s"Move the 'Total Opposition + VC Bases' marker to ${newGame.vcPoints}")
+      logChange(s"Move the 'Total Opposition + VC Bases' marker from ${origGame.vcPoints} to ${newGame.vcPoints}")
   }
 
   private var loggingPointsChangesActive = false
@@ -5468,7 +5468,7 @@ object FireInTheLake {
 
       def showPage(pageNum: Int): Unit = {
         val saveChoices: List[(Int, (String, Seq[String]))] = pages(pageNum).toList map {
-          case GameSegment(save_number, card, summary) => save_number -> (s"[$card]", summary)
+          case GameSegment(save_number, card, summary) => save_number -> (s"Save point ${save_number + 1} [$card]", summary)
         }
           val otherChoices: List[(Int, (String, Seq[String]))] = List(
             choice(pageNum > firstPage, PAGE_UP,   "Page up, show newer save points ", Seq.empty),

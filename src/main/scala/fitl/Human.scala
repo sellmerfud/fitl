@@ -763,18 +763,21 @@ object Human {
 
     def placeInCity(pieces: Pieces): Unit = if (pieces.nonEmpty) {
 
-      val name = askSimpleMenu(Cities, "Place pieces in which City:").head
+      val name = askSimpleMenu(Cities, "\nPlace pieces in which City:").head
       val num  = askInt(s"Place how many pieces in $name", 0, pieces.total)
       val toPlace = askPieces(pieces, num)
       moveOutOfPlayToMap(toPlace, name)
       placeInCity(pieces - toPlace)
     }
 
-    val numPieces = maxNum min game.casualties.totalOf(USPieces)
-    val prompt = "Choose US Pieces to remove from Out of Play"
-    val pieces = askPieces(game.casualties, numPieces, USPieces, Some(prompt))
-
-    placeInCity(pieces)
+    val numPieces = maxNum min game.outOfPlay.totalOf(USPieces)
+    if (numPieces > 0) {
+      val prompt = "Choose US Pieces to remove from Out of Play"
+      val pieces = askPieces(game.outOfPlay, numPieces, USPieces, Some(prompt))
+      placeInCity(pieces)      
+    }
+    else
+      log("There are no US pieces in the Out of Play box.")
   }
 
 

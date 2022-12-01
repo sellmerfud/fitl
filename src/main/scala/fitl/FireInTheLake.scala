@@ -3875,10 +3875,14 @@ object FireInTheLake {
   }
 
   def factionPasses(faction: Faction): Unit = {
-    val amount = if (faction == US || faction == ARVN) 3 else 1
+    val (resFaction, amount) = if (faction == US || faction == ARVN)
+      (ARVN, 3)
+    else
+      (faction, 1)
+    
     log(s"\n$faction faction passes")
     log(separator())
-    increaseResources(faction, amount)
+    increaseResources(resFaction, amount)
   }
 
   // Will not increase resrouces if faction is NP bot.

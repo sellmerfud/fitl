@@ -5420,6 +5420,18 @@ object Bot {
       logCheck(result, "20+ NVA Troops on the map?")
     }
 
+    def undergroundGuerrillasWithSupport: Boolean = {
+      val result = game.nonLocSpaces exists (sp => sp.support > Neutral && sp.pieces.has(NVAGuerrillas_U))
+      logCheck(result, "Underground NVA Guerrillas in space with Support?")
+    }
+    
+    def nvaMarchAmbushCandidates: List[String] = marchAmbushCandidates(NVA, needUnderground = true)
+    
+    def canFollowMarchWithAmbush: Boolean = { 
+      val result = nvaMarchAmbushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
+      logCheck(result, "Can Ambush in March destinations?")
+    }
+    
     val MostUndergroundGuerrillas = List(
       new HighestScore[Space](
         "Most Underground NVA Guerrillas",
@@ -6185,7 +6197,6 @@ object Bot {
   object VC_Bot {
 
     def threeD6_LE_AvailVCPieces = trungDiceCheck(3, game.availablePieces.totalOf(VCPieces), CMP_LE, s"Available VC pieces")
-    def twoD6GTAgitateTotal      = trungDiceCheck(2, game.agitateTotal, CMP_GT, s"Agitate Total")
 
     val canSubvertSpace = (sp: Space) => sp.pieces.has(VCGuerrillas_U) && sp.pieces.has(ARVNCubes)
     val canTaxSpace = (sp: Space) => {
@@ -6232,6 +6243,18 @@ object Bot {
       logCheck(result, "Underground VC Guerrillas in space with US Troops?")
     }
 
+    def vcMarchAmbushCandidates: List[String] = marchAmbushCandidates(VC, needUnderground = true)
+    
+    def canFollowMarchWithAmbush: Boolean = { 
+      val result = vcMarchAmbushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
+      logCheck(result, "Can Ambush in March destinations?")
+    }
+
+    //  Can Tax if candidate spaces exist and 2d6 > agitate totak
+    def twoD6GTAgitateTotal: Boolean = {
+      logCheck(game.spaces exists VC_Bot.canTaxSpace, "Spaces exist that can be Taxed?") &&
+      trungDiceCheck(2, game.agitateTotal, CMP_GT, s"Agitate Total")
+    }
 
     def threePlusGuerrillasWithUSTroopsNoVCBase: Boolean = {
       val test = (sp: Space) => {
@@ -7912,8 +7935,7 @@ object Bot {
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      def doSpecialActivity(): Boolean =
-        NVA_Bot.bombardActivity(params)
+      def doSpecialActivity(): Boolean = NVA_Bot.bombardActivity(params)
 
       if (!usPoints_GE_42)
         TrungDraw
@@ -8001,9 +8023,10 @@ object Bot {
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      def doSpecialActivity(): Boolean =
+      def doSpecialActivity(): Boolean = {
         NVA_Bot.infiltrateActivity(params, needDiceRoll = true, replaceVCBase = true) ||
-        NVA_Bot.bombardActivity(params)
+        NVA_Bot.bombardActivity(params)        
+      }
 
       if (params.specialActivityOnly) {
         if (doSpecialActivity())
@@ -8065,13 +8088,13 @@ object Bot {
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       if (params.specialActivityOnly) {
         // Ambush is not possible since we are not actually marching!
-          if (NVA_Bot.bombardActivity(params))
-            TrungComplete(true)
-          else
-            TrungNoOp
+        if (NVA_Bot.bombardActivity(params))
+          TrungComplete(true)
+        else
+          TrungNoOp
       }
       else {
-        if (game.nonLocSpaces exists (sp => sp.support > Neutral && sp.pieces.has(NVAGuerrillas_U))) {
+        if (NVA_Bot.undergroundGuerrillasWithSupport) {
           NVA_Bot.terrorOp(params, actNum) match {
             case Some(_) =>
               val bombarded = params.addSpecialActivity && NVA_Bot.bombardActivity(params)
@@ -8083,13 +8106,12 @@ object Bot {
         }
         else {
           def doSpecialActivity(): Boolean = {
-            val ambushCandidates = marchAmbushCandidates(NVA, needUnderground = true)
-            val canAmbush        = ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
-
-            if (canAmbush)
-              ambushActivity(NVA, ambushCandidates, March, actNum, params, false)
-
-            canAmbush || NVA_Bot.bombardActivity(params)
+            if (NVA_Bot.canFollowMarchWithAmbush) {
+              ambushActivity(NVA, NVA_Bot.nvaMarchAmbushCandidates, March, actNum, params, false)
+              true
+            }
+            else
+              NVA_Bot.bombardActivity(params)
           }
 
           NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true) match {
@@ -8151,13 +8173,12 @@ object Bot {
       }
       else {
         def doSpecialActivity(op: InsurgentOp): Boolean = {
-          val ambushCandidates = marchAmbushCandidates(NVA, needUnderground = true)
-          val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
-
-          if (canAmbush)
-            ambushActivity(NVA, ambushCandidates, op, actNum, params, false)
-
-          canAmbush || NVA_Bot.bombardActivity(params)
+          if (op == March && NVA_Bot.canFollowMarchWithAmbush) {
+            ambushActivity(NVA, NVA_Bot.nvaMarchAmbushCandidates, op, actNum, params, false)
+            true
+          }
+          else
+            NVA_Bot.bombardActivity(params)
         }
 
 
@@ -8260,9 +8281,7 @@ object Bot {
     def executeFront(params: Params): TrungResult = {
 
       def doSpecialActivity(): Boolean = {
-        val canSubvert = VC_Bot.patronage_GE_17 && (game.spaces exists VC_Bot.canSubvertSpace)
-
-        (canSubvert && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
+        (VC_Bot.patronage_GE_17 && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }
 
       if (!VC_Bot.threePlusGuerrillasInSpace)
@@ -8289,14 +8308,13 @@ object Bot {
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
 
       def doSpecialActivity(op: InsurgentOp): Boolean = {
-        val ambushCandidates = marchAmbushCandidates(VC, needUnderground = true)
-        val canAmbush        = op == March && ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
-        def canTax           = (game.spaces exists VC_Bot.canTaxSpace) && VC_Bot.twoD6GTAgitateTotal
-
-        if (canAmbush)
-          ambushActivity(VC, ambushCandidates, op, actNum, params, false)
-
-        canAmbush || (canTax && VC_Bot.taxActivity(params)) || VC_Bot.subvertActivity(params)
+        if (op == March && VC_Bot.canFollowMarchWithAmbush) {
+          ambushActivity(VC, VC_Bot.vcMarchAmbushCandidates, op, actNum, params, false)
+          true
+        }
+        else
+          (VC_Bot.twoD6GTAgitateTotal && VC_Bot.taxActivity(params)) ||
+          VC_Bot.subvertActivity(params)
       }
 
       // ------------------------------------------------------------
@@ -8330,9 +8348,8 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        def canTax           = (game.spaces exists VC_Bot.canTaxSpace) && VC_Bot.twoD6GTAgitateTotal
-
-        (canTax && VC_Bot.taxActivity(params)) || VC_Bot.subvertActivity(params)
+        (VC_Bot.twoD6GTAgitateTotal && VC_Bot.taxActivity(params)) ||
+        VC_Bot.subvertActivity(params)
       }
 
       if (!VC_Bot.undergroundAtNoActiveOpposition)
@@ -8447,7 +8464,8 @@ object Bot {
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        (VC_Bot.twoD6GTAgitateTotal && VC_Bot.taxActivity(params)) || VC_Bot.subvertActivity(params)
+        (VC_Bot.twoD6GTAgitateTotal && VC_Bot.taxActivity(params)) ||
+        VC_Bot.subvertActivity(params)
       }
 
       // ------------------------------------------------------------
@@ -8476,13 +8494,13 @@ object Bot {
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
-        val ambushCandidates = marchAmbushCandidates(VC, needUnderground = true)
-        val canAmbush        = ambushCandidates.nonEmpty && !momentumInPlay(Mo_Claymores)
-
-        if (canAmbush)
-          ambushActivity(VC, ambushCandidates, March, actNum, params, false)
-
-        canAmbush || (VC_Bot.patronage_GE_17 && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
+        if (VC_Bot.canFollowMarchWithAmbush) {
+          ambushActivity(VC, VC_Bot.vcMarchAmbushCandidates, March, actNum, params, false)
+          true
+        }
+        else
+          (VC_Bot.patronage_GE_17 && VC_Bot.subvertActivity(params)) ||
+          VC_Bot.taxActivity(params)
       }
 
       if (params.specialActivityOnly) {
@@ -8507,8 +8525,7 @@ object Bot {
     //Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
-      def doSpecialActivity(): Boolean =
-        VC_Bot.taxActivity(params)
+      def doSpecialActivity(): Boolean = VC_Bot.taxActivity(params)
 
       if (!VC_Bot.threeD6_LE_AvailVCPieces)
         TrungDraw

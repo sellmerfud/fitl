@@ -5535,7 +5535,7 @@ object FireInTheLake {
     val options = (
       List("resources", "aid", "patronage", "econ", "trail", "uspolicy", "casualties",
       "on deck card", "out of play", "capabilities", "momentum", "rvnLeaders", "pivotal",
-      "eligibility", "trung", "bot log", "log trung", "human win") ::: agitate
+      "eligibility", "trung", "bot log", "trung log", "human win") ::: agitate
     ).sorted ::: SpaceNames
 
     val choice = askOneOf("[Adjust] (? for list): ", options, param, allowNone = true, allowAbort = false)
@@ -5557,7 +5557,7 @@ object FireInTheLake {
       case "eligibility"  => adjustEligibility()
       case "trung"        => adjustTrungDeck()
       case "bot log"      => adjustBotDebug()
-      case "log trung"    => adjustLogTrung()
+      case "trung log"    => adjustLogTrung()
       case "human win"    => adjustHumanWinInVictoryPhase()
       case name           => adjustSpace(name)
     }

@@ -146,9 +146,11 @@ object Bot {
     override def toString() = display(id)
 
     def flipCard(params: Params, specialDone: Boolean = false): TrungResult = {
-      log("\nTrung card flipped to its back side")
-      log(separator())
-      log(display(id * 2))
+      if (game.logTrung || game.botDebug) {
+        log("\nTrung card flipped to its back side")
+        log(separator())
+        log(display(id * 2))        
+      }
       executeBack(params, specialDone)
     }
     def executeFront(params: Params): TrungResult
@@ -7085,7 +7087,7 @@ object Bot {
 
     val firstCard = drawTrungCard(faction)
 
-    def logTrungDraw(card: TrungCard): Unit = {
+    def logTrungDraw(card: TrungCard): Unit = if (game.logTrung || game.botDebug) {
       log(s"\nDrawing Trung Card for $faction")
       log(separator())
       log(card.toString)

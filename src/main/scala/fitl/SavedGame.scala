@@ -277,7 +277,7 @@ object SavedGame {
       asBoolean(data("gameOver")),
       asBoolean(data("peaceTalks")),
       asBoolean(data("botDebug")),
-      asBoolean(data.get("logTrung") orElse data.get("botTrungDice") getOrElse true),
+      asBoolean(data.get("logTrung") getOrElse true),
       (asList(data("history")) map (s => gameSegmentFromMap(asMap(s)))).toVector
     )
   }

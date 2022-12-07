@@ -106,15 +106,15 @@ object SavedGame {
   }  
   private def asMap(x: Any): Map[String, Any] = x match {
     case m: Map[_, _] => m.asInstanceOf[Map[String, Any]]
-    case _      => throw new Exception(s"Not a valid Map value!")
+    case _            => throw new Exception(s"Not a valid Map value!")
   }  
   private def asList(x: Any): List[Any] = x match {
     case l: List[_] => l.asInstanceOf[List[Any]]
-    case _      => throw new Exception(s"Not a valid List value!")
+    case _          => throw new Exception(s"Not a valid List value!")
   }  
   private def asSet(x: Any): Set[Any] = x match {
     case l: List[_] => l.asInstanceOf[List[Any]].toSet
-    case _      => throw new Exception(s"Not a valid Set value!")
+    case _          => throw new Exception(s"Not a valid Set value!")
   }  
     
   private def actorToMap(actor: Actor): Map[String, Any] =
@@ -273,7 +273,7 @@ object SavedGame {
       asInt(data("onDeckCard")),
       asBoolean(data("prevCardWasCoup")),
       asInt(data("coupCardsPlayed")),
-      asList(data.get("cardsSeen")) map (_.toString.toInt),
+      asList(data("cardsSeen")) map (_.toString.toInt),
       asBoolean(data("gameOver")),
       asBoolean(data("peaceTalks")),
       asBoolean(data("botDebug")),

@@ -2033,11 +2033,11 @@ object FireInTheLake {
     trungDeck: List[TrungCard]        = Nil,  // The head of the list is the top of the deck
     momentum: List[String]            = Nil,
     sequence: SequenceOfPlay          = SequenceOfPlay(),
-    cardsDrawn: Int                   = 0,
     currentCard: Int                  = 0,
     onDeckCard: Int                   = 0,
     prevCardWasCoup: Boolean          = false,
     coupCardsPlayed: Int              = 0,    // Number of Coup cards played/ignored thus far
+    cardsSeen: List[Int]              = Nil,  // Numbers of cards that have been drawn from the deck
     gameOver: Boolean                 = false,
     peaceTalks: Boolean               = false,
     botDebug: Boolean                 = false,
@@ -2058,6 +2058,7 @@ object FireInTheLake {
     lazy val citySpaces       = (spaces filter (_.isCity))
     lazy val patrolSpaces     = locSpaces ::: citySpaces
 
+    lazy val numCardsDrawn    = cardsSeen.size
     // rvnLeaders always contains "Duong Van Minh" which is
     // not a card, hence size - 1
     lazy val numCardsInLeaderBox = rvnLeaders.size - 1
@@ -2121,7 +2122,7 @@ object FireInTheLake {
     def executingPivotalEvent = eventDeck.isPivotalCard(currentCard) && sequence.numActors == 0
 
     def isFinalCampaign = coupCardsPlayed == (totalCoupCards - 1)
-    def isCoupRound = cardsDrawn > 0 && eventDeck(currentCard).isCoup
+    def isCoupRound = numCardsDrawn > 0 && eventDeck(currentCard).isCoup
     def onDeckIsCoup = onDeckCard > 0 &&  eventDeck(onDeckCard).isCoup
     def inMonsoon = !isCoupRound && onDeckIsCoup
     def resources(faction: Faction) = faction match {
@@ -2215,8 +2216,8 @@ object FireInTheLake {
     
     //  Special case for the start of a game when less than three
     //  cards have been drawn.
-    if (game.cardsDrawn < 3) {
-      val cardsRemaining = game.cardsPerCampaign - game.cardsDrawn
+    if (game.numCardsDrawn < 3) {
+      val cardsRemaining = game.cardsPerCampaign - game.numCardsDrawn
       val chance = if (coupCardShowing) 0.0 else 1.0 / cardsRemaining
       val coupStatus = (game.isCoupRound, game.onDeckIsCoup) match {
         case (true, _)     => "Is current card"
@@ -2229,16 +2230,16 @@ object FireInTheLake {
     else {
       //  A 'Pile' relates to each pile of cards containing a Coup!
       //  card as defined by the current scenario.
-      val cardsPlayed         = game.cardsDrawn - 2
+      val cardsPlayed         = game.numCardsDrawn - 2
       val lastPlayedPile      = (cardsPlayed - 1) / game.cardsPerCampaign + 1
       val currentCardPile     = cardsPlayed / game.cardsPerCampaign + 1
       val upcomingCardPile    = (cardsPlayed + 1) / game.cardsPerCampaign + 1
-      val topOfDeckPile       = (game.cardsDrawn / game.cardsPerCampaign) + 1
+      val topOfDeckPile       = (game.numCardsDrawn / game.cardsPerCampaign) + 1
       val numCoupSeen         = game.coupCardsPlayed +
                                 (if (game.isCoupRound)  1 else 0) +
                                 (if (game.onDeckIsCoup) 1 else 0)
       val currentCoupResolved = lastPlayedPile == game.coupCardsPlayed && topOfDeckPile == lastPlayedPile
-      val cardsRemainingPile  = game.cardsPerCampaign - (game.cardsDrawn % game.cardsPerCampaign)
+      val cardsRemainingPile  = game.cardsPerCampaign - (game.numCardsDrawn % game.cardsPerCampaign)
       val chance              = if (topOfDeckPile > numCoupSeen) 1.0 / cardsRemainingPile else 0.0
     
       val coupStatus = (game.isCoupRound, game.onDeckIsCoup, currentCoupResolved) match {
@@ -2305,17 +2306,18 @@ object FireInTheLake {
       wrap("Past Leaders   : ", game.rvnLeaders.tail) foreach (b += _)
       b += separator()
     }
-    if (game.cardsDrawn > 0) {
+    if (game.numCardsDrawn > 0) {
       b += s"Current card   : ${eventDeck(game.currentCard).fullString}"
-      if (game.onDeckCard > 0) {
+      if (game.onDeckCard > 0)
+        b += s"On Deck card   : ${eventDeck(game.onDeckCard).fullString}"
+      else
         b += "On Deck card   : None (Last Coup round)"
-      }
     }
 
     b += separator()
     b += s"Campaign       : ${ordinal(game.coupCardsPlayed+1)} of ${game.totalCoupCards} ${if (game.isFinalCampaign) " -- Final campaign" else ""}"
     b += f"Cards/Pile     : ${game.cardsPerCampaign}%2d"
-    b += f"Cards drawn    : ${game.cardsDrawn}%2d"
+    b += f"Cards drawn    : ${game.numCardsDrawn}%2d"
     b += s"Coup card      : $coupStatus"
     b += f"Coup chance    : $coupCardChance"
 
@@ -2440,7 +2442,7 @@ object FireInTheLake {
 
   def sequenceSummary: Seq[String] = {
     val b = new ListBuffer[String]
-    if (game.cardsDrawn > 0) {
+    if (game.numCardsDrawn > 0) {
       b += "Sequence of Play"
       b += separator()
       b ++= sequenceList(eventDeck(game.currentCard), game.sequence)
@@ -2860,20 +2862,19 @@ object FireInTheLake {
 
 
   def safeToInt(str: String): Option[Int] = try Some(str.toInt) catch { case e: NumberFormatException => None }
-  // Cannot draw pivotal event cards!
-  def isValidCardDraw(cardNum: Int): Boolean = eventDeck.isValidNumber(cardNum) && !eventDeck.isPivotalCard(cardNum)
 
   // Prompt the user for one or two cards if necessary.
   // Then update the game state with the new card numbers.
   def drawNextCard(): Unit = {
-    if (game.cardsDrawn == 0) {
+    if (game.numCardsDrawn == 0) {
       println("\nDraw event cards")
       println(separator())
       val card1 = askCardNumber("Enter the number of the 1st Event card: ")
+      game = game.copy(cardsSeen = game.cardsSeen :+ card1)
       val card2 = askCardNumber("Enter the number of the 2nd Event card: ")
       game = game.copy(currentCard  = card1,
                        onDeckCard   = card2,
-                       cardsDrawn   = 2)
+                       cardsSeen    = game.cardsSeen :+ card2)
     }
     else {
       // If Coup round then all faction cylinders have already been
@@ -2894,16 +2895,16 @@ object FireInTheLake {
         game = game.copy(currentCard     = game.onDeckCard,
                          onDeckCard      = nextCard,
                          prevCardWasCoup = game.isCoupRound,
-                         cardsDrawn      = game.cardsDrawn + 1)
+                         cardsSeen       = game.cardsSeen :+ nextCard)
       }
     }
 
     log()
     log(s"Current card: ${eventDeck(game.currentCard)}")
-    if (game.onDeckCard == 0)
-      log("On Deck card: None (Last Coup round)")
-    else
+    if (game.onDeckCard > 0)
       log(s"On Deck card: ${eventDeck(game.onDeckCard)}")
+    else
+      log("On Deck card: None (Last Coup round)")
   }
 
 
@@ -5263,15 +5264,26 @@ object FireInTheLake {
   }
 
   // Check card number input and print a message
-  // if the number is not valid
+  // if the number is not valid or if the card has already been played.
   def checkCardNum(cardNum: String): Boolean = {
     cardNum match {
-      case INTEGER(num) if isValidCardDraw(num.toInt) => true
+      case INTEGER(num) if !eventDeck.isValidNumber(num.toInt) =>
+        println(s"'$cardNum' is not a valid card number")
+        false
+        
       case INTEGER(num) if eventDeck.isPivotalCard(num.toInt) =>
         println(s"'${eventDeck(num.toInt)}' is a pivotal event card")
         false
-      case input =>
-        println(s"'$input' is not a valid card number")
+        
+      case INTEGER(num) if game.cardsSeen.contains(num.toInt) =>
+        println(s"'${eventDeck(num.toInt)}' has already been drawn during this game")
+        false
+        
+      case INTEGER(_) =>
+        true
+        
+      case _ =>
+        println(s"'$cardNum' is not a card number")
         false
     }
   }
@@ -5791,14 +5803,14 @@ object FireInTheLake {
   }
 
   def adjustOnDeckCard(): Unit = {
-    if (game.cardsDrawn <= 1)
+    if (game.numCardsDrawn <= 1)
       println("\nNo on deck card has been drawn")
     else {
       println(s"\nThe on deck card is: ${eventDeck(game.onDeckCard)}")
       val oldOnDeckNum = game.onDeckCard
       val newOnDeckNum = askCardNumber("\nEnter the number of the on deck card: ")
       if (newOnDeckNum != oldOnDeckNum) {
-        game = game.copy(onDeckCard = newOnDeckNum)
+        game = game.copy(onDeckCard = newOnDeckNum, cardsSeen = game.cardsSeen.dropRight(1) :+ newOnDeckNum)
         log(adjustmentDesc(s"On Deck Card", eventDeck(oldOnDeckNum).toString, eventDeck(newOnDeckNum).toString))
         saveGameState("Adjusted On Deck Card")
       }

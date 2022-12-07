@@ -4540,15 +4540,27 @@ object Bot {
       bestCandidate(candidates, priorities)
     }
 
+    case class GovernSpace(sp: Space, patronageOK: Boolean)
+
     // ARVN Spaces Priorities: Govern
-    def pickSpaceGovern(candidates: List[Space]): Space = {
+    def pickSpaceGovern(candidates: List[GovernSpace]): GovernSpace = {
+
+      val MostPopulation = new HighestScore[GovernSpace](
+        "Most Population",
+        governSpace => if (governSpace.sp.isLoC) NO_SCORE else governSpace.sp.population
+      )
+
+      val MostTotalSupport = new HighestScore[GovernSpace](
+        "Most Total Support",
+        governSpace => if (governSpace.sp.isLoC || !governSpace.patronageOK) NO_SCORE else governSpace.sp.supportValue
+      )
 
       val priorities = List(
         MostPopulation,
         MostTotalSupport
       )
 
-      botDebug(s"\nARVN Select space (Govern): [${andList(candidates.sorted)}]")
+      botDebug(s"\nARVN Select space (Govern): [${andList(candidates)}]")
       botDebug(separator(char = '#'))
       bestCandidate(candidates, priorities)
     }
@@ -4968,59 +4980,64 @@ object Bot {
       val mandates1   = capabilityInPlay(MandateOfHeaven_Shaded)
       val maxGovern   = if (params.maxSpaces.nonEmpty) params.maxSpaces.get
                         else if (kate || mandates1) 1 else 2
-      var governSpaces = List.empty[String]
+      var governSpaces = List.empty[GovernSpace]
+                        
+      def alreadyPicked(sp: Space) = governSpaces exists (_.sp.name == sp.name)
+      
       val prohibited = (sp: Space) =>
         !params.spaceAllowed(sp.name) ||
         trainingSpaces(sp.name) ||
-        governSpaces.contains(sp.name) ||
+        alreadyPicked(sp) ||
         sp.name == Saigon
-      val isCandidate = (sp: Space) =>
+        
+      
+      val isAidCandidate = (sp: Space) =>
         !prohibited(sp)   &&
         sp.canHaveSupport &&
         sp.coinControlled &&
         sp.support > Neutral
+        
+      val isPatronageCandidate = (sp: Space) =>
+        isAidCandidate(sp) &&
+        sp.pieces.totalOf(ARVNCubes) > sp.pieces.totalOf(USTroops)
 
+      val isCandidate = (sp: Space) => isAidCandidate(sp) || isPatronageCandidate(sp)
+      
+      def getCandidates = (game.nonLocSpaces filter isCandidate) map (sp => GovernSpace(sp, isPatronageCandidate(sp)))
+      
       // In order to implement the Mandate of Heaven Unshaded capability
       // we must first pick our spaces, then determine which space will
       // use the capability
 
       // First pick our spaces
       for (i <- 1 to maxGovern) {
-        val candidates = game.nonLocSpaces filter isCandidate
+        val candidates = getCandidates
         if (candidates.nonEmpty) {
-          governSpaces = governSpaces :+ pickSpaceGovern(candidates).name
+          governSpaces = governSpaces :+ pickSpaceGovern(candidates)
         }
       }
 
       case class GovernAction(name: String, addAid: Boolean)
 
-      // Find the order of the spaces that produces the most patronage.
+      // Bot will only increase US Aid if aid is currently at zero and
+      // the space will not add at least 2 patronage.  So there will only
+      // be a maximum of one Aid action UNLESS all of the canidate spaces
+      // are not valid spaces for inceasing patronage.
       def getGovernActions(): List[GovernAction] = {
-
-        def doSpaces(spaceList: List[String]): (List[GovernAction], Int) = {
-          var usAid     = game.usAid
-          var patronage = game.patronage
-
-          val governActions = for (name <- spaceList) yield {
-            val sp = game.getSpace(name)
-            if (usAid < 2) {
-              usAid += sp.population * 3
-              GovernAction(name, true)
-            }
-            else {
-              val num    = usAid min sp.population
-              usAid     -= num
-              patronage += num
-              GovernAction(name, false)
-            }
-          }
-          (governActions, patronage - game.patronage)
+        val canAddPatronage  = governSpaces exists (_.patronageOK)
+        val haveAidSpace     = governSpaces exists (entry => !entry.patronageOK || entry.sp.population == 1)
+        
+        if (!canAddPatronage) {
+          governSpaces map (entry => GovernAction(entry.sp.name, true))
         }
-
-        val (actions1, increase1) = doSpaces(governSpaces)
-        val (actions2, increase2) = doSpaces(governSpaces.reverse)
-
-        if (increase1 > increase2) actions1 else actions2
+        else if (game.usAid == 0 && haveAidSpace) {
+          val aidSpace = (governSpaces find (entry => !entry.patronageOK || entry.sp.population == 1)).get
+          val other    = governSpaces filterNot (entry => entry.sp.name != aidSpace.sp.name)
+          GovernAction(aidSpace.sp.name, true) :: (other map (entry => GovernAction(entry.sp.name, false)))
+        }
+        else {
+          governSpaces map (entry => GovernAction(entry.sp.name, false))
+        }
       }
 
       if (governSpaces.nonEmpty) {

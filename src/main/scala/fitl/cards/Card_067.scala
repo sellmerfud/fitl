@@ -107,7 +107,7 @@ object Card_067 extends EventCard(67, "Amphib Landing",
 
     // Cannot sweep into a LoC
     if (!sp.isLoC)
-      Human.executeSweep(eventFaction, params)
+      Human.executeSweep(eventFaction, params.copy(sweep = SweepParams(explicitSpaces = Set(target))))
       
     Human.performAssault(eventFaction, target, params)
   }

@@ -83,7 +83,7 @@ object Card_044 extends EventCard(44, "la Drang",
         Human.doAirLift(params)
         log(s"\nUS performs free Sweep into $name")
         log(separator(char = '='))
-        Human.executeSweep(US, params.copy(onlyIn = Some(Set(name))))
+        Human.executeSweep(US, params.copy(sweep = SweepParams(explicitSpaces = Set(name))))
         log(s"\nUS performs free Assault in $name")
         log(separator(char = '='))
         Human.performAssault(US, name, params)

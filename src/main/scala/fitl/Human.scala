@@ -1140,7 +1140,6 @@ object Human {
     def liftOutCandidates = if (airLiftSpaces.size > 1)
       airLiftSpaces.filter{ name =>
         !isOnlyDest(name) &&
-        params.airlift.canLiftTo(name) &&
         moveablePieces(game.getSpace(name)).nonEmpty
       }
     else

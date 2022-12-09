@@ -384,14 +384,16 @@ object Bot {
       PassiveSupport
     else
       ActiveSupport
-    val sp          = game.getSpace(name)
-    val maxShift    = ((maxSupport.value - sp.support.value) max 0) min maxLevels
-    val maxInSpace  = maxShift + sp.terror
-    val d3Limit     = if (coupRound) NO_LIMIT else d3
-    val maxAfford   = (coupRound, useResources) match {
-      case (_, true)      => game.arvnResources / cost
-      case (true, false)  => coupPoints
-      case (false, false) => NO_LIMIT
+    val sp             = game.getSpace(name)
+    val maxShift       = ((maxSupport.value - sp.support.value) max 0) min maxLevels
+    val maxInSpace     = maxShift + sp.terror
+    val d3Limit        = if (coupRound) NO_LIMIT else d3
+    val availResources = if (faction == ARVN) game.arvnResources else ((game.arvnResources - game.econ) max 0)
+    val maxAfford      = (coupRound, useResources) match {
+      case (_, true)  if cost == 0 => NO_LIMIT
+      case (_, true)               => availResources / cost
+      case (true, false)           => coupPoints
+      case (false, false)          => NO_LIMIT
     }
     val maxPacify = ((sp.terror + maxShift) min d3Limit) min maxAfford
     val numTerror = maxPacify min sp.terror

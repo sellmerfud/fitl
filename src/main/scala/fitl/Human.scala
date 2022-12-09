@@ -625,11 +625,12 @@ object Human {
         (if (nguyenCaoKy) 4 else if (blowtorch) 1 else 3)
     else
         (if (nguyenCaoKy) 4 else 3)
-    val maxSupport  = if (faction == US && capabilityInPlay(CORDS_Shaded)) PassiveSupport else ActiveSupport
-    val sp          = game.getSpace(name)
-    val maxShift    = ((maxSupport.value - sp.support.value) max 0) min maxLevels
-    val maxInSpace  = maxShift + sp.terror
-    val maxPossible = if (cost == 0) maxInSpace else maxInSpace min (game.arvnResources / cost)
+    val maxSupport     = if (faction == US && capabilityInPlay(CORDS_Shaded)) PassiveSupport else ActiveSupport
+    val sp             = game.getSpace(name)
+    val maxShift       = ((maxSupport.value - sp.support.value) max 0) min maxLevels
+    val maxInSpace     = maxShift + sp.terror
+    val availResources = if (faction == ARVN) game.arvnResources else ((game.arvnResources - game.econ) max 0)
+    val maxPossible    = if (cost == 0) maxInSpace else maxInSpace min (availResources / cost)
 
     log(s"\nPacifying in $name")
     log(separator())

@@ -3211,7 +3211,8 @@ object FireInTheLake {
 
           val spaceMsg = s"${amountOf(4 - pacifySpaces.size, "space")} remaining"
           val cashMsg  = amountOf(game.arvnResources, "ARVN resource")
-          println(s"\n$faction Pacification ($spaceMsg, $cashMsg)")
+          val econMsg  = if (faction == US) s", Econ is ${game.econ}" else ""
+          println(s"\n$faction Pacification (${spaceMsg}, ${cashMsg}${econMsg})")
           askMenu(choices, "Choose space to pacify:").head match {
             case "finished" =>
             case name       =>

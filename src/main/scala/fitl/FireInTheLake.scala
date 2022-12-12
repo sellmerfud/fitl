@@ -4977,6 +4977,7 @@ object FireInTheLake {
 
     def showPieces(label: String, oldPieces: Pieces, newPieces: Pieces): Unit = {
       if (oldPieces != newPieces) {
+        b += ""
         wrap(label, newPieces.descriptions) foreach (x => b += x)
       }
     }
@@ -5033,6 +5034,19 @@ object FireInTheLake {
         println(s"Flip RVN Leader face up [${to.currentRvnLeader}]")
     }
 
+    // Score markers
+    if (from.usPoints   != to.usPoints ||
+        from.arvnPoints != to.arvnPoints ||
+        from.nvaPoints  != to.nvaPoints ||
+        from.vcPoints   != to.vcPoints) {
+          
+      b += ""
+    }
+    
+    showMarker("Support + Avail US", from.usPoints, to.usPoints)
+    showMarker("COIN Control + Patronage", from.arvnPoints, to.arvnPoints)
+    showMarker("NVA Control + NVA Bases", from.nvaPoints, to.nvaPoints)
+    showMarker("Total Opposition + VC Bases", from.vcPoints, to.vcPoints)
 
     if (from.sequence != to.sequence) {
       b += ""

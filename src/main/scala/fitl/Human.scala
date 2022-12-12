@@ -2795,6 +2795,7 @@ object Human {
     var sweepSpaces     = params.sweep.explicitSpaces
     var activatedSpaces = Set.empty[String]
     var cobrasSpaces    = Set.empty[String]
+    var specialActivityDeclined = false
     val alreadyMoved    = new MovingGroups()
     val platoonsShaded  = faction == US && !params.limOpOnly && capabilityInPlay(CombActionPlatoons_Shaded)
     val cobrasUnshaded  = capabilityInPlay(Cobras_Unshaded)
@@ -2933,6 +2934,18 @@ object Human {
           }
         }
       }
+      else if (canSpecial) {
+        //  It is possible that there are not spaces where guerrillas can be
+        //  activated at the moment, but the playe is planning to Air Lift
+        //  some into a Sweep space.
+        println("\nNo guerrillas can be activated in any of the remaining Sweep spaces.")
+        if (askYorN("\nDo you wish to perform a special activity? (y/n) ")) {
+          executeSpecialActivity(faction, params, specialActivities)
+          activateGuerrillas()
+        }
+        else
+          specialActivityDeclined = true
+      }
       else if (activatedSpaces.isEmpty)
         log(s"\nNo guerrillas can be activated in the ${amountOf(sweepSpaces.size, "sweep space")}")
     }
@@ -2955,7 +2968,7 @@ object Human {
       activateGuerrillas()
 
     //  Last chance to perform special activity
-    if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
+    if (!specialActivityDeclined && canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
       executeSpecialActivity(faction, params, specialActivities)
 
     sweepSpaces

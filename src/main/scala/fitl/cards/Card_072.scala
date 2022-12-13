@@ -85,7 +85,7 @@ object Card_072 extends EventCard(72, "Body Count",
     if (candidates.nonEmpty && game.availablePieces.has(NVATroops)) {
       val sp = NVA_Bot.pickSpacePlaceTroops(candidates)
       val num = game.availablePieces.totalOf(NVATroops) min 2
-      placePieces(sp.name, Pieces(nvaTroops = 1))
+      placePieces(sp.name, Pieces(nvaTroops = num))
       botPlaceNVA(candidates filterNot (_.name == sp.name))
     }
   }

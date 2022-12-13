@@ -2307,7 +2307,8 @@ object Bot {
     }
 
     val isOrigin = (sp: Space) => {
-      notYetMoved(sp, moveTypes) > 0 && !(moveDestinations.contains(sp.name) || previousOrigins(sp.name))
+      notYetMoved(sp, moveTypes) > 0 &&
+      !(moveDestinations.contains(sp.name) || previousOrigins(sp.name))
     }
     
     val candidates = spaces(candidateNames) filter isOrigin
@@ -2611,6 +2612,7 @@ object Bot {
         allOrigins.size + moveDestinations.size >= maxDest
       else
         moveDestinations.size >= maxDest
+      
       if (!exhausted) {
         // For Air Lift don't allow moving into any origin space
         val prohibited = if (action == AirLift)

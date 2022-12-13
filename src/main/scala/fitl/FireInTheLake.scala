@@ -518,7 +518,7 @@ object FireInTheLake {
         if (sp.pieces.has(InsurgentPieces) || sp.isProvince)
           getTravelOrigins(travelSpaces.tail, origins + name)
         else {
-          val adjacent = getAdjacent(name) - NorthVietnam
+          val adjacent = getAdjacent(name) - NorthVietnam - destName
           val newTravelSpaces = (travelSpaces.tail ++ adjacent) -- origins
           getTravelOrigins(newTravelSpaces, origins + name)
         }
@@ -526,7 +526,7 @@ object FireInTheLake {
     }
 
     // Can always move from any adjacent space
-    getTravelOrigins(getAdjacent(destName) - NorthVietnam, Set.empty)
+    getTravelOrigins(getAdjacent(destName) - NorthVietnam - destName, Set.empty)
   }
 
 

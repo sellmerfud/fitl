@@ -5021,33 +5021,47 @@ object Bot {
         }
       }
 
-      case class GovernAction(name: String, addAid: Boolean)
+      case class GovernAction(name: String, addPatronage: Boolean)
 
       // Bot will only increase US Aid if aid is currently at zero and
       // the space will not add at least 2 patronage.  So there will only
       // be a maximum of one Aid action UNLESS all of the canidate spaces
       // are not valid spaces for inceasing patronage.
       def getGovernActions(): List[GovernAction] = {
-        val canAddPatronage  = governSpaces exists (_.patronageOK)
-        val haveAidSpace     = governSpaces exists (entry => !entry.patronageOK || entry.sp.population == 1)
-        
-        if (!canAddPatronage) {
-          governSpaces map (entry => GovernAction(entry.sp.name, true))
+        if ((governSpaces exists (_.patronageOK)) == false) {
+          //  No spaces have more ARNV cubes than US troops so just add aid
+          governSpaces map (entry => GovernAction(entry.sp.name, addPatronage = false))
         }
-        else if (game.usAid == 0 && haveAidSpace) {
-          val aidSpace = (governSpaces find (entry => !entry.patronageOK || entry.sp.population == 1)).get
-          val other    = governSpaces filter (entry => entry.sp.name != aidSpace.sp.name && entry.patronageOK)
-          GovernAction(aidSpace.sp.name, true) :: (other map (entry => GovernAction(entry.sp.name, false)))
+        else if (game.usAid > 0) {
+          //  Add patronage in each space unless there less ARVN cubes than US cubes
+          governSpaces map (entry => GovernAction(entry.sp.name, addPatronage = entry.patronageOK))
         }
         else {
-          governSpaces map (entry => GovernAction(entry.sp.name, false))
+          //  US Aid is at zero so we try to Add Aid but do not cannaballize a space that would
+          //  add 2 or more patronage.
+          val forcePatronage = (entry: GovernSpace) => entry.patronageOK && entry.sp.population > 1
+          
+          val patronageOnly = governSpaces forall forcePatronage
+          
+          if (governSpaces forall forcePatronage)
+            governSpaces map (entry => GovernAction(entry.sp.name, addPatronage = true))
+          else {
+            // For adding Aid, first pick a space that cannot add patronage.
+            // If that does not exist then pick one that will only add 1
+            val noPatronage  = governSpaces filterNot (_.patronageOK)
+            val aidSpace     =  (noPatronage ::: (governSpaces filter (_.sp.population == 1))).head
+            val otherSpaces  = governSpaces filter (entry => entry.sp.name != aidSpace.sp.name)
+            val aidAction    = GovernAction(aidSpace.sp.name, addPatronage = false)
+            val otherActions = otherSpaces map (entry => GovernAction(entry.sp.name, addPatronage = entry.patronageOK))
+            aidAction :: otherActions
+          }
         }
       }
 
       if (governSpaces.nonEmpty) {
         val governActions = getGovernActions()
         val mandateSpace  = if (capabilityInPlay(MandateOfHeaven_Unshaded)) {
-          val patronageSpaces = governActions filterNot (_.addAid)
+          val patronageSpaces = governActions filter (_.addPatronage)
           patronageSpaces.sortBy(x => game.getSpace(x.name).support.value).map(_.name).headOption
         }
         else
@@ -5056,18 +5070,14 @@ object Bot {
         if (!params.event)
           logSAChoice(ARVN, Govern)
 
-        for (GovernAction(name, addAid) <- governActions) {
+        for (GovernAction(name, addPatronage) <- governActions) {
           val sp = game.getSpace(name)
 
           log(s"\nARVN Governs in ${sp.name} (population: ${sp.population})")
           log(separator())
 
           loggingPointsChanges {
-            if (addAid) {
-              log("Add 3 times population value to Aid")
-              increaseUsAid(sp.population * 3)
-            }
-            else {
+            if (addPatronage) {
               val num = (game.usAid min sp.population)
 
               log("Transfer population value from Aid to Patronage")
@@ -5079,6 +5089,10 @@ object Bot {
                 case _ =>
                   decreaseSupport(sp.name, 1)
               }
+            }
+            else {
+              log("Add 3 times population value to Aid")
+              increaseUsAid(sp.population * 3)
             }
 
             //  Young turks always applies if in play

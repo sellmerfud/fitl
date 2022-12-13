@@ -1519,7 +1519,6 @@ object Human {
         sp.canHaveSupport    &&
         sp.support > Neutral &&
         sp.name != Saigon    &&
-        sp.pieces.totalOf(ARVNCubes) > sp.pieces.totalOf(USTroops) &&
         !Special.trainingSpaces(sp.name) &&
         !Special.selectedSpaces(sp.name)
     }

@@ -5036,7 +5036,7 @@ object Bot {
         }
         else if (game.usAid == 0 && haveAidSpace) {
           val aidSpace = (governSpaces find (entry => !entry.patronageOK || entry.sp.population == 1)).get
-          val other    = governSpaces filterNot (entry => entry.sp.name != aidSpace.sp.name)
+          val other    = governSpaces filter (entry => entry.sp.name != aidSpace.sp.name && entry.patronageOK)
           GovernAction(aidSpace.sp.name, true) :: (other map (entry => GovernAction(entry.sp.name, false)))
         }
         else {

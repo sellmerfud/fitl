@@ -268,7 +268,7 @@ object Bot {
   }
 
       //  Used by US/ARVN Patrol operations
-  def activateGuerrillasOnLOCs(faction: Faction): Unit = {
+  def activateGuerrillasOnLOCs(faction: Faction): Boolean = {
     case class Activation(sp: Space, num: Int)
     val PatrolCubes = if (faction == US) List(USTroops) else ARVNCubes
     val underground = (sp: Space) => sp.pieces.totalOf(UndergroundGuerrillas)
@@ -277,8 +277,10 @@ object Bot {
 
     log(s"\n$faction Patrol - Activating guerrillas on LOCs")
     log(separator())
-    if (numbers.isEmpty)
+    if (numbers.isEmpty) {
       log("No guerrillas are activated")
+      false
+    }
     else {
       //  If a space has both NVA and VC underground guerrillas
       //  then ask user to pick the ones to activate.
@@ -287,6 +289,7 @@ object Bot {
         revealPieces(sp.name, guerrillas)
         pause()
       }
+      true
     }
   }
 
@@ -295,7 +298,7 @@ object Bot {
     needRoll == false || makeActivationRoll(faction, actNum)
   }
 
-  val CanTho_Hue_Routes = Set(
+  val CanTho_Hue_Route_Spaces = Set(
     Hue, DaNang, Kontum, QuiNhon, CamRahn, AnLoc, Saigon, CanTho, LOC_Hue_DaNang,
     LOC_DaNang_DakTo, LOC_DaNang_QuiNhon, LOC_Kontum_DakTo, LOC_Kontum_QuiNhon,
     LOC_Kontum_BanMeThuot, LOC_QuiNhon_CamRanh, LOC_CamRanh_DaLat, LOC_BanMeThuot_DaLat,
@@ -427,9 +430,18 @@ object Bot {
   // Is space on the Can Tho - Hue route and would
   // an assault remove all insurgent pieces
   def assaultInWouldUnblockAlongCanTho_HueRoute(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean)(sp: Space): Boolean = {
-    CanTho_Hue_Routes(sp.name)    &&
-    sp.pieces.has(InsurgentForces) &&
+    CanTho_Hue_Route_Spaces(sp.name) &&
+    sp.pieces.has(InsurgentForces)   &&
     assaultResult(faction, cubeTreatment, vulnerableTunnels)(sp).pieces.totalOf(InsurgentForces) == 0
+  }
+  
+  // Is space on the Can Tho - Hue route and would
+  // an assault remove all insurgent pieces
+  def assaultInWouldRemoveInsurgentsAlongCanTho_HueRoute(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean)(sp: Space): Boolean = {
+    val numInsurgents = sp.pieces.totalOf(InsurgentPieces)
+    CanTho_Hue_Route_Spaces(sp.name) &&
+    numInsurgents > 0                &&
+    assaultResult(faction, cubeTreatment, vulnerableTunnels)(sp).pieces.totalOf(InsurgentPieces) < numInsurgents
   }
 
   def pickSpaces(num: Int, candidates: List[Space])(picker: (List[Space]) => Space): List[Space] = {
@@ -3312,11 +3324,11 @@ object Bot {
         movePiecesToDestinations(US, Patrol, Set(USTroops), false, params, maxDests = Some(1))(saigonCandidate)
         if (moveDestinations.size < maxPatrol)
           movePiecesToDestinations(US, Patrol, Set(USTroops), false, params)(locPatrolCandidate)
-        activateGuerrillasOnLOCs(US)
+        val activatedSomething = activateGuerrillasOnLOCs(US)
 
         // Add an assault on one LoC.  If this was a LimOp then the LoC must
         // be the selected destination.  If none was selected then we can pick any one.
-        val assaultLoC = if (params.limOpOnly)
+        val assaultLoC = if (params.limOpOnly && moveDestinations.nonEmpty)
           moveDestinations.headOption filter { name =>
             val sp = game.getSpace(name)
             sp.isLoC &&
@@ -3325,17 +3337,32 @@ object Bot {
           }
           else {
             val unblockCandidates = spaceNames(game.locSpaces filter { sp =>
-              assaultInWouldUnblockAlongCanTho_HueRoute(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
-              (!capabilityInPlay(SearchAndDestroy_Shaded) || sp.pieces.has(NVATroops))
-          })
+              assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
+              assaultInWouldUnblockAlongCanTho_HueRoute(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
+            })
 
-          shuffle(unblockCandidates).headOption
+            val helpUnblockCandidates = spaceNames(game.locSpaces filter { sp =>
+              assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
+              assaultInWouldRemoveInsurgentsAlongCanTho_HueRoute(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
+            })
+            val genericCandidates = spaceNames(game.locSpaces filter assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels))
+
+            shuffle(unblockCandidates).headOption     orElse
+            shuffle(helpUnblockCandidates).headOption orElse
+            shuffle(genericCandidates).headOption
         }
 
         assaultLoC foreach { name =>
           performAssault(US, name, Params(free = true))
         }
-        Some(Patrol)
+        
+        if (moveDestinations.nonEmpty || activatedSomething || assaultLoC.nonEmpty)
+          Some(Patrol)
+        else {
+          log("\nSkipping US Patrol as it would not be effective")
+          log(separator())
+          None
+        }
       }
       else
         None
@@ -3990,7 +4017,7 @@ object Bot {
     val mostOpposition = List(
       new LowestScore[Space]("Most Opposition", _.support.value)
     )
-
+    
     // Determine which ARVN troops/police are eligible to move
     // The Trung rules have instructions for which cubes
     // should remain in place
@@ -4770,10 +4797,10 @@ object Bot {
         if (!momentumInPlay(Mo_BodyCount) && game.trackResources(ARVN))
           decreaseResources(ARVN, 3)
         movePiecesToDestinations(ARVN, Patrol, ARVNCubes.toSet, false, params, maxDests = params.maxSpaces)(nextPatrolCandidate)
-        activateGuerrillasOnLOCs(ARVN)
+        val activatedSomething = activateGuerrillasOnLOCs(ARVN)
         // Add an assault on one LoC.  If this was a LimOp then the LoC must
         // be the selected destination.  If none was selected then we can pick any one.
-        val assaultLoC = if (params.limOpOnly)
+        val assaultLoC = if (params.limOpOnly && moveDestinations.nonEmpty)
           moveDestinations.headOption filter { name =>
             val sp = game.getSpace(name)
             sp.isLoC && assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
@@ -4783,9 +4810,15 @@ object Bot {
             assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
             assaultInWouldUnblockAlongCanTho_HueRoute(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
           })
+          val helpUnblockCandidates = spaceNames(game.locSpaces filter { sp =>
+            assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
+            assaultInWouldRemoveInsurgentsAlongCanTho_HueRoute(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
+          })
           val genericCandidates = spaceNames(game.locSpaces filter assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels))
 
-          shuffle(unblockCandidates).headOption orElse shuffle(genericCandidates).headOption
+          shuffle(unblockCandidates).headOption     orElse
+          shuffle(helpUnblockCandidates).headOption orElse
+          shuffle(genericCandidates).headOption
         }
 
         assaultLoC foreach { name =>
@@ -4794,7 +4827,16 @@ object Bot {
 
         if (capabilityInPlay(M48Patton_Shaded) && movedPieces.size > 0)
           performM48Patton_Shaded(movedPieces)
-        Some(Patrol)
+        
+        if (movedPieces.size > 0 || activatedSomething || assaultLoC.nonEmpty)
+          Some(Patrol)
+        else {
+          log("\nSkipping ARVN Patrol as it would not be effective")
+          log(separator())
+          if (!momentumInPlay(Mo_BodyCount) && game.trackResources(ARVN))
+            increaseResources(ARVN, 3)
+          None
+        }
       }
       else
         None
@@ -7274,7 +7316,7 @@ object Bot {
       }
       else {
         val operation = if (US_Bot.allLocRoutesCanTho_HueBlockedAndNoShadedM48)
-          US_Bot.patrolOp(params)
+          US_Bot.patrolOp(params) orElse US_Bot.sweepOp(params)
         else
           US_Bot.sweepOp(params)
 
@@ -7679,7 +7721,7 @@ object Bot {
       }
       else {
         val operation = if (allLocRoutesCanTho_HueBlocked)
-          ARVN_Bot.patrolOp(params)
+          ARVN_Bot.patrolOp(params) orElse ARVN_Bot.sweepOp(params, actNum)
         else
           ARVN_Bot.sweepOp(params, actNum)
 
@@ -7864,10 +7906,8 @@ object Bot {
     // Back Operation
     // ------------------------------------------------------------
     def executeBack(params: Params, specialDone: Boolean): TrungResult = {
-      val allBlocked = allLocRoutesCanTho_HueBlocked
-
       def doSpecialActivity(): Boolean =
-        (allBlocked && ARVN_Bot.governActivity(params)) ||
+        (allLocRoutesCanTho_HueBlocked && ARVN_Bot.governActivity(params)) ||
         ARVN_Bot.raidActivity(params) ||
         ARVN_Bot.transportActivity(params)
 
@@ -7878,8 +7918,8 @@ object Bot {
           TrungNoOp
       }
       else {
-        val operation = if (allBlocked)
-          ARVN_Bot.patrolOp(params)
+        val operation = if (allLocRoutesCanTho_HueBlocked)
+          ARVN_Bot.patrolOp(params) orElse ARVN_Bot.sweepOp(params, actNum)
         else
           ARVN_Bot.sweepOp(params, actNum)
 

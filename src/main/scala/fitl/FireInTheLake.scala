@@ -6165,14 +6165,15 @@ object FireInTheLake {
   def adjustSpace(name: String): Unit = {
     val origSpace = game.getSpace(name)
     def nextAction(): Unit = {
-      val sp        = game.getSpace(name)
-      val adjPieces = game.availablePieces.nonEmpty || sp.pieces.nonEmpty
-      val marker    = if (sp.isLoC) "Sabotage" else "Terror"
-      val choices   = List(
-        choice(true,      "support", "Support level"),
-        choice(true,      "terror",  s"Number of $marker markers"),
-        choice(adjPieces, "pieces",  "Faction pieces"),
-        choice(true,      "done",   s"Finished adjusting $name")
+      val sp         = game.getSpace(name)
+      val adjSupport = sp.canHaveSupport
+      val adjPieces  = game.availablePieces.nonEmpty || sp.pieces.nonEmpty
+      val marker     = if (sp.isLoC) "Sabotage" else "Terror"
+      val choices    = List(
+        choice(adjSupport, "support", "Support level"),
+        choice(true,       "terror",  s"Number of $marker markers"),
+        choice(adjPieces,  "pieces",  "Faction pieces"),
+        choice(true,       "done",   s"Finished adjusting $name")
       ).flatten
 
       printSummary(spaceSummary(name, "Adjusting: "))

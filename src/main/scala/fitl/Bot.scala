@@ -514,6 +514,36 @@ object Bot {
 
     bestCandidate(candidates, priorities)
   }
+  
+  //  Pick a target LoC to for an Assault as part of a Patrol Operation
+  //  Be sure to only pass in candidate for which an assault would be effective!
+  def pickPatrolAssaultLoc(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean): Option[String] = {
+    val priorities = List(
+      new BooleanPriority[Space](
+        "Would remove an Insurgent along a Can Tho to Hue route",
+        assaultInWouldRemoveInsurgentsAlongCanTho_HueRoute(faction, cubeTreatment, vulnerableTunnels)
+      ),
+      new BooleanPriority[Space](
+        "Would clear a all Insurgennts along a Can Tho to Hue route",
+        assaultInWouldUnblockAlongCanTho_HueRoute(faction, cubeTreatment, vulnerableTunnels)
+      ),
+      new HighestScore[Space](
+        "Remove the most insurgent pieces",
+        sp => {
+          val numBefore = sp.pieces.totalOf(InsurgentForces)
+          val numAfter  = assaultResult(faction, cubeTreatment, vulnerableTunnels)(sp).pieces.totalOf(InsurgentForces)
+        
+          numBefore - numAfter
+        }
+      )
+    )
+    
+    (game.locSpaces filter assaultEffective(faction, cubeTreatment, vulnerableTunnels)) match {
+      case Nil        => None
+      case candidates => Some(bestCandidate(candidates, priorities).name)
+    }
+  }
+  
 
   //  -------------------------------------------------------------
   //  NVA and VC Ambush Activity
@@ -3303,8 +3333,7 @@ object Bot {
         // Select a LoC Patrol destination candidate
         // ARVN Patrol never needs an activation roll
         val saigonCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
-          val sp = game.getSpace(Saigon)
-          if (sp.coinControlled) None else Some(Saigon)
+          if (!game.getSpace(Saigon).coinControlled) Some(Saigon) else None
         }
 
         val locPatrolCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
@@ -3328,29 +3357,16 @@ object Bot {
 
         // Add an assault on one LoC.  If this was a LimOp then the LoC must
         // be the selected destination.  If none was selected then we can pick any one.
-        val assaultLoC = if (params.limOpOnly && moveDestinations.nonEmpty)
+        val assaultLoC = if (params.limOpOnly) {
           moveDestinations.headOption filter { name =>
             val sp = game.getSpace(name)
+            
             sp.isLoC &&
-            assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
-            (!capabilityInPlay(SearchAndDestroy_Shaded) || sp.pieces.has(NVATroops))
-          }
-          else {
-            val unblockCandidates = spaceNames(game.locSpaces filter { sp =>
-              assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
-              assaultInWouldUnblockAlongCanTho_HueRoute(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
-            })
-
-            val helpUnblockCandidates = spaceNames(game.locSpaces filter { sp =>
-              assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
-              assaultInWouldRemoveInsurgentsAlongCanTho_HueRoute(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
-            })
-            val genericCandidates = spaceNames(game.locSpaces filter assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels))
-
-            shuffle(unblockCandidates).headOption     orElse
-            shuffle(helpUnblockCandidates).headOption orElse
-            shuffle(genericCandidates).headOption
+            assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
+          }          
         }
+        else
+          pickPatrolAssaultLoc(US, params.cubeTreatment, params.vulnerableTunnels)
 
         assaultLoC foreach { name =>
           performAssault(US, name, Params(free = true))
@@ -4800,26 +4816,14 @@ object Bot {
         val activatedSomething = activateGuerrillasOnLOCs(ARVN)
         // Add an assault on one LoC.  If this was a LimOp then the LoC must
         // be the selected destination.  If none was selected then we can pick any one.
-        val assaultLoC = if (params.limOpOnly && moveDestinations.nonEmpty)
+        val assaultLoC = if (params.limOpOnly) {
           moveDestinations.headOption filter { name =>
             val sp = game.getSpace(name)
             sp.isLoC && assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
           }
-        else {
-          val unblockCandidates = spaceNames(game.locSpaces filter { sp =>
-            assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
-            assaultInWouldUnblockAlongCanTho_HueRoute(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
-          })
-          val helpUnblockCandidates = spaceNames(game.locSpaces filter { sp =>
-            assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
-            assaultInWouldRemoveInsurgentsAlongCanTho_HueRoute(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
-          })
-          val genericCandidates = spaceNames(game.locSpaces filter assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels))
-
-          shuffle(unblockCandidates).headOption     orElse
-          shuffle(helpUnblockCandidates).headOption orElse
-          shuffle(genericCandidates).headOption
         }
+        else
+          pickPatrolAssaultLoc(ARVN, params.cubeTreatment, params.vulnerableTunnels)
 
         assaultLoC foreach { name =>
           performAssault(ARVN, name, Params(free = true))

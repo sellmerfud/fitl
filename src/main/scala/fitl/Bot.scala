@@ -7991,8 +7991,9 @@ object Bot {
           val infiltrated = params.addSpecialActivity && doSpecialActivity()
 
           NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false) match {
-            case Some(_) => TrungComplete(infiltrated)
-            case None    => TrungNoOp
+            case Some(_)             => TrungComplete(infiltrated)
+            case None if infiltrated => TrungComplete(infiltrated) // SA only
+            case None                => TrungNoOp
           }
         }
         else {

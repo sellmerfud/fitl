@@ -681,7 +681,7 @@ object FireInTheLake {
       log(s"Die roll: $die  [$status]")
       (die < 4) match {
         case true if faction == US => removeToCasualties(name, Pieces(usTroops = 1))
-        case true                  => removeToAvailable(name, Pieces(nvaTroops = 1))
+        case true                  => removeToAvailable(name, Pieces(arvnTroops = 1))
         case false                 => log("No troop is removed")
       }
       true

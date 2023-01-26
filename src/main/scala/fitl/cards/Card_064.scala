@@ -71,7 +71,7 @@ object Card_064 extends EventCard(64, "Honolulu Conference",
   def executeUnshaded(faction: Faction): Unit = {
     val (addAid, addPat) = if (game.isHuman(faction)) {
       val aidChoices = List(true -> "Increase US Aid +10", false -> "Decrease US Aid -10")
-      val patChoices = List(true -> "Increase Patronage Aid +3", false -> "Decrease Patronage -5")
+      val patChoices = List(true -> "Increase Patronage +3", false -> "Decrease Patronage -5")
       (askMenu(aidChoices, "\nChoose one:").head, askMenu(patChoices, "\nChoose one:").head)
     }
     else if (isCoin(faction))

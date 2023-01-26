@@ -2198,7 +2198,7 @@ object Human {
 
     val choices: List[(Option[SpecialActivity], String)] =
       (activities filterNot prohibited.apply map (a => Some(a) -> a.toString)) :+
-      (None -> "Do not perform a Speical Activitiy now")
+      (None -> "Do not perform a Special Activitiy now")
 
     if (choices.size == 1) {
       // If all activities have been prohibited
@@ -3061,7 +3061,7 @@ object Human {
       }
 
       if (killedPieces.isEmpty)
-        log("\nNo insurgemnt pieces were removed in the assault")
+        log("\nNo insurgent pieces were removed in the assault")
 
       // Cobras_Shaded
       //    Eash US assault space, 1 US Troop to Casualties on die roll of 1-3

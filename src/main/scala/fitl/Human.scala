@@ -2992,7 +2992,7 @@ object Human {
       validEnemy(InsurgentNonTunnels)
     val sp          = game.getSpace(name)
     def pieces      = game.getSpace(name).pieces  // Always get fresh instance
-    val baseFirst   = remove1BaseFirst && pieces.has(baseTargets) && !pieces.has(validEnemy(UndergroundGuerrillas))
+    val baseFirst   = remove1BaseFirst && pieces.has(baseTargets)
     val underground = remove1Underground && pieces.has(validEnemy(UndergroundGuerrillas))
     val totalLosses = sp.assaultFirepower(faction, params.cubeTreatment) + 
                       (if (params.assault.removeTwoExtra) 2 else 0)
@@ -3013,8 +3013,10 @@ object Human {
 
       log(s"The assault inflicts ${amountOf(totalLosses, "hit")}")
 
+      
       // Abrams unshaded
-      if (remaining > 0 && baseFirst) {
+      if (remaining > 0 && baseFirst &&
+          askYorN(s"Do you wish to use the unshaded Abrams capability to remove an insurgent base first? (y/n) ")) {
         log(s"\nRemove a base first [$Abrams_Unshaded]")
         val removed = askPieces(pieces, 1, baseTargets.to(Seq))
         removeToAvailable(name, removed)

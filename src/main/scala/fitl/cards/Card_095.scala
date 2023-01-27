@@ -66,20 +66,28 @@ object Card_095 extends EventCard(95, "Westmoreland",
           VC   -> (Critical    -> Shaded))) {
 
 
+  def baseFirstOK = if (game.isBot(US))
+    Bot.canUseAbramsUnshaded(US)
+  else
+    Human.canUseAbramsUnshaded(US)
+
   val canSweep = (sp: Space) =>
     !sp.isLoC &&
     sp.sweepActivations(US, NormalTroops) > 0
 
-  val canAssault = (sp: Space) =>
-    assaultEffective(US, NormalTroops, false)(sp)
+  val canAssault = (sp: Space) => 
+    assaultEffective(US, NormalTroops, baseFirstOK, false)(sp)
+  
 
   val canAssultOrSweep = (sp: Space) => canAssault(sp) || canSweep(sp)
   
-  val assaultKillsAllActive = (sp: Space) =>
+  def assaultKillsAllActive(faction: Faction) = (sp: Space) => {
       canAssault(sp) &&
-      assaultKillsAllVulnerable(US, NormalTroops, vulnerableTunnels = false)(sp)
+      assaultKillsAllVulnerable(US, NormalTroops, baseFirstOK, vulnerableTunnels = false)(sp)
+    
+  }
 
-  val botCanAssultOrSweep = (sp: Space) => assaultKillsAllActive(sp) || canSweep(sp)
+  def botCanAssultOrSweep(faction: Faction) = (sp: Space) => assaultKillsAllActive(faction)(sp) || canSweep(sp)
 
   def humanSweepAssault(): Unit = {
     var spacesSelected = Set.empty[String]
@@ -110,15 +118,15 @@ object Card_095 extends EventCard(95, "Westmoreland",
 
   // Bot Instructions:
   // In each space, Assault if it would remove all Active enemies; otherwise Sweep.
-  def botSweepAssault(): Unit = {
+  def botSweepAssault(faction: Faction): Unit = {
     var spacesSelected = Set.empty[String]
     def validSpaces = game.spaces filterNot (sp => spacesSelected(sp.name))
 
     def nextAssault(): Unit = {
-      val candidates = validSpaces filter assaultKillsAllActive
+      val candidates = validSpaces filter assaultKillsAllActive(faction)
 
       if (spacesSelected.size < 2 && candidates.nonEmpty) {
-        val sp = Bot.pickSpaceWithMostVulnerableInsurgents(candidates)
+        val sp = Bot.pickSpaceWithMostVulnerableInsurgents(faction, candidates)
         Bot.performAssault(US, sp.name, Params(event = true, free = true))
         spacesSelected += sp.name
         nextAssault()
@@ -146,7 +154,7 @@ object Card_095 extends EventCard(95, "Westmoreland",
       pause()
   }
 
-  def unshadedEffective(faction: Faction): Boolean = game.spaces exists botCanAssultOrSweep
+  def unshadedEffective(faction: Faction): Boolean = game.spaces exists botCanAssultOrSweep(faction)
 
   def executeUnshaded(faction: Faction): Unit = {
     val human  = game.isHuman(US)
@@ -159,7 +167,7 @@ object Card_095 extends EventCard(95, "Westmoreland",
     else {
       US_Bot.airLiftActivity(params)
       pause()
-      botSweepAssault()
+      botSweepAssault(faction)
       US_Bot.airStrikeActivity(params)
       pause()
     }

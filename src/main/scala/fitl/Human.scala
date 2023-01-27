@@ -47,9 +47,12 @@ import FireInTheLake._
 // Functions to handle human commands/special activities
 object Human {
 
-  private val NO_LIMIT = 1000;          // When space selection is unlimited.
-  private var pt76_shaded_used = false  // NVA attack in one space
-  private var m48PattonSpaces = List.empty[String]
+  private val NO_LIMIT           = 1000;       // When space selection is unlimited.
+  private var pt76_shaded_used   = false       // NVA attack in one space
+  private var m48PattonSpaces    = List.empty[String]
+  private var abramsUnshadedUsed = false       // Abrams may only be used in one Assault space per turn
+  
+  def canUseAbramsUnshaded(faction: Faction) = faction == US && capabilityInPlay(Abrams_Unshaded) && !abramsUnshadedUsed
 
   def logOpChoice(faction: Faction, op: Operation, notes: Iterable[String] = Nil): Unit = {
     log(s"\n$faction chooses $op operation")
@@ -2198,7 +2201,7 @@ object Human {
 
     val choices: List[(Option[SpecialActivity], String)] =
       (activities filterNot prohibited.apply map (a => Some(a) -> a.toString)) :+
-      (None -> "Do not perform a Special Activitiy now")
+      (None -> "Do not perform a Special Activity now")
 
     if (choices.size == 1) {
       // If all activities have been prohibited
@@ -2977,7 +2980,7 @@ object Human {
   //  Perform an assault in the given space.
   def performAssault(faction: Faction, name: String, params: Params): Unit = {
     val asUS = faction == US || params.cubeTreatment == AllCubesAsUS || params.cubeTreatment == AllTroopsAsUS
-    val remove1BaseFirst   = asUS && capabilityInPlay(Abrams_Unshaded)
+    val abramsInPlay       = asUS && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
     def validEnemy(types: Iterable[PieceType]): Iterable[PieceType] =
       params.assault.onlyTarget match {
@@ -2992,7 +2995,7 @@ object Human {
       validEnemy(InsurgentNonTunnels)
     val sp          = game.getSpace(name)
     def pieces      = game.getSpace(name).pieces  // Always get fresh instance
-    val baseFirst   = remove1BaseFirst && pieces.has(baseTargets)
+    val baseFirst   = abramsInPlay && pieces.has(baseTargets)
     val underground = remove1Underground && pieces.has(validEnemy(UndergroundGuerrillas))
     val totalLosses = sp.assaultFirepower(faction, params.cubeTreatment) + 
                       (if (params.assault.removeTwoExtra) 2 else 0)
@@ -3015,11 +3018,12 @@ object Human {
 
       
       // Abrams unshaded
-      if (remaining > 0 && baseFirst &&
+      if (remaining > 0 && baseFirst && !abramsUnshadedUsed &&
           askYorN(s"Do you wish to use the unshaded Abrams capability to remove an insurgent base first? (y/n) ")) {
         log(s"\nRemove a base first [$Abrams_Unshaded]")
         val removed = askPieces(pieces, 1, baseTargets.to(Seq))
         removeToAvailable(name, removed)
+        abramsUnshadedUsed = true
         killedPieces = killedPieces + removed
       }
 
@@ -3125,10 +3129,9 @@ object Human {
     def canAddPatton(name: String) = m48PattonCount < 2 && canUseM48PattonUnshaded(faction, name)
     
     val isCandidate = (sp: Space) => {
-      
       params.spaceAllowed(sp.name) &&           // If event limits command to certain spaces
       !assaultSpaces.contains(sp.name) &&       // Not already selected
-      assaultEffective(faction, params.cubeTreatment, vulnerableTunnels = false, m48PattonCount)(sp)
+      assaultEffective(faction, params.cubeTreatment, canUseAbramsUnshaded(faction), vulnerableTunnels = false, m48PattonCount)(sp)
     }
 
     def canSpecial = Special.allowed

@@ -89,6 +89,7 @@ object Card_070 extends EventCard(70, "ROKs",
     log(s"\n$faction chooses $actor to carry out the Sweeps and Assaults")
 
     if (game.isHuman(actor)) {
+      val baseFirstOK = Human.canUseAbramsUnshaded(actor)
       Human.resetM48PattonSpaces()
       println()
       Human.executeSweep(actor, params)
@@ -97,7 +98,7 @@ object Card_070 extends EventCard(70, "ROKs",
         for {
           name <- unshadedNames
           sp   =  game.getSpace(name)
-               if assaultEffective(actor, AllCubesAsUS, false, Human.m48PattonCount)(sp)
+               if assaultEffective(actor, AllCubesAsUS, baseFirstOK, false, Human.m48PattonCount)(sp)
         } {
           Human.performAssault(actor, name, params)
           pause()
@@ -105,6 +106,7 @@ object Card_070 extends EventCard(70, "ROKs",
       }
     }
     else {
+      val baseFirstOK = Bot.canUseAbramsUnshaded(actor)
       Bot.resetM48PattonSpaces()
       US_Bot.sweepOp(params)
       pause()
@@ -112,7 +114,7 @@ object Card_070 extends EventCard(70, "ROKs",
         for {
           name <- unshadedNames
           sp   =  game.getSpace(name)
-               if assaultEffective(actor, AllCubesAsUS, false, Bot.m48PattonCount)(sp)
+               if assaultEffective(actor, AllCubesAsUS, baseFirstOK, false, Bot.m48PattonCount)(sp)
         } {
           Bot.performAssault(actor, name, params)
           pause()

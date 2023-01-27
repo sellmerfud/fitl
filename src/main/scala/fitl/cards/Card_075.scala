@@ -64,10 +64,16 @@ object Card_075 extends EventCard(75, "Sihanouk",
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
+  def baseFirstOK(faction: Faction) =
+    if (game.isBot(faction))
+      Bot.canUseAbramsUnshaded(faction)
+    else
+      Human.canUseAbramsUnshaded(faction)
+    
   def canSweep(faction: Faction)(sp: Space) = sp.sweepActivations(faction, NormalTroops) > 0
 
   def canAssault(faction: Faction)(sp: Space) = 
-    assaultEffective(faction, NormalTroops, false)(sp)
+    assaultEffective(faction, NormalTroops, baseFirstOK(faction), false)(sp)
 
 
   // The move priorities for US/ARVN state to keep all cubes

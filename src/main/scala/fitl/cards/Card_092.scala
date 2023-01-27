@@ -71,11 +71,16 @@ object Card_092 extends EventCard(92, "SEALORDS",
     (sp.sweepActivations(faction, NormalTroops) > 0)
 
   def canAssault(faction: Faction)(sp: Space) = {
+    val baseFirstOK = if (game.isBot(faction))
+      Bot.canUseAbramsUnshaded(faction)
+    else
+      Human.canUseAbramsUnshaded(faction)
+      
     val numPatton = if (game.isBot(faction))
       Bot.m48PattonCount
     else
       Human.m48PattonCount
-    assaultEffective(faction, NormalTroops, false, numPatton)(sp)
+    assaultEffective(faction, NormalTroops, baseFirstOK, false, numPatton)(sp)
   }
 
   def canAssultOrSweep(faction: Faction)(sp: Space) =
@@ -107,9 +112,11 @@ object Card_092 extends EventCard(92, "SEALORDS",
     // - The assault will remove ALL active enemies.
     def willAssault(actor: Faction, name: String): Boolean = {
       val sp = game.getSpace(name)
+      val baseFirstOK = Bot.canUseAbramsUnshaded(actor)
+      
       canAssault(actor)(sp) &&
       (!sp.pieces.has(UndergroundGuerrillas) || 
-       assaultKillsAllVulnerable(actor, NormalTroops, vulnerableTunnels = false)(sp))
+       assaultKillsAllVulnerable(actor, NormalTroops, baseFirstOK, vulnerableTunnels = false)(sp))
 
     }
 
@@ -129,11 +136,13 @@ object Card_092 extends EventCard(92, "SEALORDS",
       case name::rest =>
         println(s"\nSEALORDS target: $name")
         println(separator(char = '='))
-        for (actor <- List(ARVN, US) if canAssultOrSweep(actor)(game.getSpace(name))) {
-          if (game.isHuman(actor))
-            humanUnshaded(actor, name)
-          else
-            botUnshaded(actor, name)
+        for (actor <- List(ARVN, US)) {
+          if (canAssultOrSweep(actor)(game.getSpace(name))) {
+            if (game.isHuman(actor))
+              humanUnshaded(actor, name)
+            else
+              botUnshaded(actor, name)
+          }
         }
         nextCandidate(rest)
     }

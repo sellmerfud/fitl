@@ -99,7 +99,7 @@ object Card_074 extends EventCard(74, "Lam Son 719",
       // The Trung cards would never resolve an op in Laos
       // so we will attempt to Assault in the space.
       val sp = game.getSpace(name)
-      if (assaultEffective(ARVN, NormalTroops, false)(sp))
+      if (assaultEffective(ARVN, NormalTroops, false, false)(sp))
         Bot.performAssault(ARVN, name, params)
       else
         log(s"\nARVN chooses to not perform a Limited Op in $name")

@@ -101,6 +101,7 @@ object Bot {
   private var trainingSpaces        = Set.empty[String]
   private var adviseSpaces          = Set.empty[String]
   private var m48PattonSpaces       = Set.empty[String]
+  private var abramsUnshadedUsed    = false
   // Keeps track of all pieces that actually moved
   // during March/Sweep/Patrol/Transport/Air Lift..
   private var movedPieces      = new MovingGroups()
@@ -109,6 +110,7 @@ object Bot {
   def resetM48PattonSpaces(): Unit = m48PattonSpaces = Set.empty
   def m48PattonCount = m48PattonSpaces.size
   def canAddM48Patton(faction: Faction, name: String) = m48PattonCount < 2 && canUseM48PattonUnshaded(faction, name)
+  def canUseAbramsUnshaded(faction: Faction) = faction == US && capabilityInPlay(Abrams_Unshaded) && !abramsUnshadedUsed
   
   def getMoveDestinations = moveDestinations
   
@@ -463,10 +465,10 @@ object Bot {
     bestCandidate(candidates, priorities)
   }
 
-  def pickSpaceWithMostVulnerableInsurgents(candidates: List[Space]) = {
+  def pickSpaceWithMostVulnerableInsurgents(faction: Faction, candidates: List[Space]) = {
     val priorities = List(new Bot.HighestScore[Space](
       s"Most vulnerable Insurgents",
-      sp => vulnerableInsurgents(sp.pieces, vulnerableTunnels = false).total
+      sp => vulnerableInsurgents(sp.pieces, baseFirst = canUseAbramsUnshaded(faction), vulnerableTunnels = false).total
     ))
     bestCandidate(candidates, priorities)
   }
@@ -538,7 +540,7 @@ object Bot {
       )
     )
     
-    (game.locSpaces filter assaultEffective(faction, cubeTreatment, vulnerableTunnels)) match {
+    (game.locSpaces filter assaultEffective(faction, cubeTreatment, canUseAbramsUnshaded(faction), vulnerableTunnels)) match {
       case Nil        => None
       case candidates => Some(bestCandidate(candidates, priorities).name)
     }
@@ -673,7 +675,12 @@ object Bot {
       }
 
     val asUS               = faction == US || params.cubeTreatment == AllCubesAsUS || params.cubeTreatment == AllTroopsAsUS
-    val remove1BaseFirst   = asUS && capabilityInPlay(Abrams_Unshaded)
+    val abramsFaction      = faction match {
+      case ARVN if asUS => US
+      case f           => f
+    }
+    
+    val abramsInPlay       = asUS && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
     val m48Patton          = asUS && capabilityInPlay(M48Patton_Unshaded)
     val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
@@ -702,9 +709,10 @@ object Bot {
       }
 
       // Abrams unshaded
-      val baseFirst = if (remove1BaseFirst && remainingLosses <= numVulnerableForces && remainingEnemy.has(baseTargets)) {
+      val baseFirst = if (canUseAbramsUnshaded(abramsFaction) && remainingLosses <= numVulnerableForces && remainingEnemy.has(baseTargets)) {
         val removed = selectEnemyRemoveReplaceActivate(remainingEnemy.only(baseTargets), 1)
 
+        abramsUnshadedUsed = true
         killedPieces = killedPieces + removed
         true
       }
@@ -857,10 +865,20 @@ object Bot {
   }
 
   def assaultResult(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean)(sp: Space): Space = {
-    val pattonExtra     = if (canAddM48Patton(faction, sp.name)) 2 else 0
-    val firepower       = assaultFirepower(faction, cubeTreatment)(sp) + pattonExtra
-    val num             = firepower min vulnerableInsurgents(sp.pieces, vulnerableTunnels).total
-    val (deadPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, num)
+    val abramsFaction = faction match {
+      case ARVN if cubeTreatment == AllCubesAsUS || cubeTreatment == AllTroopsAsUS => US
+      case f => f
+    }
+    
+    val baseFirstOK      = canUseAbramsUnshaded(abramsFaction)
+    val pattonExtra      = if (canAddM48Patton(faction, sp.name)) 2 else 0
+    val firepower        = assaultFirepower(faction, cubeTreatment)(sp) + pattonExtra
+    val num              = firepower min vulnerableInsurgents(sp.pieces, baseFirstOK, vulnerableTunnels).total
+    val (dead1stBase, _) = if (baseFirstOK)
+                            selectRemoveEnemyInsurgentBasesLast(sp.pieces.only(InsurgentNonTunnels), 1)
+                          else
+                            (Pieces(), Pieces())
+    val (deadPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces - dead1stBase, num - dead1stBase.total)
     sp.copy(pieces = sp.pieces - deadPieces)
   }
 
@@ -924,7 +942,7 @@ object Bot {
 
   val COINFirepowerLessThanVulnerable = new BooleanPriority[Space](
     "COIN Firepower < vulnerable enemies where US pieces",
-    sp => sp.pieces.has(USPieces) && coinFirepower(NormalTroops)(sp) < vulnerableInsurgents(sp.pieces, false).total
+    sp => sp.pieces.has(USPieces) && coinFirepower(NormalTroops)(sp) < vulnerableInsurgents(sp.pieces, canUseAbramsUnshaded(US), false).total
   )
 
   val HasUSBase = new BooleanPriority[Space](
@@ -1562,7 +1580,7 @@ object Bot {
     import params._
     val desc = "Keep COIN firepower >= vulnerable enemy"
     val firepower  = coinFirepower(NormalTroops)(origin)
-    val vulnerable = vulnerableInsurgents(origin.pieces, false).total
+    val vulnerable = vulnerableInsurgents(origin.pieces, false, false).total
 
     if (firepower >= vulnerable) {
 
@@ -1986,7 +2004,7 @@ object Bot {
     import params._
     val desc = "Get COIN Firepower equal to vulnerable enemies"
 
-    val numVulnerable = vulnerableInsurgents(dest.pieces, false).total
+    val numVulnerable = vulnerableInsurgents(dest.pieces, canUseAbramsUnshaded(US), false).total
 
     def movePieces(num: Int): Pieces = {
       val toMove = selectFriendlyToPlaceOrMove(candidates, num)
@@ -2532,7 +2550,7 @@ object Bot {
       case (US|ARVN, true)  => numCoin < numInsurgent
       case (NVA|VC,  true)  => numInsurgent <= numCoin
       case (US|ARVN, false) => !dest.coinControlled &&
-                               coinFirepower(cubeTreatment)(dest) < vulnerableInsurgents(dest.pieces, false).total
+                               coinFirepower(cubeTreatment)(dest) < vulnerableInsurgents(dest.pieces, canUseAbramsUnshaded(faction), false).total
       case (NVA,     false) => !dest.nvaControlled
       case (VC,      false) => dest.coinControlled || dest.nvaControlled
     }
@@ -2783,7 +2801,7 @@ object Bot {
 
     def usPiecesWithVulnerableEnemies: Boolean = {
       val result = game.spaces exists { sp =>
-        sp.pieces.has(USPieces) && vulnerableInsurgents(sp.pieces, false).nonEmpty
+        sp.pieces.has(USPieces) && vulnerableInsurgents(sp.pieces, canUseAbramsUnshaded(US), false).nonEmpty
       }
       logCheck(result, "US pieces in any space with vulnerable enemies?")
     }
@@ -3362,7 +3380,7 @@ object Bot {
             val sp = game.getSpace(name)
             
             sp.isLoC &&
-            assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
+            assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels)(sp)
           }          
         }
         else
@@ -3491,15 +3509,15 @@ object Bot {
 
         val assaultRemovesAllVulnerable = (sp: Space) =>
           !assaultSpaces(sp.name)  &&
-          assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels)(sp) &&
+          assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels)(sp) &&
           noVulnerableInsurgents(assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)) &&
           (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
 
 
         val assaultWithArvn = (sp: Space) => {
-          if (!assaultSpaces(sp.name) && assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels, m48PattonCount)(sp)) {
+          if (!assaultSpaces(sp.name) && assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels, m48PattonCount)(sp)) {
             val afterUS = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
-            if (assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(afterUS)) {
+            if (assaultEffective(ARVN, params.cubeTreatment, false, params.vulnerableTunnels)(afterUS)) {
               val afterARVN = assaultResult(ARVN, params.cubeTreatment, params.vulnerableTunnels)(afterUS)
               val deadNVA   = sp.pieces.totalOf(NVATargets) > afterARVN.pieces.totalOf(NVATargets)
               capabilityInPlay(SearchAndDestroy_Shaded) == false || deadNVA
@@ -3524,7 +3542,7 @@ object Bot {
 
         val assaultWithTroops = (sp: Space) =>
           !assaultSpaces(sp.name)  &&
-          assaultEffective(US, params.cubeTreatment, params.vulnerableTunnels, m48PattonCount)(sp) &&
+          assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels, m48PattonCount)(sp) &&
           (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
 
 
@@ -3688,7 +3706,7 @@ object Bot {
       }
 
       def doArvnAssaults(): Unit = {
-        val candidates = game.spaces filter assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)
+        val candidates = game.spaces filter assaultEffective(ARVN, params.cubeTreatment, false, params.vulnerableTunnels)
         if (canAdvise && candidates.nonEmpty) {
           val sp = pickSpaceRemoveReplace(candidates)
 
@@ -4503,7 +4521,7 @@ object Bot {
     // allows ARVN to free assault in one Transport destination
     // Will only trigger if an transport special activity has take place.
     def armoredCavalryAssault(): Unit = {
-      val candidates = spaces(transportDestinations) filter assaultEffective(ARVN, NormalTroops, vulnerableTunnels = false)
+      val candidates = spaces(transportDestinations) filter assaultEffective(ARVN, NormalTroops, false, vulnerableTunnels = false)
       // General Landsdale prohibits assault
       if (capabilityInPlay(ArmoredCavalry_Unshaded) && !momentumInPlay(Mo_GeneralLansdale) && candidates.nonEmpty) {
         val sp = pickSpaceRemoveReplace(candidates)
@@ -4819,7 +4837,7 @@ object Bot {
         val assaultLoC = if (params.limOpOnly) {
           moveDestinations.headOption filter { name =>
             val sp = game.getSpace(name)
-            sp.isLoC && assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
+            sp.isLoC && assaultEffective(ARVN, params.cubeTreatment, false, params.vulnerableTunnels)(sp)
           }
         }
         else
@@ -4937,7 +4955,7 @@ object Bot {
         None
       else {
         val candidates = game.spaces filter { sp =>
-          assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
+          assaultEffective(ARVN, params.cubeTreatment, false, params.vulnerableTunnels)(sp)
         }
         if (candidates.nonEmpty) {
           val MostFirepower = List(
@@ -4985,7 +5003,7 @@ object Bot {
           lazy val candidates = game.spaces filter { sp =>
             !previousAssaults(sp.name) &&
             !assaultSpaces(sp.name)    &&
-            assaultEffective(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
+            assaultEffective(ARVN, params.cubeTreatment, false, params.vulnerableTunnels)(sp)
           }
 
           if (previousAssaults.size + assaultSpaces.size < maxAssault && candidates.nonEmpty && activated) {
@@ -7067,6 +7085,7 @@ object Bot {
     trainingSpaces        = Set.empty
     adviseSpaces          = Set.empty
     m48PattonSpaces       = Set.empty
+    abramsUnshadedUsed    = false
     movedPieces.reset()
   }
 

@@ -64,7 +64,8 @@ object Card_006 extends EventCard(6, "Aces",
 
   def unshadedEffective(faction: Faction): Boolean = {
     val validSpaces = spaces(NorthVietnam::LaosCambodia)
-    val canStrike = validSpaces exists (sp => vulnerableInsurgents(sp.pieces, false).nonEmpty)
+    val baseFirstOK = faction == US && capabilityInPlay(Abrams_Unshaded)
+    val canStrike = validSpaces exists (sp => vulnerableInsurgents(sp.pieces, baseFirstOK, false).nonEmpty)
     canStrike || game.trail > TrailMin
   }
 

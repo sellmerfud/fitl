@@ -1773,8 +1773,7 @@ object FireInTheLake {
 
   case class AssaultParams(
     onlyTarget: Option[Faction] = None,      // Chu Luc (unshaded)
-    specificSpaces: Set[String] = Set.empty, // Chu Luc (unshaded)
-    removeTwoExtra: Boolean     = false      // M48 Patton (unshaded)
+    specificSpaces: Set[String] = Set.empty  // Chu Luc (unshaded)
   )
 
   case class MarchParams(

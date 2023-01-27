@@ -2726,11 +2726,8 @@ object Human {
 
         askMenu(choices, "\nChoose one:").head match {
           case "assault" =>
-            val assaultParams = Params(
-              free    = true,
-              assault = AssaultParams(removeTwoExtra = pattonUshaded))
             val name = askSimpleMenu(candidates, "\nAssault in which LOC:").head
-            performAssault(faction, name, assaultParams)
+            performAssault(faction, name, Params(free = true))
 
           case "special" =>
             executeSpecialActivity(faction, params, specialActivities)
@@ -2983,23 +2980,27 @@ object Human {
     val asUS = faction == US || params.cubeTreatment == AllCubesAsUS || params.cubeTreatment == AllTroopsAsUS
     val abramsInPlay       = asUS && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
+    val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
+        
     def validEnemy(types: Iterable[PieceType]): Iterable[PieceType] =
       params.assault.onlyTarget match {
         case Some(f) => types filter (t => owner(t) == f)
         case None    => types
       }
-
-    val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
     val baseTargets = if (params.vulnerableTunnels)
       validEnemy(InsurgentBases)
     else
       validEnemy(InsurgentNonTunnels)
+
+    val addPatton = canUseM48PattonUnshaded(faction, params.cubeTreatment, name) &&
+                    m48PattonCount < 2 && 
+                    askYorN(s"\nRemove 2 extra pieces in this Assault [$M48Patton_Unshaded]? (y/n) ")
+    val pattonLosses = if (addPatton) 2 else 0
     val sp          = game.getSpace(name)
     def pieces      = game.getSpace(name).pieces  // Always get fresh instance
     val baseFirst   = abramsInPlay && pieces.has(baseTargets)
     val underground = remove1Underground && pieces.has(validEnemy(UndergroundGuerrillas))
-    val totalLosses = sp.assaultFirepower(faction, params.cubeTreatment) + 
-                      (if (params.assault.removeTwoExtra) 2 else 0)
+    val totalLosses = sp.assaultFirepower(faction, params.cubeTreatment) + pattonLosses
     var killedPieces = Pieces()
     def remaining   = totalLosses - killedPieces.total
 
@@ -3010,9 +3011,14 @@ object Human {
 
       if (faction == ARVN && !params.free) {
         if (momentumInPlay(Mo_BodyCount))
-          log(s"\nARVN Assault costs zero resources [Momentum: $Mo_BodyCount]")
+          log(s"ARVN Assault costs zero resources [Momentum: $Mo_BodyCount]")
         else
           decreaseResources(ARVN, 3)
+      }
+      
+      if (addPatton) {
+        log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
+        m48PattonSpaces = name :: m48PattonSpaces        
       }
 
       log(s"The assault inflicts ${amountOf(totalLosses, "hit")}")
@@ -3127,8 +3133,6 @@ object Human {
     var assaultSpaces       = List.empty[String]
     var addedARVNAssault    = false
     
-    def canAddPatton(name: String) = m48PattonCount < 2 && canUseM48PattonUnshaded(faction, params.cubeTreatment, name)
-    
     val isCandidate = (sp: Space) => {
       params.spaceAllowed(sp.name) &&           // If event limits command to certain spaces
       !assaultSpaces.contains(sp.name) &&       // Not already selected
@@ -3138,21 +3142,12 @@ object Human {
     def canSpecial = Special.allowed
 
     def assaultIn(name: String): Unit = {
-      val assaultParams = if (canAddPatton(name) &&
-                              askYorN(s"Remove 2 extra pieces in this Assault [$M48Patton_Unshaded]? (y/n) ")) {
-        log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
-        m48PattonSpaces = name :: m48PattonSpaces
-        params.copy(assault = params.assault.copy(removeTwoExtra = true))
-      }
-      else
-        params
-      performAssault(faction, name, assaultParams)
+      performAssault(faction, name, params)
 
       val canFollowup = faction == US &&
-                        params.cubeTreatment == NormalTroops &&  // All cubes already participated!
-                        addedARVNAssault == false &&
-                        game.getSpace(name).pieces.hasExposedInsurgents &&
-                        game.getSpace(name).pieces.has(ARVNCubes) &&
+                        params.cubeTreatment == NormalTroops &&  // Only if ARVN cubes didn't already participate
+                        addedARVNAssault == false &&             // Only one follow up per turn
+                        assaultEffective(ARVN, NormalTroops, false, false)(game.getSpace(name))
                         (bodyCount || (game.arvnResources - 3) >= game.econ)
 
       if (canFollowup && askYorN(s"Follow up with ARVN assault in $name? (y/n) ")) {

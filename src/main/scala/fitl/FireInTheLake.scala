@@ -1107,13 +1107,16 @@ object FireInTheLake {
     }
   }
 
-  def canUseM48PattonUnshaded(faction: Faction, name: String): Boolean = {
+  def canUseM48PattonUnshaded(faction: Faction, cubeTreatment: CubeTreatment, name: String): Boolean = {
     val sp = game.getSpace(name)
-    faction == US &&
-    capabilityInPlay(M48Patton_Unshaded) &&
-    !sp.isLowland &&
-    sp.pieces.has(USTroops)
+    lazy val haveCubes = cubeTreatment match {
+      case NormalTroops  => faction == US && sp.pieces.has(USTroops)
+      case AllCubesAsUS  => sp.pieces.has(CoinCubes)
+      case AllTroopsAsUS => sp.pieces.has(CoinTroops)
+      case _             => false
+    }
     
+    capabilityInPlay(M48Patton_Unshaded) && !sp.isLowland && haveCubes
   }
     
 
@@ -1128,7 +1131,7 @@ object FireInTheLake {
         case (pieces, _)   => pieces
       }
     val asUSAssault = faction == US || cubeTreatment == AllCubesAsUS || cubeTreatment == AllTroopsAsUS
-    val pattonExtra = if (canUseM48PattonUnshaded(faction, sp.name) && pattonCount < 2) 2 else 0      
+    val pattonExtra = if (canUseM48PattonUnshaded(faction, cubeTreatment, sp.name) && pattonCount < 2) 2 else 0      
     val firepower   = assaultFirepower(faction, cubeTreatment)(sp) + pattonExtra
 
     val vulnerable = vulnerableInsurgents(enemyPieces(sp), baseFirstOK, vulnerableTunnels).total
@@ -1148,7 +1151,7 @@ object FireInTheLake {
         case (pieces, _)   => pieces
       }
     val asUSAssault     = faction == US || cubeTreatment == AllCubesAsUS || cubeTreatment == AllTroopsAsUS
-    val pattonExtra     = if (canUseM48PattonUnshaded(faction, sp.name) && pattonCount < 2) 2 else 0
+    val pattonExtra     = if (canUseM48PattonUnshaded(faction, cubeTreatment, sp.name) && pattonCount < 2) 2 else 0
     val firepower       = assaultFirepower(faction, cubeTreatment)(sp) + pattonExtra
     val enemy           = enemyPieces(sp)
     val killUnderground = asUSAssault && capabilityInPlay(SearchAndDestroy_Unshaded) && enemy.has(UndergroundGuerrillas)

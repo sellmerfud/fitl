@@ -109,7 +109,9 @@ object Bot {
 
   def resetM48PattonSpaces(): Unit = m48PattonSpaces = Set.empty
   def m48PattonCount = m48PattonSpaces.size
-  def canAddM48Patton(faction: Faction, name: String) = m48PattonCount < 2 && canUseM48PattonUnshaded(faction, name)
+  def canAddM48Patton(faction: Faction, cubeTreatment: CubeTreatment, name: String) = {
+    m48PattonCount < 2 && canUseM48PattonUnshaded(faction, cubeTreatment, name)
+  }
   def canUseAbramsUnshaded(faction: Faction) = faction == US && capabilityInPlay(Abrams_Unshaded) && !abramsUnshadedUsed
   
   def getMoveDestinations = moveDestinations
@@ -729,7 +731,7 @@ object Bot {
     val regularLosses = calculateLosses(totalLosses)
     // Trigger the M48 Patton capability if it is in play and would
     // be effective (max two non-Lowland spaces)
-    val pattonLosses = if (canAddM48Patton(faction, name))
+    val pattonLosses = if (canAddM48Patton(faction, params.cubeTreatment, name))
       calculateLosses(totalLosses + 2)
     else
       EnemyLosses()
@@ -871,7 +873,7 @@ object Bot {
     }
     
     val baseFirstOK      = canUseAbramsUnshaded(abramsFaction)
-    val pattonExtra      = if (canAddM48Patton(faction, sp.name)) 2 else 0
+    val pattonExtra      = if (canAddM48Patton(faction, cubeTreatment, sp.name)) 2 else 0
     val firepower        = assaultFirepower(faction, cubeTreatment)(sp) + pattonExtra
     val num              = firepower min vulnerableInsurgents(sp.pieces, baseFirstOK, vulnerableTunnels).total
     val (dead1stBase, _) = if (baseFirstOK)

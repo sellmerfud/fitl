@@ -77,6 +77,7 @@ object Human {
   def initTurnVariables(specialActivity: Boolean): Unit = {
     Special.init(specialActivity)
     pt76_shaded_used = false
+    abramsUnshadedUsed = false;
     resetM48PattonSpaces()
   }
 
@@ -3126,7 +3127,7 @@ object Human {
     var assaultSpaces       = List.empty[String]
     var addedARVNAssault    = false
     
-    def canAddPatton(name: String) = m48PattonCount < 2 && canUseM48PattonUnshaded(faction, name)
+    def canAddPatton(name: String) = m48PattonCount < 2 && canUseM48PattonUnshaded(faction, params.cubeTreatment, name)
     
     val isCandidate = (sp: Space) => {
       params.spaceAllowed(sp.name) &&           // If event limits command to certain spaces

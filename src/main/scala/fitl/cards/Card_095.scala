@@ -75,15 +75,21 @@ object Card_095 extends EventCard(95, "Westmoreland",
     !sp.isLoC &&
     sp.sweepActivations(US, NormalTroops) > 0
 
-  val canAssault = (sp: Space) => 
-    assaultEffective(US, NormalTroops, baseFirstOK, false)(sp)
+  def pattonCount = if (game.isBot(US))
+      Bot.m48PattonCount
+    else
+      Human.m48PattonCount
+
+  def canAssault = (sp: Space) =>
+    assaultEffective(US, NormalTroops, baseFirstOK, false, pattonCount)(sp)
+  
   
 
   val canAssultOrSweep = (sp: Space) => canAssault(sp) || canSweep(sp)
   
   def assaultKillsAllActive(faction: Faction) = (sp: Space) => {
       canAssault(sp) &&
-      assaultKillsAllVulnerable(US, NormalTroops, baseFirstOK, vulnerableTunnels = false)(sp)
+      assaultKillsAllVulnerable(US, NormalTroops, baseFirstOK, vulnerableTunnels = false, pattonCount)(sp)
     
   }
 

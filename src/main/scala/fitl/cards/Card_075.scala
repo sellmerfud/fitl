@@ -72,8 +72,13 @@ object Card_075 extends EventCard(75, "Sihanouk",
     
   def canSweep(faction: Faction)(sp: Space) = sp.sweepActivations(faction, NormalTroops) > 0
 
-  def canAssault(faction: Faction)(sp: Space) = 
-    assaultEffective(faction, NormalTroops, baseFirstOK(faction), false)(sp)
+  def canAssault(faction: Faction)(sp: Space) = {
+    val pattonCount = if (game.isBot(faction))
+      Bot.m48PattonCount
+    else
+      Human.m48PattonCount
+    assaultEffective(faction, NormalTroops, baseFirstOK(faction), false, pattonCount)(sp)
+  }
 
 
   // The move priorities for US/ARVN state to keep all cubes

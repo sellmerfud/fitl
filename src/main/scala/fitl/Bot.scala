@@ -540,7 +540,7 @@ object Bot {
       )
     )
     
-    (game.locSpaces filter assaultEffective(faction, cubeTreatment, canUseAbramsUnshaded(faction), vulnerableTunnels)) match {
+    (game.locSpaces filter assaultEffective(faction, cubeTreatment, canUseAbramsUnshaded(faction), vulnerableTunnels, m48PattonCount)) match {
       case Nil        => None
       case candidates => Some(bestCandidate(candidates, priorities).name)
     }
@@ -3380,7 +3380,7 @@ object Bot {
             val sp = game.getSpace(name)
             
             sp.isLoC &&
-            assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels)(sp)
+            assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels, m48PattonCount)(sp)
           }          
         }
         else
@@ -3509,7 +3509,7 @@ object Bot {
 
         val assaultRemovesAllVulnerable = (sp: Space) =>
           !assaultSpaces(sp.name)  &&
-          assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels)(sp) &&
+          assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels, m48PattonCount)(sp) &&
           noVulnerableInsurgents(assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)) &&
           (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
 

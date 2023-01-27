@@ -116,7 +116,7 @@ object Card_092 extends EventCard(92, "SEALORDS",
       
       canAssault(actor)(sp) &&
       (!sp.pieces.has(UndergroundGuerrillas) || 
-       assaultKillsAllVulnerable(actor, NormalTroops, baseFirstOK, vulnerableTunnels = false)(sp))
+       assaultKillsAllVulnerable(actor, NormalTroops, baseFirstOK, vulnerableTunnels = false, Bot.m48PattonCount)(sp))
 
     }
 

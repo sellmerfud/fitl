@@ -2332,7 +2332,10 @@ object FireInTheLake {
     }
 
     b += separator()
-    b += s"Campaign       : ${ordinal(game.coupCardsPlayed+1)} of ${game.totalCoupCards} ${if (game.isFinalCampaign) " -- Final campaign" else ""}"
+    if (game.gameOver)
+      b += s"Campaign       : Game Over - ${game.scores.head.faction} Victory"
+    else
+      b += s"Campaign       : ${ordinal(game.coupCardsPlayed+1)} of ${game.totalCoupCards} ${if (game.isFinalCampaign) " -- Final campaign" else ""}"
     b += f"Cards/Pile     : ${game.cardsPerCampaign}%2d"
     b += f"Cards drawn    : ${game.numCardsDrawn}%2d"
     b += s"Coup card      : $coupStatus"

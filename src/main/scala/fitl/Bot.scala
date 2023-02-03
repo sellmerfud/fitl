@@ -4078,29 +4078,28 @@ object Bot {
         val numCOIN        = sp.pieces.totalOf(CoinPieces)
         val numOtherARVN   = numARVNCubes - numCubeType
         val numOtherCOIN   = numCOIN - numCubeType
+        val numEnemy       = numNVA + numVC
 
         // If we are moving mandatory Troops out of LoCs or Provinces
         // without a base, then we don't keep any behind
         val numToKeep = if (cubeType == ARVNTroops && locOrProvinceNoBase(ignoreCoinBases)(sp))
           0
         else {
-          val keepForSupport = if (cubeType == ARVNTroops && locOrProvinceNoBase(ignoreCoinBases)(sp))
-            0
-          else if (sp.population == 2 && sp.support > Neutral && numARVNCubes > numUSTroops)
-            (numUSTroops + 1 - numOtherARVN) min numCubeType
+          val keepForSupport = if (sp.population == 2 && sp.support > Neutral && numARVNCubes > numUSTroops)
+            (numUSTroops + 1 - numOtherARVN) max 0
           else if (sp.support < PassiveSupport && numARVNTroops > 0 && numPolice > 0)
             1
           else
             0
 
-          val keepForControl = if (numCOIN > numNVA + numVC)
-            (numNVA + numVC + 1 - numOtherCOIN) min numCubeType
+          val keepForControl = if (numCOIN > numEnemy)
+            (numEnemy + 1 - numOtherCOIN) max 0
           else if (numCOIN + numVC >= numNVA)
-            (numNVA - numOtherCOIN - numVC) min numCubeType
+            (numNVA - numOtherCOIN - numVC) max 0
           else
             0
 
-          keepForSupport max keepForControl
+          (keepForSupport max keepForControl) min numCubeType
         }
 
 

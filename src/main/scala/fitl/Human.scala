@@ -724,7 +724,7 @@ object Human {
   // Ask the user if they wish to use the Cobras capability
   // in the space.
   // (Part of a Sweep operation)
-  def doCobrasUnshaded(name: String): Boolean = {
+  def checkCobrasUnshaded(name: String): Boolean = {
     val sp        = game.getSpace(name)
     val isPossible = capabilityInPlay(Cobras_Unshaded) &&
                      (sp.pieces.has(NVATroops::ActiveGuerrillas) ||
@@ -1072,7 +1072,7 @@ object Human {
           askCandidateOrBlank("ARVN Sweep in which space: ", sweepCandidates) foreach { name =>
             activateGuerrillasForSweep(name, ARVN, params.cubeTreatment)
             checkShadedBoobyTraps(name, ARVN)
-            doCobrasUnshaded(name)
+            checkCobrasUnshaded(name)
             Special.selectedSpaces = Special.selectedSpaces + name
           }
           nextAdviseSpace()
@@ -2793,9 +2793,8 @@ object Human {
     else
       Transport::Raid::Nil
     var sweepSpaces     = params.sweep.explicitSpaces
-    var activatedSpaces = Set.empty[String]
+    var resolvedSpaces   = Set.empty[String]
     var cobrasSpaces    = Set.empty[String]
-    var specialActivityDeclined = false
     val alreadyMoved    = new MovingGroups()
     val platoonsShaded  = faction == US && !params.limOpOnly && capabilityInPlay(CombActionPlatoons_Shaded)
     val cobrasUnshaded  = capabilityInPlay(Cobras_Unshaded)
@@ -2806,7 +2805,7 @@ object Human {
     val cubeDesc        = andList(cubeTypes)
 
     def canSpecial = Special.allowed
-
+    
     def moveTroopsTo(destName: String): Unit = {
       val candidates = spaceNames(sweepSources(destName, faction, alreadyMoved))
       val choices = (candidates map (name => name -> name)) :+ ("finished" -> s"Finished moving troops to $destName")
@@ -2874,9 +2873,6 @@ object Human {
             sweepSpaces = sweepSpaces + name
             if (faction == ARVN && !params.free)
               decreaseResources(ARVN, 3)
-
-            if (cobrasUnshaded && cobrasSpaces.size < 2 && doCobrasUnshaded(name))
-              cobrasSpaces = cobrasSpaces + name
           }
           selectSweepSpace()
 
@@ -2888,66 +2884,47 @@ object Human {
       }
     }
 
-    def activateGuerrillas(): Unit = {
-      val canActivate = (name: String) => {
-        val sp = game.getSpace(name)
-        sp.sweepActivations(faction, params.cubeTreatment) > 0
+    def resolveSweepSpaces(): Unit = {
+      
+      def resolveSweep(name: String): Unit = {
+        if (!activateGuerrillasForSweep(name, faction, params.cubeTreatment))
+          log(s"\nNo guerrillas were activated in $name")
+        if (cobrasUnshaded && cobrasSpaces.size < 2 && checkCobrasUnshaded(name))
+          cobrasSpaces = cobrasSpaces + name
+        checkShadedBoobyTraps(name, faction)
+        resolvedSpaces = resolvedSpaces + name
       }
-      val candidates = ((sweepSpaces -- activatedSpaces) filter canActivate).toList.sorted
-      val canAll  = candidates.size > 1 && activatedSpaces.isEmpty
-      val canRest = candidates.size > 1 && activatedSpaces.nonEmpty
-
+      
+      val candidates = (sweepSpaces -- resolvedSpaces).toList.sorted
       if (candidates.nonEmpty) {
         if (canSpecial) {
           val topChoices = List(
-            choice(canAll,     "all",      "Activate guerrillas in all Sweep spaces"),
-            choice(canRest,    "rest",     "Activate guerrillas in the rest of the Sweep spaces"),
-            choice(canSpecial, "special",  "Perform a Special Activity")
+            choice(resolvedSpaces.isEmpty,  "all",      "Resolve all Sweep spaces"),
+            choice(resolvedSpaces.nonEmpty, "rest",     "Resolve all remaining Sweep spaces"),
+            choice(canSpecial,              "special",  "Perform a Special Activity")
           ).flatten
-          val spaceChoices = candidates map (n => n -> s"Activate guerrillas in $n")
+          val spaceChoices = candidates map (n => n -> s"Resolve Sweep in $n")
           val choices = topChoices ::: spaceChoices
   
           askMenu(choices, "\nSweep activation:").head match {
             case "all" | "rest" =>
-              for (name <- candidates) {
-                activateGuerrillasForSweep(name, faction, params.cubeTreatment)
-                checkShadedBoobyTraps(name, faction)
-                activatedSpaces = activatedSpaces + name
-              }
+              for (name <- candidates)
+                resolveSweep(name)
   
             case "special" =>
               executeSpecialActivity(faction, params, specialActivities)
-              activateGuerrillas()
+              resolveSweepSpaces()
   
             case name =>
-              activateGuerrillasForSweep(name, faction, params.cubeTreatment)
-              checkShadedBoobyTraps(name, faction)
-              activatedSpaces = activatedSpaces + name
-              activateGuerrillas()
+              resolveSweep(name)
+              resolveSweepSpaces()
           }
         }
         else {
-          for (name <- candidates) {
-            activateGuerrillasForSweep(name, faction, params.cubeTreatment)
-            checkShadedBoobyTraps(name, faction)
-            activatedSpaces = activatedSpaces + name
-          }
+          for (name <- candidates)
+            resolveSweep(name)
         }
       }
-      else if (canSpecial) {
-        //  It is possible that there are not spaces where guerrillas can be
-        //  activated at the moment, but the playe is planning to Air Lift
-        //  some into a Sweep space.
-        println("\nNo guerrillas can be activated in any of the remaining Sweep spaces.")
-        if (askYorN("\nDo you wish to perform a special activity? (y/n) ")) {
-          executeSpecialActivity(faction, params, specialActivities)
-          activateGuerrillas()
-        }
-        else
-          specialActivityDeclined = true
-      }
-      else if (activatedSpaces.isEmpty)
-        log(s"\nNo guerrillas can be activated in the ${amountOf(sweepSpaces.size, "sweep space")}")
     }
 
 
@@ -2960,15 +2937,16 @@ object Human {
     if (!params.event)
       logOpChoice(faction, Sweep, notes)
 
-
+    // If sweepSpaces is not empty then we are executing an Event that specified the
+    // explicit spaces, otherwise prompt the user for the spaces.
     if (sweepSpaces.isEmpty)
       selectSweepSpace()
     moveTroops()
     if (sweepSpaces.nonEmpty)
-      activateGuerrillas()
+      resolveSweepSpaces()
 
     //  Last chance to perform special activity
-    if (!specialActivityDeclined && canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
+    if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
       executeSpecialActivity(faction, params, specialActivities)
 
     sweepSpaces

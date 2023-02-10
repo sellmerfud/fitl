@@ -90,7 +90,7 @@ you must enter the appropriate command to let the software know that this has oc
 
 ## License
 
-    Copyright (c) 2017 Curt Sellmer
+    Copyright (c) 2023 Curt Sellmer
     
     Permission is hereby granted, free of charge, to any person obtaining
     a copy of this software and associated documentation files (the

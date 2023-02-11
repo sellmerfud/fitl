@@ -3310,7 +3310,7 @@ object Human {
         case "select" =>
           askCandidateOrBlank("\nRally in which space: ", candidates) foreach { name =>
             //  Note: COIN control does not prevent agitation here
-            val canAgitate = cadres && game.resources(VC) > 0 && ({
+            val canAgitate = cadres && !didCadres && game.resources(VC) > 0 && ({
               val sp = game.getSpace(name)
               sp.pieces.hasBase(VC) && (sp.support != ActiveOpposition || sp.terror > 0)
             })

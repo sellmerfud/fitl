@@ -6546,7 +6546,9 @@ object Bot {
 
     // Cadres_Unshaded - VC must remove two guerrillas in the space
     // Cadres_Shaded   - Allows VC to agitate in a rally space.
-    def agitateSpace(name: String, coupRound: Boolean, maxLevels: Int = 2): Unit = {
+    //
+    //  Return TRUE if space was agitated
+    def agitateSpace(name: String, coupRound: Boolean, maxLevels: Int = 2): Boolean = {
       val cadres_unshaded = capabilityInPlay(Cadres_Unshaded)
       val sp = game.getSpace(name)
       val cadres_check = !cadres_unshaded || sp.pieces.totalOf(VCGuerrillas) >= 2
@@ -6568,7 +6570,10 @@ object Bot {
           val toRemove = selectFriendlyRemoval(sp.pieces.only(VCGuerrillas), 2)
           removeToAvailable(sp.name, toRemove, Some(s"$Cadres_Unshaded triggers"))
         }
+        true
       }
+      else
+        false
     }
 
     //  -------------------------------------------------------------
@@ -6611,7 +6616,7 @@ object Bot {
 
       def tryCadresAgitate(sp: Space): Unit = {
         if (!agitated && cadres && sp.support > ActiveOpposition && game.agitateTotal > 0)
-          agitateSpace(sp.name, coupRound = false)
+          agitated = agitateSpace(sp.name, coupRound = false)
       }
 
       // Return true if we can continue (no failed activation)

@@ -2353,68 +2353,81 @@ object FireInTheLake {
     b.toList
   }
 
-  def availablePiecesSummary: Seq[String] = {
+  def availablePiecesSummary(factions: List[Faction] = List(US, ARVN, NVA, VC)): Seq[String] = {
     val b = new ListBuffer[String]
-    val avail = game.availablePieces
+    val pieceTypes: Map[Faction, List[PieceType]] = Map(
+      US   -> List(USTroops, Irregulars_U, USBase),
+      ARVN -> List(ARVNTroops, ARVNPolice, Rangers_U, ARVNBase),
+      NVA  -> List(NVATroops, NVAGuerrillas_U, NVABase),
+      VC   -> List(VCGuerrillas_U, VCBase)
+    )
+    
+    def hasPieces(faction: Faction): Boolean = game.availablePieces.has(pieceTypes(faction))
 
-    def addPieces(types: Iterable[PieceType]): Unit = {
-      if (avail.has(types))
-        b += separator()
-      for (t <- types; name = t.genericPlural; count = avail.totalOf(t))
+    def addPieces(faction: Faction): Unit = if (hasPieces(faction)) {
+      b += separator()
+      for (t <- pieceTypes(faction); name = t.genericPlural; count = game.availablePieces.totalOf(t))
         b += f"${name}%-15s: ${count}%2d"
     }
 
     b += "Available Pieces"
-    if (game.availablePieces.isEmpty) {
+    if (factions exists hasPieces) 
+      factions foreach addPieces
+    else {
       b += separator()
       b += "None"
     }
-    else {
-      addPieces(USTroops::Irregulars_U::USBase::Nil)
-      addPieces(ARVNTroops::ARVNPolice::Rangers_U::ARVNBase::Nil)
-      addPieces(NVATroops::NVAGuerrillas_U::NVABase::Nil)
-      addPieces(VCGuerrillas_U::VCBase::Nil)
-    }
+
     b.toList
   }
 
-  def casualtiesSummary: Seq[String] = {
+  def casualtiesSummary(factions: List[Faction] = List(US, ARVN)): Seq[String] = {
     val b = new ListBuffer[String]
+    val pieceTypes: Map[Faction, List[PieceType]] = Map(
+      US   -> USPieces,
+      ARVN -> ARVNPieces
+    )
 
-    def addPieces(types: Iterable[PieceType]): Unit = {
-      if (game.casualties.has(types))
-        b += separator()
-      for (t <- types; name = t.genericPlural; count = game.casualties.totalOf(t) if count > 0)
+    def hasPieces(faction: Faction): Boolean = game.casualties.has(pieceTypes(faction))
+    
+    def addPieces(faction: Faction): Unit = if (hasPieces(faction)) {
+      b += separator()
+      for (t <-pieceTypes(faction); name = t.genericPlural; count = game.casualties.totalOf(t) if count > 0)
         b += f"${name}%-15s: ${count}%2d"
     }
+    
     b += "Casualties"
-    if (game.casualties.isEmpty) {
+    if (factions exists hasPieces)
+      factions foreach addPieces
+    else {
       b += separator()
       b += "None"
     }
-    else
-      addPieces(USPieces)
-      addPieces(ARVNPieces)
+
     b.toList
   }
 
-  def outOfPlaySummary: Seq[String] = {
+  def outOfPlaySummary(factions: List[Faction] = List(US, ARVN)): Seq[String] = {
     val b = new ListBuffer[String]
+    val pieceTypes: Map[Faction, List[PieceType]] = Map(
+      US   -> USPieces,
+      ARVN -> ARVNPieces
+    )
 
-    def addPieces(types: Iterable[PieceType]): Unit = {
-      if (game.outOfPlay.has(types))
-        b += separator()
-      for (t <- types; name = t.genericPlural; count = game.outOfPlay.totalOf(t) if count > 0)
+    def hasPieces(faction: Faction): Boolean = game.outOfPlay.has(pieceTypes(faction))
+
+    def addPieces(faction: Faction): Unit = if (hasPieces(faction)) {
+      b += separator()
+      for (t <- pieceTypes(faction); name = t.genericPlural; count = game.outOfPlay.totalOf(t) if count > 0)
         b += f"${name}%-15s: ${count}%2d"
     }
+    
     b += "Out of Play"
-    if (game.outOfPlay.isEmpty) {
+    if (factions exists hasPieces)
+      factions foreach addPieces
+    else {
       b += separator()
       b += "None"
-    }
-    else {
-      addPieces(USPieces)
-      addPieces(ARVNPieces)
     }
     b.toList
   }
@@ -2809,6 +2822,7 @@ object FireInTheLake {
                   |  show summary   - current score, resources, etc.
                   |  show pieces    - available pieces, casualties, out of play pieces
                   |  show events    - capabilities, momentum, pivotal events
+                  |  show faction   - show all locations containing a faction's pieces
                   |  show all       - entire game state
                   |  show <space>   - state of a single space""".stripMargin
 
@@ -5380,22 +5394,23 @@ object FireInTheLake {
 
 
   def showCommand(param: Option[String]): Unit = {
-    val options =  "scenario" :: "summary" :: "pieces" :: "events" :: "all" :: SpaceNames
+    val options =  "scenario" :: "summary" :: "pieces" :: "events" :: "faction" :: "all" :: SpaceNames
 
     askOneOf("Show: ", options, param, allowNone = true, allowAbort = false) foreach {
       case "scenario" => printSummary(scenarioSummary)
       case "summary"  => printSummary(statusSummary)
       case "pieces"   => printPiecesSummary()
       case "events"   => printSummary(eventSummary)
+      case "faction"  => printFactionPieces()
       case "all"      => printGameState()
       case name       => printSummary(spaceSummary(name))
     }
   }
 
   def printPiecesSummary(): Unit = {
-    printSummary(availablePiecesSummary)
-    printSummary(casualtiesSummary)
-    printSummary(outOfPlaySummary)
+    printSummary(availablePiecesSummary())
+    printSummary(casualtiesSummary())
+    printSummary(outOfPlaySummary())
   }
 
   def printGameState(): Unit = {
@@ -5409,6 +5424,34 @@ object FireInTheLake {
       println(line)
   }
 
+
+  //  Ask the user for a faction, then then
+  //  display the location of all pieces belonging to that faction.
+  //  Available, Casualties, Out  of Play and all spaces on the map that contain at least 
+  //  one piece belonging to that faction.
+  def printFactionPieces(): Unit = {
+    try {
+      val faction = askFaction("Show piece locations for which faction:")
+      def containsPiece(name: String) = game.getSpace(name).pieces.totalFaction(faction) > 0
+      
+      printSummary(availablePiecesSummary(faction::Nil))
+      if (faction == US || faction == ARVN) {
+        printSummary(casualtiesSummary(faction::Nil))
+        printSummary(outOfPlaySummary(faction::Nil))
+      }
+
+      //  Print summary of every space that contains at least one of the
+      //  factions pieces
+      println()
+      for (name <- SpaceNames; if containsPiece(name); line <- spaceSummary(name))
+        println(line)
+      
+    }
+    catch {
+      case AbortAction =>
+    }    
+  }
+  
   // Display some or all of the game log.
   // usage:
   // history            - Shows the log starting from the most recent save point (Same as history -1)

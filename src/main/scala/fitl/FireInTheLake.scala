@@ -2432,17 +2432,6 @@ object FireInTheLake {
     b.toList
   }
 
-
-  def canPlayPivotal(faction: Faction): Boolean = {
-    val pivotCard = eventDeck(faction.pivotCard)
-
-    game.pivotCardsAvailable(faction)       &&
-    game.sequence.eligibleThisTurn(faction) &&
-    pivotCard.eventEffective(faction)
-  }
-
-
-
   def eventSummary: Seq[String] = {
     val b = new ListBuffer[String]
     val pivotal = Faction.ALL.toList.sorted map {
@@ -3780,11 +3769,19 @@ object FireInTheLake {
     }
 
     val eligible = getPlayablePivotalEvents
+    def botPivotalRoll(faction: Faction): Boolean = {
+        val die = d6
+        val result = if (die < game.numCardsInLeaderBox) "Success" else "Failure"
+        
+        log(s"\n$faction Bot Pivotal Event die roll: $die  [$result] (${game.numCardsInLeaderBox} cards in leader box)")
+        die < game.numCardsInLeaderBox
+    }
+    
     // Find the first Bot that will play their card.
     val pivotBot = eligible find { faction =>
-      game.isBot(faction)           &&
-      d6 < game.numCardsInLeaderBox &&
-      !currentEventIsCritical(faction)
+      game.isBot(faction)              &&
+      !currentEventIsCritical(faction) &&
+      botPivotalRoll(faction)
     }
 
     // Next find all eligible human factions

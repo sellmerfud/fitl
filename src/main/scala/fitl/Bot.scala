@@ -3127,7 +3127,7 @@ object Bot {
       def placeNext(toPlace: Pieces): Unit = if (toPlace.nonEmpty) {
         val piece = selectFriendlyToPlaceOrMove(toPlace, 1)
         val sp = if (piece.has(USBase))
-          pickSpacePlaceBases(spaces(Cities))
+          pickSpacePlaceBases(spaces(Cities) filter (_.canTakeBase))
         else
           pickSpacePlaceCubesSpecialForces(troops = piece.has(USTroops))(spaces(Cities))
 

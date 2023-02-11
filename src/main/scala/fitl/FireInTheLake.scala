@@ -2290,7 +2290,7 @@ object FireInTheLake {
     val coupCardChance = if (game.isFinalCampaign && game.isCoupRound)
       s"0.00%  (Final Coup! round)"
     else
-      f"${coupChance*100}%.2f%%  (${amountOf(cardsRemaining, "card")} remaining in ${ordinal(nextCardCampaign)} pile)"
+      f"${coupChance*100}%.2f%%  (${amountOf(cardsRemaining, "card")} remaining in ${ordinal(nextCardCampaign)} pile of ${game.cardsPerCampaign})"
 
     b += "Game Summary"
     b += separator()

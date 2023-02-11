@@ -97,7 +97,7 @@ object Card_090 extends EventCard(90, "Walt Rostow",
       (NVAGuerrillas_U, VCGuerrillas_U)
     else
       (VCGuerrillas_U, NVAGuerrillas_U)
-    val spacesWithArvn = game.spaces filter (_.pieces.has(ARVNPieces))
+    val spacesWithArvn = game.spaces filter (sp => sp.isProvince && sp.pieces.has(ARVNPieces))
 
     if (game.isHuman(faction)) {
       def availGuerrillas = game.availablePieces.only(Guerrillas)

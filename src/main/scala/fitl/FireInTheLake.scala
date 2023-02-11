@@ -2432,16 +2432,34 @@ object FireInTheLake {
     b.toList
   }
 
+
+  def canPlayPivotal(faction: Faction): Boolean = {
+    val pivotCard = eventDeck(faction.pivotCard)
+
+    game.pivotCardsAvailable(faction)       &&
+    game.sequence.eligibleThisTurn(faction) &&
+    pivotCard.eventEffective(faction)
+  }
+
+
+
   def eventSummary: Seq[String] = {
     val b = new ListBuffer[String]
     val pivotal = Faction.ALL.toList.sorted map {
       faction =>
       val pt = if (game.peaceTalks && faction == US) ", Peace Talks" else ""
-      if (game.pivotCardsAvailable(faction))
-        s"$faction (available$pt)"
+      if (game.pivotCardsAvailable(faction)) {
+        val playable = if (eventDeck(faction.pivotCard).eventEffective(faction))
+          ", playable"
+        else
+          ", not playable"
+        
+        s"$faction (available$pt$playable)"
+      }
       else
         s"$faction (not available)"
     }
+    
     b += "Active Events"
     b += separator()
     wrap("Capabilities: ", game.capabilities map (_.toString)) foreach (b += _)

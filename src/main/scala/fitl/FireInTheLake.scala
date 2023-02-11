@@ -2815,6 +2815,11 @@ object FireInTheLake {
     val name = "bot"
     val desc = s"The Bot acts on the current card"
   }
+  
+  object DiscardCmd extends Command {
+    val name = "discard"
+    val desc = s"Discard the current card.  No eligible factions."
+  }
 
   object CoupCmd extends Command {
     val name = "coup"
@@ -3671,17 +3676,25 @@ object FireInTheLake {
 
   // Resolve the action for the next eligible faction.
   @tailrec def processActorCommand(): Unit = {
-    val faction   = game.actingFaction.get
-    val upNext    = s"  ($faction is up next)"
-    val actorCmds = if (game.isBot(faction)) List(BotCmd) else List(ActCmd)
-    val opts      = orList((actorCmds map (_.name)) :+ "?")
     val extra     = if (game.inMonsoon) " [MONSOON]"
                     else if (game.executingPivotalEvent) " [PIVOTAL EVENT]"
                     else ""
+    //  The action faction will be None if there are no eligible factions
+    //  This could happend due to an event making factions ineligible
+    val (mainCmd, mainPrompt) = game.actingFaction match {
+      case None =>
+        (DiscardCmd, s">>> No eligible factions$extra <<<")
+        
+      case Some(faction) =>
+        (if (game.isBot(faction)) BotCmd else ActCmd, s">>> $faction turn$extra <<<")
+    }
+    
+    val actorCmds = List(mainCmd)
+    val opts      = orList((actorCmds map (_.name)) :+ "?")
     val prompt = {
       val promptLines = new ListBuffer[String]
       promptLines += ""
-      promptLines += s">>> $faction turn$extra <<<"
+      promptLines += mainPrompt
       promptLines += separator(char = '=')
       promptLines ++= sequenceList(eventDeck(game.currentCard), game.sequence)
       promptLines += s"($opts): "
@@ -3691,12 +3704,18 @@ object FireInTheLake {
     val (cmd, param) = askCommand(prompt, actorCmds ::: CommonCmds)
 
     cmd match {
+      case DiscardCmd =>
+        val card = eventDeck(game.currentCard).fullString
+        log(s"\n ${card} discarded with no effect.  There are no eligible factions.")
+      
       case ActCmd  =>
+        val faction = game.actingFaction.get
         logSummary(sequenceSummary, echo = false)
         Human.act()
         log(s"\nFinished with $faction turn")
 
       case BotCmd  =>
+        val faction = game.actingFaction.get
         logSummary(sequenceSummary, echo = false)
         Bot.act()
         log(s"\nFinished with $faction turn")

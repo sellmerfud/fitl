@@ -7,7 +7,7 @@ You can play as any faction and the bots will play the other three factions.
 
 ## Downloading the executable package
 
->> This software is in beta test so the executable package is not yet available.
+> This software is in beta test so the executable package is not yet available.
 
 ## Running the program
 
@@ -21,12 +21,12 @@ There are two scripts provided that will start the program.
 
 ## Using the program
 
->> To be done.
+> To be done.
 
 
 ## Entering commands
 
->> To be done.
+> To be done.
 
 
 ## License

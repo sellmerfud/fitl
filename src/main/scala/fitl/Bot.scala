@@ -5159,15 +5159,16 @@ object Bot {
               log("Add 3 times population value to Aid")
               increaseUsAid(sp.population * 3)
             }
-
-            //  Young turks always applies if in play
-            if (isRVNLeader(RVN_Leader_YoungTurks)) {
-              log(s"$RVN_Leader_YoungTurks leader effect triggers")
-              increasePatronage(2)
-            }
           }
           pause()
         }
+        
+        //  Young turks always applies if in play
+        if (isRVNLeader(RVN_Leader_YoungTurks)) {
+          log(s"$RVN_Leader_YoungTurks leader effect triggers")
+          increasePatronage(2)
+        }
+        
         logEndSA(ARVN, Govern)
         true
       }

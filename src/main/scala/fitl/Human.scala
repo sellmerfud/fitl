@@ -1582,11 +1582,6 @@ object Human {
                 increaseUsAid(sp.population * 3)
               }
 
-              //  Young turks always applies if in play
-              if (young_turks) {
-                log(s"$RVN_Leader_YoungTurks leader effect triggers")
-                increasePatronage(2)
-              }
             }
           }
           nextGovernAction()
@@ -1608,6 +1603,13 @@ object Human {
       logSAChoice(ARVN, Govern, notes)
 
     nextGovernAction()
+    
+    //  Young turks always applies if in play
+    if (young_turks) {
+      log(s"$RVN_Leader_YoungTurks leader effect triggers")
+      increasePatronage(2)
+    }
+    
   }
 
   // ARVN special activity

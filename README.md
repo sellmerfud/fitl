@@ -5,17 +5,7 @@ The Tru'ng Bots were designed by Bruce Mansfield.
 
 You can play as any faction and the bots will play the other three factions.
 
-## Running the program
-
-This is a Scala program, so you will need to have the Java JVM installed and make sure that
-the `java` command is on your `PATH`
-
-There are two scripts provided that will start the program.
-
-* `filt` -- As bash script used on Mac and Linux
-* `filt.cmd` -- A Windows command file
-
-## Downloading the package
+## Downloading the executable package
 
 You can download the zip file with the latest release (version 4.15) [here][1]
 
@@ -26,6 +16,16 @@ new *awakening-x.x* directory.
 
 
 [1]: https://www.dropbox.com/s/ruch47a2yq5e7wk/awakening-4.15.zip?dl=0
+
+## Running the program
+
+This is a Scala program, so you will need to have the Java JVM installed and make sure that
+the `java` command is on your `PATH`
+
+There are two scripts provided that will start the program.
+
+* `filt` -- As bash script used on Mac and Linux
+* `filt.cmd` -- A Windows command file
 
 ## Using the program
 

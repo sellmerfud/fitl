@@ -191,9 +191,18 @@ object SavedGame {
       "terror"     -> sp.terror
     )
   
+  
   private def spaceFromMap(data: Map[String, Any]): Space = {
+    //  Some space names have been fixed for typos etc.
+    //  This will allow us to load game files that were saved
+    //  with the obsolete names
+    def spaceNameFixup(name: String): String = name match {
+      case "Quang Tin Quang Ngai" => FireInTheLake.QuangTin_QuangNgai  // Added a hypen between the two Names
+      case other                  => other
+    }
+    
     Space(
-      asString(data("name")),
+      spaceNameFixup(asString(data("name"))),
       SpaceType(asString(data("spaceType"))),
       asInt(data("population")),
       asBoolean(data("coastal")),
@@ -242,7 +251,7 @@ object SavedGame {
       "history"                -> (gameState.history map gameSegmentToMap)
     )
   }
-  
+    
   private def gameFromVersion1(data: Map[String, Any]): GameState = {
     GameState(
       asString(data("scenarioName")),

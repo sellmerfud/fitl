@@ -261,7 +261,7 @@ object FireInTheLake {
   val NorthVietnam       = "North Vietnam"
   val QuangTri_ThuaThien = "Quang Tri-Thua Thien"
   val QuangNam           = "Quang Nam"
-  val QuangTin_QuangNgai = "Quang Tin Quang Ngai"
+  val QuangTin_QuangNgai = "Quang Tin-Quang Ngai"
   val BinhDinh           = "Binh Dinh"
   val Pleiku_Darlac      = "Pleiku-Darlac"
   val PhuBon_PhuYen      = "Phu Bon-Phu Yen"

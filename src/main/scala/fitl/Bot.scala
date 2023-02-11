@@ -2759,12 +2759,12 @@ object Bot {
     }
 
     def twoOrMoreSpacesWithSupportAndUndergroundGuerrillas: Boolean = {
-      val result = game.nonLocSpaces exists { sp =>
+      val result = game.nonLocSpaces count { sp =>
         sp.canHaveSupport           &&
         sp.support > Neutral        &&
         sp.pieces.has(UndergroundGuerrillas)
       }
-      logCheck(result, "2 or more spaces with Support and Underground Guerrillas?")
+      logCheck(result >= 2, "2 or more spaces with Support and Underground Guerrillas?")
     }
 
     // This condition is used by the US Bot to determine if it

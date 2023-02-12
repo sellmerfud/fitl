@@ -55,7 +55,7 @@ import fitl.Human
 
 object Card_001 extends EventCard(1, "Gulf of Tonkin",
   DualEvent,
-  List(US, ARVN, NVA, VC),
+  List(US, NVA, ARVN, VC),
   ListMap(US   -> (Critical    -> Unshaded),
           ARVN -> (NotExecuted -> Unshaded),
           NVA  -> (Performed   -> Shaded),

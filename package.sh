@@ -31,7 +31,7 @@ getYorN() {
     case "$response" in
       y*|Y*) return 0;;
       n*|N*) return 1;;
-      *) echo "Invalid resopnse"
+      *) echo "Invalid response"
     esac
   done
 }

@@ -2464,26 +2464,30 @@ object Bot {
     import params.airlift.allowedType
     // Can only move up to 4 ARVNTroop, Irregulars, Rangers
     val otherTypes = (ARVNTroops::Irregulars:::Rangers).toSet filter allowedType
-    val usTroops  = Set(USTroops) filter allowedType
-    val numOthers = 4 - movedPieces.allPieces.totalOf(otherTypes)
-    val moveTypes = if (numOthers < 4)
+    val usTroops   = (USTroops::Nil).toSet filter allowedType
+    val numOthers  = 4 - movedPieces.allPieces.totalOf(otherTypes)
+    val moveTypes  = if (numOthers < 4)
       otherTypes ++ usTroops
     else
       usTroops
 
-    val newcandidates = game.spaces filter { sp =>
+
+    def hasMoveablePieces(sp: Space) = movePiecesFromOneOrigin(sp.name, destName, US, AirLift, moveTypes, 1, params).nonEmpty
+
+
+    val newCandidates = game.spaces filter { sp =>
       sp.name != destName                 &&
       !moveDestinations.contains(sp.name) &&
       !currentOrigins(sp.name)            &&
-      sp.pieces.has(moveTypes)
+      hasMoveablePieces(sp) // sp.pieces.has(moveTypes)
     }
     val existingCandidates = spaces(currentOrigins) filter { sp =>
       sp.name != destName    &&
       !alreadyTried(sp.name) &&
-      sp.pieces.has(moveTypes)
+      hasMoveablePieces(sp) // sp.pieces.has(moveTypes)
     }
     val candidates = if (addNewOrigin)
-      newcandidates:::existingCandidates
+      newCandidates:::existingCandidates
     else
       existingCandidates
 

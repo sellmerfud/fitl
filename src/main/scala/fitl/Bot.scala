@@ -123,9 +123,9 @@ object Bot {
       moveDestinations = moveDestinations :+ destName
   }
 
-  //  Return the number of moveable pieces in the given space
-  def notYetMoved(space: Space, moveTypes: Set[PieceType]): Int = {
-    space.pieces.totalOf(moveTypes) - movedPieces(space.name).totalOf(moveTypes)    
+  //  Return the pieces in the given space that have not moved during the current turn
+  def notYetMoved(spaceName: String): Pieces = {
+    game.getSpace(spaceName).pieces - movedPieces(spaceName)
   }
 
   // Used to implement the Eligibility Tables
@@ -1064,9 +1064,7 @@ object Bot {
         //        with the most unmoved troops that is adjacent to the target space
         //        Link: https://boardgamegeek.com/thread/2969461/article/41151414#41151414
         
-        // adjacent.foldLeft(0) { (totalTroops, name) => totalTroops + notYetMoved(game.getSpace(name)) }
-        
-        val ajacentTroopNums = adjacent.map { name => notYetMoved(game.getSpace(name), Set(NVATroops)) }
+        val ajacentTroopNums = adjacent.map { name => notYetMoved(name).totalOf(NVATroops) }
         
         ajacentTroopNums.toList.sorted.lastOption getOrElse 0
     }
@@ -2300,11 +2298,17 @@ object Bot {
         movePriIf(nva,                  MP_GetNvaControlWithoutCoinForcesOrLaosCambodia)
       ).flatten
 
-    val candidates = origin.pieces.only(moveTypes) - mustKeep
-    if (candidates.isEmpty)
-      candidates  // No pieces were found that can move
+    //  Pieces that have already moved into this space cannot move again.
+    //  Use those as the first pieces to satisfy the 'must keep' pieces for the Trung
+    //  movement rules.
+    //  We then calculate the moveable pieces as any that have not yet moved minus any
+    //  that must be left behind along with the pieces that have already moved into the origin space.
+    val nonMovedMustKeep = mustKeep - movedPieces(originName)
+    val moveablePieces   = notYetMoved(originName).only(moveTypes) - nonMovedMustKeep
+    if (moveablePieces.isEmpty)
+      moveablePieces  // No pieces were found that can move
     else {
-      val params     = MoveParams(origin, dest, faction, action, moveTypes, maxPieces, candidates)
+      val params = MoveParams(origin, dest, faction, action, moveTypes, maxPieces, moveablePieces)
 
       logMoved(params, s"$faction is selecting pieces to move from $originName to $destName", "")
       nextMovePriority(movePriorities, params)
@@ -2367,15 +2371,18 @@ object Bot {
       case March if faction == NVA  => NVA_Bot.getNVAAdjacent(destName) filter params.march.canMarchFrom
       case March                    => getAdjacent(destName) filter params.march.canMarchFrom
     }
+    
+    def numMoveablePieces(sp: Space) = movePiecesFromOneOrigin(sp.name, destName, faction, action, moveTypes, 1000, params).total
+    
 
     val isOrigin = (sp: Space) => {
-      notYetMoved(sp, moveTypes) > 0 &&
+      numMoveablePieces(sp) > 0 &&
       !(moveDestinations.contains(sp.name) || previousOrigins(sp.name))
     }
     
     val candidates = spaces(candidateNames) filter isOrigin
     val priorities = List(
-      new HighestScore[Space]( "Most Moveable Pieces", sp => notYetMoved(sp, moveTypes))
+      new HighestScore[Space]( "Most Moveable Pieces", sp => numMoveablePieces(sp))
     )
 
     botDebug(s"\nSelect origin space with moveable: [${andList(moveTypes.toList)}]")
@@ -3002,8 +3009,8 @@ object Bot {
         new BooleanPriority[Space]("LoC", _.isLoC),  // LoCs have no population so pick them first.
         new LowestScore[Space]("Least Population", sp => if (sp.isLoC) NO_SCORE else sp.population)
       )
-      val numBases  = (sp: Space) => (sp.pieces - movedPieces(sp.name)).totalOf(USBase)
-      val numTroops = (sp: Space) => (sp.pieces - movedPieces(sp.name)).totalOf(USTroops)
+      val numBases  = (sp: Space) => notYetMoved(sp.name).totalOf(USBase)
+      val numTroops = (sp: Space) => notYetMoved(sp.name).totalOf(USTroops)
 
       def moveBases(): Unit = if (basesMoved < 2) {
         val originCandidates = game.spaces filter { sp =>

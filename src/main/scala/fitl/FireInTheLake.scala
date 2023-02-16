@@ -2509,6 +2509,15 @@ object FireInTheLake {
     b.toList
   }
 
+  def piecesSummary(heading: String, pieces: Pieces): Seq[String] = {
+    val b = new ListBuffer[String]
+    b += ""
+    b += heading
+    b += separator()
+    wrap("", pieces.descriptions) foreach (x => b += x)
+    b.toList
+  }
+  
   def spaceNames(spaces: Iterable[Space]): List[String] = (spaces map (_.name)).to(List).sorted(SpaceNameOrdering)
   def spaces(names: Iterable[String]): List[Space] = (names map game.getSpace).to(List).sortBy(_.name)(SpaceNameOrdering)
 
@@ -5027,8 +5036,14 @@ object FireInTheLake {
   def amountOf(num: Int, name: String, plural: Option[String] = None) = s"$num ${pluralize(num, name, plural)}"
   def amtPiece(num: Int, pieceType: PieceType) = amountOf(num, pieceType.singular, Some(pieceType.plural))
 
+  //  Show user the changes need to the physical game board when changing from
+  //  one game state another.  This happens when the user aborts in the middle of a turn,
+  //  and when the user rolls back to a previous save point.
   def displayGameStateDifferences(from: GameState, to: GameState): Unit = if (from != to) {
     val b = new ListBuffer[String]
+    var removedFrom = Set.empty[String]
+    var piecesMoved = false
+    var headingDisplayed = false
 
     def showMarker(marker: String, oldValue: Any, newValue: Any, displayValue: Any = null): Unit = {
       if (oldValue != newValue) {
@@ -5043,38 +5058,135 @@ object FireInTheLake {
       }
     }
 
-    def showPieces(label: String, oldPieces: Pieces, newPieces: Pieces): Unit = {
-      if (oldPieces != newPieces) {
-        b += ""
-        wrap(label, newPieces.descriptions) foreach (x => b += x)
+    def printBanner(banner: String): Unit = {
+      println()
+      println(separator(banner.length, '='))
+      println(banner)
+      println(separator(banner.length, '='))      
+    }
+    
+    def displayHeading(): Unit = if (!headingDisplayed) {
+      headingDisplayed = true;
+      printBanner("The following changes should be made to the game board")
+    }
+    
+
+    //  Firsgt show piece removal
+    //  -------------------------------------------------------------------------------
+    //  Show necessary removal of terror/sabotage markers and pieces from each space
+    for (fromSp <- from.spaces.sorted; name = fromSp.name) {
+      val toSp = to.getSpace(name)
+      
+      b.clear()
+      if (fromSp.terror > toSp.terror) {
+        val terrorName = if (fromSp.isLoC) "Sabotage marker" else "Terror marker"
+        b += s"Remove ${amountOf(fromSp.terror - toSp.terror, terrorName)}"        
+      }
+      
+      val toRemove = fromSp.pieces - toSp.pieces
+      if (toRemove.nonEmpty) {
+        wrap("Remove ", toRemove.descriptions) foreach (x => b += x)
+      }
+      
+      if (b.nonEmpty) {
+        removedFrom += name
+        piecesMoved = true
+        displayHeading()
+        println(s"\nRemove from ${name} to Available:")
+        println(separator())
+        b foreach println
+        pause()
       }
     }
 
-    val heading = "The following changes should be made to the game board"
-    println()
-    println(separator(length = heading.length, char = '='))
-    println("The following changes should be made to the game board")
-    println(separator(length = heading.length, char = '='))
+    //  -------------------------------------------------------------------------------
+    //  Show removal of pieces from the Casualties and Out of Play boxes
+    val casualtiesToRemove = from.casualties - to.casualties
+    if (casualtiesToRemove.nonEmpty) {
+      piecesMoved = true
+      displayHeading()
+      printSummary(piecesSummary("Remove from Casualties to Available", casualtiesToRemove))      
+    }
 
-    // Show changes to spaces first
-    for (fromSp <- from.spaces.sorted) {
-      val toSp = to.getSpace(fromSp.name)
+    val oopToRemove = from.outOfPlay - to.outOfPlay
+    if (oopToRemove.nonEmpty) {
+      piecesMoved = true
+      displayHeading()
+      printSummary(piecesSummary("Remove from Out of Play to Available", oopToRemove))
+    }
+    
+    if (casualtiesToRemove.nonEmpty || oopToRemove.nonEmpty)
+      pause()
+
+    //  Next show updates to each space
+    //  -------------------------------------------------------------------------------
+    //  Show changes to Support and Control markers, 
+    //  addition of terror/sabotage markers,
+    //  and addition of pieces to each space from available.
+    
+    for (fromSp <- from.spaces.sorted; name = fromSp.name) {
+      val toSp = to.getSpace(name)
       val terrorName = if (fromSp.isLoC) "Sabotage markers" else "Terror markers"
       b.clear()
+      
       showMarker("Support", fromSp.support, toSp.support)
       showMarker("Control",  fromSp.control, toSp.control)
-      showMarker(terrorName, fromSp.terror, toSp.terror)
-      showPieces("Pieces: ", fromSp.pieces, toSp.pieces)
+      if (toSp.terror > fromSp.terror) {
+        val terrorName = if (fromSp.isLoC) "Sabotage marker" else "Terror marker"
+        b += s"Add ${amountOf(toSp.terror - fromSp.terror, terrorName)}"        
+      }
 
+      val toAdd = toSp.pieces - fromSp.pieces
+      if (toAdd.nonEmpty) {
+        piecesMoved = true
+        wrap("Add ", toAdd.descriptions) foreach (x => b += x)
+      }
+      
       if (b.nonEmpty) {
-        println(s"\nChanges to ${fromSp.name}:")
+        displayHeading()
+        println(s"\nChanges to $name:")
         println(separator())
         b foreach println
       }
+      
+      if (b.nonEmpty || removedFrom(name)) {
+        printSummary(spaceSummary(name, prefix = "Current Status: "))
+        pause()
+      }
     }
 
+    //  -------------------------------------------------------------------------------
+    //  Show addition of pieces the Casualties and Out of Play boxes
+
+    val casualtiesToAdd = to.casualties - from.casualties
+    if (casualtiesToAdd.nonEmpty) {
+      piecesMoved = true
+      displayHeading()
+      printSummary(piecesSummary("Add to Casualties", casualtiesToAdd))
+    }
+
+    if (from.casualties != to.casualties)
+      printSummary(piecesSummary("Current Casualty Pieces", to.casualties))
+    
+    val oopToAdd = to.outOfPlay - from.outOfPlay
+    if (oopToAdd.nonEmpty) {
+      piecesMoved = true
+      displayHeading()
+      printSummary(piecesSummary("Add to Out of Play", oopToAdd))
+    }
+
+    if (from.outOfPlay != to.outOfPlay)
+      printSummary(piecesSummary("Current Out of Play Pieces", to.outOfPlay))
+
+    // If any pieces were moved then show the currently available pieces for reference
+    if (piecesMoved) {
+      printSummary(piecesSummary("Current Available Pieces", to.availablePieces))
+      pause()
+    }
+    
+    //  -------------------------------------------------------------------------------
+    // Show changes to various markers on the score track
     b.clear()
-    b += ""
     for (f <- List(ARVN, NVA, VC))
       if (game.trackResources(f))
         showMarker("ARVN resources", from.resources(f), to.resources(f))
@@ -5085,48 +5197,59 @@ object FireInTheLake {
     showMarker("US Aid", from.usAid, to.usAid)
     showMarker("Patronage", from.patronage, to.patronage)
     showMarker("Econ marker", from.econ, to.econ)
+    showMarker("Support + Avail US", from.usPoints, to.usPoints)
+    showMarker("COIN Control + Patronage", from.arvnPoints, to.arvnPoints)
+    showMarker("NVA Control + NVA Bases", from.nvaPoints, to.nvaPoints)
+    showMarker("Total Opposition + VC Bases", from.vcPoints, to.vcPoints)
+        
+    if (b.nonEmpty) {
+      displayHeading()
+      println(s"\nChanges to markers on the score track:")
+      println(separator())
+      b foreach println
+      pause()
+    }
+    
+    
+    b.clear()
+    if (from.sequence != to.sequence) {
+      for (f <- List(US, ARVN, NVA, VC)) {
+        if (from.sequence.location(f) != to.sequence.location(f))
+          b += s"Place $f cylinder in the ${to.sequence.location(f)}"
+      }
+      
+      displayHeading()
+      println(s"\nChanges to faction eligibility:")
+      println(separator())
+      b foreach println
+      pause()
+    }
+    
+    b.clear()
     showMarker("Trail marker", from.trail, to.trail)
     if (game.isBot(US))
       showMarker("US Policy", from.usPolicy, to.usPolicy)
-
-    showPieces("Casualties: ", from.casualties, to.casualties)
-    showPieces("Out of play: ", from.outOfPlay, to.outOfPlay)
-    showPieces("Available: ", from.availablePieces, to.availablePieces)
     showList("Capabilities: ", from.capabilities, to.capabilities)
     showList("Momentum: ", from.momentum, to.momentum)
     showList("RVN Leaders: ", from.rvnLeaders, to.rvnLeaders)
     if (from.rvnLeaderFlipped != to.rvnLeaderFlipped) {
       if (to.rvnLeaderFlipped)
-        println(s"Flip RVN Leader face down [${to.currentRvnLeader}]")
+        b += s"Flip RVN Leader face down [${to.currentRvnLeader}]"
       else
-        println(s"Flip RVN Leader face up [${to.currentRvnLeader}]")
+        b += s"Flip RVN Leader face up [${to.currentRvnLeader}]"
     }
 
-    // Score markers
-    if (from.usPoints   != to.usPoints ||
-        from.arvnPoints != to.arvnPoints ||
-        from.nvaPoints  != to.nvaPoints ||
-        from.vcPoints   != to.vcPoints) {
-          
-      b += ""
+
+    if (b.nonEmpty) {
+      displayHeading()
+      println(s"\nOther changes:")
+      println(separator())
+      b foreach println
+      pause()
     }
     
-    showMarker("Support + Avail US", from.usPoints, to.usPoints)
-    showMarker("COIN Control + Patronage", from.arvnPoints, to.arvnPoints)
-    showMarker("NVA Control + NVA Bases", from.nvaPoints, to.nvaPoints)
-    showMarker("Total Opposition + VC Bases", from.vcPoints, to.vcPoints)
-
-    if (from.sequence != to.sequence) {
-      b += ""
-      for {
-        f <- List(US, ARVN, NVA, VC)
-        if from.sequence.location(f) != to.sequence.location(f)
-      } {
-        b += s"Place $f cylinder in the ${to.sequence.location(f)}"
-      }
-    }
-
-    b foreach println
+    if (!headingDisplayed) 
+      printBanner("No changes need to be made to the game board")
   }
 
   // Find a match for the given string in the list of options.

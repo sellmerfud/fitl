@@ -5718,7 +5718,7 @@ object FireInTheLake {
 
       def showPage(pageNum: Int): Unit = {
         val saveChoices: List[(Int, (String, Seq[String]))] = pages(pageNum).toList map {
-          case GameSegment(save_number, card, summary) => save_number -> (s"Save point ${save_number + 1} [$card]", summary)
+          case GameSegment(save_number, card, summary) => save_number -> (s"Save point ${save_number} [$card]", summary)
         }
           val otherChoices: List[(Int, (String, Seq[String]))] = List(
             choice(pageNum > firstPage, PAGE_UP,   "Page up, show newer save points ", Seq.empty),
@@ -5726,6 +5726,9 @@ object FireInTheLake {
             choice(true,                CANCEL,    "Cancel, do not roll back ", Seq.empty)
           ).flatten
 
+        val current = game.history.last
+        println()
+        wrap(s"Current save point: ${current.save_number} [${current.card}] ", current.summary) foreach (l => println(l))
         println("\nRollback to the beginning of a previous save point.")
         println("The save points are displayed with the most recent first.")
 

@@ -797,14 +797,21 @@ object FireInTheLake {
     case _                                 => pieceType
   }
 
+  //  We return the requeed type first in the list followed by it's similar type,
   def similarTypes(pieceType: PieceType): Seq[PieceType] = pieceType match {
-    case Irregulars_A    | Irregulars_U    => Seq(Irregulars_A, Irregulars_U)
-    case Rangers_A       | Rangers_U       => Seq(Rangers_A, Rangers_U)
-    case VCGuerrillas_A  | VCGuerrillas_U  => Seq(VCGuerrillas_A, VCGuerrillas_U)
-    case NVAGuerrillas_A | NVAGuerrillas_U => Seq(NVAGuerrillas_A, NVAGuerrillas_U)
-    case NVABase         | NVATunnel       => NVABases
-    case VCBase          | VCTunnel        => VCBases
-    case _                                 => Seq(pieceType)
+    case Irregulars_U    => Seq(Irregulars_U, Irregulars_A)
+    case Irregulars_A    => Seq(Irregulars_A, Irregulars_U)
+    case Rangers_U       => Seq(Rangers_U, Rangers_A)
+    case Rangers_A       => Seq(Rangers_A, Rangers_U)
+    case VCGuerrillas_U  => Seq(VCGuerrillas_U, VCGuerrillas_A)
+    case VCGuerrillas_A  => Seq(VCGuerrillas_A, VCGuerrillas_U)
+    case NVAGuerrillas_U => Seq(NVAGuerrillas_U, NVAGuerrillas_A)
+    case NVAGuerrillas_A => Seq(NVAGuerrillas_A, NVAGuerrillas_U)
+    case NVABase         => List(NVABase, NVATunnel)
+    case NVATunnel       => List(NVATunnel, NVABase)
+    case VCBase          => List(VCBase, VCTunnel)
+    case VCTunnel        => List(VCTunnel, VCBase)
+    case _               => Seq(pieceType)
   }
   
   def owner(pieceType: PieceType): Faction = pieceType match {

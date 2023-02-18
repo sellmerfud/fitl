@@ -6630,13 +6630,13 @@ object FireInTheLake {
       val pieces = game.getSpace(name).pieces
       val other  = game.allPiecesOnMap - pieces
       val choices = List(
-        choice(canMove(AVAIL, name),    (AVAIL, name),     "Add pieces from Available"),
+        choice(canMove(AVAIL, name),    (AVAIL, name),     "Add  pieces from Available"),
+        choice(canMove(SPACE, name),    (SPACE, name),     "Get  pieces from another space"),
+        choice(canMove(CASUALTY, name), (CASUALTY, name),  "Add  pieces from Casualties"),
+        choice(canMove(OOPLAY, name),   (OOPLAY, name),    "Add  pieces from Out of Play"),
         choice(canMove(name, AVAIL),    (name, AVAIL),     "Remove pieces to Available"),
-        choice(canMove(SPACE, name),    (SPACE, name),     "Move pieces from another space"),
-        choice(canMove(name, SPACE),    (name, SPACE),     "Move pieces to another space"),
-        choice(canMove(CASUALTY, name), (CASUALTY, name),  "Add pieces from Casualties"),
+        choice(canMove(name, SPACE),    (name, SPACE),     "Send   pieces to another space"),
         choice(canMove(name, CASUALTY), (name, CASUALTY),  "Remove pieces to Casualties"),
-        choice(canMove(OOPLAY, name),   (OOPLAY, name),    "Add pieces from Out of Play"),
         choice(canMove(name, OOPLAY),   (name, OOPLAY),    "Remove pieces to Out of Play"),
         choice(true,                    (DONE, ""),        "Finished adjusting pieces")
       ).flatten

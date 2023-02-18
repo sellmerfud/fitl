@@ -881,7 +881,7 @@ object Bot {
                           else
                             (Pieces(), Pieces())
     val (deadPieces, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces - dead1stBase, num - dead1stBase.total)
-    sp.copy(pieces = sp.pieces - deadPieces)
+    sp.removePieces(deadPieces)
   }
 
   def assaultWouldRemoveBase(faction: Faction, cubeTreatment: CubeTreatment, vulnerableTunnels: Boolean)(sp: Space): Boolean = {

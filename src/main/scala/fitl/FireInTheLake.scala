@@ -4221,7 +4221,7 @@ object FireInTheLake {
       val sp      = game.getSpace(spaceName)
 
       assert(pieces.totalBases + sp.pieces.totalBases <= 2, s"Cannot place more than 2 bases in $spaceName")
-      game = game.updateSpace(sp.copy(pieces = sp.pieces + pieces))
+      game = game.updateSpace(sp.addPieces(pieces))
       for (desc <- pieces.descriptions)
         log(s"Place $desc from AVAILABLE into $spaceName")
     }
@@ -4236,7 +4236,7 @@ object FireInTheLake {
       val sp      = game.getSpace(spaceName)
 
       assert(pieces.totalBases + sp.pieces.totalBases <= 2, s"Cannot place more than 2 bases in $spaceName")
-      game = game.copy(outOfPlay = game.outOfPlay - pieces).updateSpace(sp.copy(pieces = sp.pieces + pieces))
+      game = game.copy(outOfPlay = game.outOfPlay - pieces).updateSpace(sp.addPieces(pieces))
       for (desc <- pieces.descriptions)
         log(s"Place $desc from OUT OF PLAY into $spaceName")
     }
@@ -4246,7 +4246,7 @@ object FireInTheLake {
     loggingControlChanges {
       val sp = game.getSpace(spaceName)
       assert(sp.pieces contains pieces, s"removeToAvailable() $spaceName does not contain all requested pieces: $pieces")
-      val updated = sp.copy(pieces = sp.pieces - pieces)
+      val updated = sp.removePieces(pieces)
       game = game.updateSpace(updated)
 
       reason foreach { msg =>
@@ -4262,7 +4262,7 @@ object FireInTheLake {
     loggingControlChanges {
       val sp = game.getSpace(spaceName)
       assert(sp.pieces contains pieces, s"removeToCasualties() $spaceName does not contain all requested pieces: $pieces")
-      val updated = sp.copy(pieces = sp.pieces - pieces)
+      val updated = sp.removePieces(pieces)
       // Pieces in casualties are always normalized.
       game = game.updateSpace(updated).copy(casualties = game.casualties + pieces.normalized)
 
@@ -4280,7 +4280,7 @@ object FireInTheLake {
     loggingControlChanges {
       val sp = game.getSpace(spaceName)
       assert(sp.pieces contains pieces, s"removeToOutOfPlay() $spaceName does not contain all requested pieces: $pieces")
-      val updated = sp.copy(pieces = sp.pieces - pieces)
+      val updated = sp.removePieces(pieces)
       // Pieces in casualties are always normalized.
       game = game.updateSpace(updated).copy(outOfPlay = game.outOfPlay + pieces.normalized)
 
@@ -4345,7 +4345,7 @@ object FireInTheLake {
       val casualties = game.casualties
       assert(casualties contains pieces, s"All requested pieces are not in casualties: $pieces")
       val sp = game.getSpace(name)
-      val newSp = sp.copy(pieces = sp.pieces +  pieces)
+      val newSp = sp.addPieces(pieces)
       game = game.copy(casualties = game.casualties - pieces.normalized).updateSpace(newSp)
 
       reason foreach { msg =>
@@ -4375,7 +4375,7 @@ object FireInTheLake {
   def moveOutOfPlayToMap(pieces: Pieces, name: String): Unit = if (pieces.total > 0) {
     loggingControlChanges {
       val sp    = game.getSpace(name)
-      val newSp = sp.copy(pieces = sp.pieces + pieces)
+      val newSp = sp.addPieces(pieces)
 
       assert(game.outOfPlay contains pieces, s"All requested pieces are not in out of play: $pieces")
       game = game.copy(outOfPlay = game.outOfPlay - pieces.normalized).updateSpace(newSp)
@@ -4433,7 +4433,7 @@ object FireInTheLake {
       rangers_A       = hidden.rangers_U,
       nvaGuerrillas_A = hidden.nvaGuerrillas_U,
       vcGuerrillas_A  = hidden.vcGuerrillas_U)
-    val updated = sp.copy(pieces = sp.pieces - hidden + visible)
+    val updated = sp.removePieces(hidden).addPieces(visible)
     game = game.updateSpace(updated)
 
     for (desc <- hidden.descriptions)
@@ -4452,7 +4452,7 @@ object FireInTheLake {
       rangers_U       = visible.rangers_A,
       nvaGuerrillas_U = visible.nvaGuerrillas_A,
       vcGuerrillas_U  = visible.vcGuerrillas_A)
-    val updated = sp.copy(pieces = sp.pieces - visible + hidden)
+    val updated = sp.removePieces(visible).addPieces(hidden)
     game = game.updateSpace(updated)
 
     for (desc <- visible.descriptions)
@@ -4468,8 +4468,8 @@ object FireInTheLake {
     val dstSpace = game.getSpace(dest)
     assert(srcSpace.pieces contains pieces, s"movePieces() $source does not contain all requested pieces: $pieces")
 
-    val updatedSrc = srcSpace.copy(pieces = srcSpace.pieces - pieces)
-    val updatedDst = dstSpace.copy(pieces = dstSpace.pieces + pieces)
+    val updatedSrc = srcSpace.removePieces(pieces)
+    val updatedDst = dstSpace.addPieces(pieces)
     loggingControlChanges {
       game = game.updateSpace(updatedSrc).updateSpace(updatedDst)
 
@@ -4491,7 +4491,7 @@ object FireInTheLake {
     }
 
     val newPieces = sp.pieces - bases + tunnels
-    game = game.updateSpace(sp.copy(pieces = newPieces))
+    game = game.updateSpace(sp.setPieces(newPieces))
     for (desc <- bases.descriptions)
       log(s"Add a tunnel marker to ${desc} in $spaceName")
   }
@@ -4508,7 +4508,7 @@ object FireInTheLake {
     }
 
     val newPieces = sp.pieces - tunnels + bases
-    game = game.updateSpace(sp.copy(pieces = newPieces))
+    game = game.updateSpace(sp.setPieces(newPieces))
     for (desc <- tunnels.descriptions)
       log(s"Remove a tunnel marker from ${desc} in $spaceName")
   }
@@ -4676,7 +4676,7 @@ object FireInTheLake {
         println()
         for ((name, pieces) <- removed) {
           val sp = game.getSpace(name)
-          val updated = sp.copy(pieces = sp.pieces - pieces)
+          val updated = sp.removePieces(pieces)
           game = game.updateSpace(updated)
           log(s"Remove ${andList(pieces.descriptions)} from $name to AVAILABLE")
         }

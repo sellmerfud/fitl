@@ -134,7 +134,7 @@ object Card_053 extends EventCard(53, "Sappers",
       else
         arvn map { sp => 
           if (sp.name == name)
-            sp.copy(pieces = sp.pieces - Pieces(arvnBases = 1))
+            sp.removePieces(Pieces(arvnBases = 1))
           else
             sp
         }

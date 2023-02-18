@@ -745,8 +745,6 @@ object FireInTheLake {
   val NVAGuerrillas       = List(NVAGuerrillas_A, NVAGuerrillas_U)
   val VCGuerrillas        = List(VCGuerrillas_A, VCGuerrillas_U)
   val ARVNCubes           = List(ARVNPolice, ARVNTroops)
-  val FlippablePieces     = List(Irregulars_U, Irregulars_A, Rangers_U, Rangers_A,
-                                                  NVAGuerrillas_U, NVAGuerrillas_A, VCGuerrillas_U, VCGuerrillas_A)
   val SpecialForces       = Rangers:::Irregulars
   val Guerrillas          = List(NVAGuerrillas_A, VCGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_U)
   val ActiveGuerrillas    = List(NVAGuerrillas_A, VCGuerrillas_A)
@@ -758,7 +756,7 @@ object FireInTheLake {
   val CoinTroops          = List(USTroops, ARVNTroops)
   val NVAForces           = List(NVATroops, NVAGuerrillas_A, NVAGuerrillas_U)
   val InsurgentForces     = List(NVATroops, NVAGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_A, VCGuerrillas_U)
-
+  
   val factionPieces: Map[Faction, List[PieceType]] = Map(
     US   -> USPieces,
     ARVN -> ARVNPieces,
@@ -767,12 +765,13 @@ object FireInTheLake {
 
   val BasePieces = List(USBase, ARVNBase, NVABase, NVATunnel, VCBase, VCTunnel)
   val AllPieceTypes = USPieces:::ARVNPieces:::NVAPieces:::VCPieces
+  val NormalizedPieceTypes = (AllPieceTypes map normalizedType).distinct
+
 
   val Forces = AllPieceTypes filterNot isBase
 
   def isBase(pieceType: PieceType)        = BasePieces contains pieceType
   def isForce(pieceType: PieceType)       = Forces contains pieceType
-  def isFlippable(pieceType: PieceType)   = FlippablePieces contains pieceType
 
   def areEnemies(us: Faction, them: Faction) = isCoin(us) != isCoin(them)
 
@@ -789,33 +788,31 @@ object FireInTheLake {
   //  Normalize active types to their undeground counterparts,
   //  and tunneled bases to their non-tunnel counterparts
   def normalizedType(pieceType: PieceType): PieceType = pieceType match {
-    case Irregulars_A | Irregulars_U       => Irregulars_U
-    case Rangers_A | Rangers_U             => Rangers_U
-    case VCGuerrillas_A | VCGuerrillas_U   => VCGuerrillas_U
+    case Irregulars_A    | Irregulars_U    => Irregulars_U
+    case Rangers_A       | Rangers_U       => Rangers_U
+    case VCGuerrillas_A  | VCGuerrillas_U  => VCGuerrillas_U
     case NVAGuerrillas_A | NVAGuerrillas_U => NVAGuerrillas_U
-    case VCTunnel | VCBase                 => VCBase
-    case NVATunnel | NVABase               => NVABase
+    case VCTunnel        | VCBase          => VCBase
+    case NVATunnel       | NVABase         => NVABase
     case _                                 => pieceType
   }
 
-  def simiarTypes(pieceType: PieceType): Seq[PieceType] = pieceType match {
-    case Irregulars_A | Irregulars_U       => Seq(Irregulars_A, Irregulars_U)
-    case Rangers_A | Rangers_U             => Seq(Rangers_A, Rangers_U)
-    case VCGuerrillas_A | VCGuerrillas_U   => Seq(VCGuerrillas_A, VCGuerrillas_U)
+  def similarTypes(pieceType: PieceType): Seq[PieceType] = pieceType match {
+    case Irregulars_A    | Irregulars_U    => Seq(Irregulars_A, Irregulars_U)
+    case Rangers_A       | Rangers_U       => Seq(Rangers_A, Rangers_U)
+    case VCGuerrillas_A  | VCGuerrillas_U  => Seq(VCGuerrillas_A, VCGuerrillas_U)
     case NVAGuerrillas_A | NVAGuerrillas_U => Seq(NVAGuerrillas_A, NVAGuerrillas_U)
-    case NVABase | NVATunnel               => NVABases
-    case VCBase | VCTunnel                 => VCBases
+    case NVABase         | NVATunnel       => NVABases
+    case VCBase          | VCTunnel        => VCBases
     case _                                 => Seq(pieceType)
   }
-
-
+  
   def owner(pieceType: PieceType): Faction = pieceType match {
     case t if USPieces contains t   => US
     case t if ARVNPieces contains t => ARVN
     case t if NVAPieces contains t  => NVA
     case _                          => VC
   }
-
 
   def getInsurgentCounterPart(pieceType: PieceType): PieceType = {
     pieceType match {
@@ -900,7 +897,12 @@ object FireInTheLake {
 
     // Return true if this Pieces instance has at least one of any of the given piece types
     def has(pts: Iterable[PieceType]): Boolean = totalOf(pts) > 0
-
+    
+    //  Return true if this Pieces instance has the requested piece type
+    //  treating active/underground guerrillas and special forces as the same
+    //  and treating Insurgent Bases/Tunneled Bases as the same.
+    def hasSimilar(pieceType: PieceType): Boolean = has(similarTypes(pieceType))
+        
     def totalOf(pieceType: PieceType): Int = pieceType match {
       case USTroops        => usTroops
       case Irregulars_U    => irregulars_U
@@ -4634,7 +4636,7 @@ object FireInTheLake {
 
   // Ask the user to remove the given number of pieces of the requested type from the map.
   def voluntaryRemoval(num: Int, pieceType: PieceType, prohibited: Set[String] = Set.empty): Unit = if (num > 0) {
-    val types = simiarTypes(pieceType)  // Account for Active/Underground if necessary
+    val types = similarTypes(pieceType)  // Account for Active/Underground if necessary
     val numOnMap = game.totalOnMap(_.pieces.totalOf(types))
     var removed = Map.empty[String, Pieces].withDefaultValue(Pieces())
     def candidates = spaceNames(
@@ -6446,62 +6448,199 @@ object FireInTheLake {
     }
   }
 
-
+  //  Adjust pieces in a given space
   def adjustPieces(name: String): Unit = {
-    val origPieces = game.getSpace(name).pieces
-    def nextAdjustment(): Unit = {
-      val sp        = game.getSpace(name)
-      val forbidden: Set[PieceType] = if (sp.isLoC) (CoinBases:::InsurgentBases).toSet else Set.empty
-      val pieces    = sp.pieces.except(forbidden)
-      val available = game.availablePieces.except(forbidden)
-      val pieceChoices: List[(Option[PieceType], String)] = AllPieceTypes flatMap { t =>
-        if (!forbidden(t) &&
-           pieces.has(t) || available.has(normalizedType(t)) &&
-           (!isBase(t) || pieces.only(BasePieces).except(t).total < 2))
-          Some(Some(t) -> t.plural)
+    val AVAIL    = "Available"
+    val CASUALTY = "Casualties"
+    val OOPLAY   = "Out of Play"
+    val SPACE    = "Space"
+    val DONE     = "Done"
+    
+    def isBox(location: String) = List(AVAIL, CASUALTY, OOPLAY) contains location
+    
+    def validDestTypes(dest: String): List[PieceType] = dest match {
+      case AVAIL                          => AllPieceTypes
+      case CASUALTY                       => USPieces 
+      case OOPLAY                         => USPieces ::: ARVNPieces
+      case _ if game.getSpace(dest).isLoC => Forces
+      case NorthVietnam                   => NVAPieces
+      case _                              => AllPieceTypes
+    }
+    
+    def canMovePiece(pieceType: PieceType, sourcePieces: Pieces, destPieces: Pieces, destIsBox: Boolean) = {
+      (sourcePieces hasSimilar pieceType) &&
+      (destIsBox || !isBase(pieceType) || destPieces.totalOf(BasePieces) < 2)
+    }
+    
+    def getPieces(location: String): Pieces = location match {
+        case AVAIL    => game.availablePieces
+        case CASUALTY => game.casualties
+        case OOPLAY   => game.outOfPlay
+        case _        => game.getSpace(location).pieces
+    }
+    
+    def setPieces(location: String, pieces: Pieces): Unit = location match {
+        case AVAIL    => // Available pieces are not stored in game state
+        case CASUALTY => game = game.copy(casualties = pieces)
+        case OOPLAY   => game = game.copy(outOfPlay = pieces)
+        case _        => game.withSpace(location) { sp => game = game.updateSpace(sp.setPieces(pieces)) }
+    }
+    
+    def canMove(source: String, dest: String): Boolean = {
+
+      if (source == SPACE) {
+        val destPieces   = getPieces(dest)
+        val validTypes   = validDestTypes(dest)
+        val otherSpaces  = SpaceNames filterNot (_ == dest)
+        
+        otherSpaces exists { sourceName =>
+          val sourcePieces = getPieces(sourceName)
+          validDestTypes(dest) exists { pieceType => canMovePiece(pieceType, sourcePieces, destPieces, isBox(dest)) }
+        }
+      }
+      else if (dest == SPACE) {
+        val sourcePieces = getPieces(source)
+        val otherSpaces  = SpaceNames filterNot (_ == source)
+        
+        otherSpaces exists { destName =>
+          val destPieces = getPieces(destName)
+          validDestTypes(destName) exists { pieceType => canMovePiece(pieceType, sourcePieces, destPieces, isBox(destName)) }
+        }
+      }
+      else {
+        val sourcePieces = getPieces(source)
+        val destPieces   = getPieces(dest)
+        val validTypes   = validDestTypes(dest)
+        validDestTypes(dest) exists { pieceType => canMovePiece(pieceType, sourcePieces, destPieces, isBox(dest)) }
+      }
+    }
+    
+    
+            
+    def movePieces(sourceName: String, destName: String): Unit = {
+      // //  Prompt for other space if necessary
+      val (source, dest) = (sourceName, destName) match {
+        case (_, SPACE) =>
+          val candidates = (SpaceNames filterNot (_ == sourceName)) filter (d => canMove(sourceName, d))
+          val dst = askCandidateOrBlank(s"Move pieces from $sourceName to which space: ", candidates, allowAbort = false) getOrElse ""
+            (sourceName, dst)
+          
+        case (SPACE, _) =>
+          val candidates = (SpaceNames filterNot (_ == destName)) filter (s => canMove(s, destName))
+          val src = askCandidateOrBlank(s"Move pieces to $destName from which space: ", candidates, allowAbort = false) getOrElse ""
+          (src, destName)
+          
+        case _ =>
+          (sourceName, destName)
+      }
+      
+      // If use enters blank then we abandon this move operation 
+      if (source != "" && dest != "") {
+        val origSourcePieces = getPieces(source)
+        val origDestPieces   = getPieces(dest)
+        val allowedDestTypes = validDestTypes(dest)
+      
+        def normalizedForDest(pieces: Pieces): Pieces = if (isBox(dest))
+           pieces.normalized
         else
-          None
-      }
-      val choices = pieceChoices :+ (None -> s"Finished adjusting pieces in ${name}")
-
-
-      println(s"\nPieces in $name")
-      println(separator())
-      wrap("", pieces.descriptions) foreach println
-
-      println(s"\nAvailable Pieces")
-      println(separator())
-      wrap("", game.availablePieces.descriptions) foreach println
-
-      askMenu(choices, "\nSelect type of piece to adjust:", allowAbort = false).head foreach {
-        pieceType =>
-          val origNum = pieces.totalOf(pieceType)
-          val maxNum  = {
-            val n = available.totalOf(normalizedType(pieceType)) + pieces.totalOf(pieceType)
-            if (isBase(pieceType)) {
-              val maxBase = 2 - pieces.only(BasePieces).except(pieceType).total
-               n min maxBase
-            }
-            else n
+          pieces
+      
+        def nextMove(sourcePieces: Pieces, destPieces: Pieces): (Pieces, Pieces) = {
+          val pieceChoices: List[(Option[PieceType], String)] = allowedDestTypes flatMap { pieceType =>
+            if (canMovePiece(pieceType, sourcePieces, destPieces, isBox(dest)))
+              Some(Some(pieceType) -> pieceType.plural)
+            else
+              None
           }
-
-          adjustInt(pieceType.plural, origNum, 0 to maxNum) foreach { value =>
-            if (value != origNum) {
-              loggingControlChanges {
-                game = game.updateSpace(sp.setPieces(pieces.set(value, pieceType)))
-                log(spaceAdjustmentDesc(name, pieceType.plural, origNum, value))
+          val choices = pieceChoices :+ (None -> s"Finished moving pieces from $source to $dest")
+      
+          println(s"\nPieces in $source")
+          println(separator())
+          wrap("", sourcePieces.descriptions) foreach (l => println(l))
+        
+          println(s"\nPieces in $dest")
+          println(separator())
+          wrap("", destPieces.descriptions) foreach (l => println(l))
+        
+          val typePrompt = s"\nSelect type of piece to move from $source to $dest:"
+          askMenu(choices, typePrompt, allowAbort = false).head match {
+            case Some(pieceType) =>
+              val maxNum  = {
+                val numAtSource = sourcePieces.totalOf(similarTypes(pieceType))
+                if (isBox(dest) || !isBase(pieceType))
+                  numAtSource
+                else {
+                   numAtSource min (2 - destPieces.totalOf(BasePieces))
+                }
               }
-            }
+
+              val numPrompt  = s"Move how many ${pieceType.plural} into $dest"
+              val movePrompt = s"Selecting ${pieceType.plural} to move from $source to $dest"
+              val num        = askInt(numPrompt, 0, maxNum, allowAbort = false)
+              if (num > 0) {
+                val movedOut   = askPieces(sourcePieces, num, similarTypes(pieceType), Some(movePrompt), allowAbort = false)
+                val movedIn    = normalizedForDest(Pieces().set(movedOut.total, pieceType))
+                nextMove(sourcePieces - movedOut, destPieces + movedIn)              
+              }
+              else
+                nextMove(sourcePieces, destPieces)              
+
+            case None =>
+              (sourcePieces, destPieces)        
           }
-          nextAdjustment()
+        }
+      
+        val (sourcePieces, destPieces) = nextMove(origSourcePieces, origDestPieces)
+        if (origSourcePieces != sourcePieces) {
+          loggingControlChanges {
+            setPieces(dest, destPieces)
+            setPieces(source, sourcePieces)
+            
+            // piecesOut can be different than pieces in for example when
+            // moving underground guerrilas from a source as active guerrillas in the
+            // destination
+            val piecesOut = origSourcePieces - sourcePieces
+            val piecesIn  = destPieces - origDestPieces
+            log(s"\nAdjustment: Move pieces from $source to $dest")
+            log(separator())
+            if (piecesOut == piecesIn)
+              wrap("Pieces: ", piecesIn.descriptions) foreach (l => log(l))
+            else {
+              wrap("Pieces out: ", piecesOut.descriptions) foreach (l => log(l))
+              wrap("Pieces in : ", piecesIn.descriptions) foreach (l => log(l))
+            }
+            saveGameState(s"Adjusted pieces from $source to $dest")
+          }
+        }
       }
     }
-
-    loggingControlChanges {
-      nextAdjustment()
+    
+    //  We allow the user to add pieces from the Available box, Casualties box, Out of Play Box
+    //  We allow the user to remove pieces to the Available box, Casualties box, Out of Play Box
+    //  We allow the user to move pieces in from another space
+    //  We allow the user to move pieces out to another space
+    def nextAdjustment(): Unit = {
+      val pieces = game.getSpace(name).pieces
+      val other  = game.allPiecesOnMap - pieces
+      val choices = List(
+        choice(canMove(AVAIL, name),    (AVAIL, name),     "Add pieces from Available"),
+        choice(canMove(name, AVAIL),    (name, AVAIL),     "Remove pieces to Available"),
+        choice(canMove(SPACE, name),    (SPACE, name),     "Move pieces from another space"),
+        choice(canMove(name, SPACE),    (name, SPACE),     "Move pieces to another space"),
+        choice(canMove(CASUALTY, name), (CASUALTY, name),  "Add pieces from Casualties"),
+        choice(canMove(name, CASUALTY), (name, CASUALTY),  "Remove pieces to Casualties"),
+        choice(canMove(OOPLAY, name),   (OOPLAY, name),    "Add pieces from Out of Play"),
+        choice(canMove(name, OOPLAY),   (name, OOPLAY),    "Remove pieces to Out of Play"),
+        choice(true,                    (DONE, ""),        "Finished adjusting pieces")
+      ).flatten
+      
+      askMenu(choices, s"\nAdjust pieces in $name:", allowAbort = false).head match {
+        case (DONE, _)      => 
+        case (source, dest) => movePieces(source, dest); nextAdjustment()
+      }
     }
-
-    if (game.getSpace(name).pieces != origPieces)
-      saveGameState(s"Adjusted pieces in $name")
+    
+    nextAdjustment()
   }
 }
+

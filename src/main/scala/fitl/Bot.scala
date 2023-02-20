@@ -7808,7 +7808,10 @@ object Bot {
             ARVN_Bot.armoredCavalryAssault()
             TrungComplete(didSpecial)
 
-          case None => TrungNoOp
+          case None if didSpecial =>
+            TrungComplete(didSpecial)
+          case None =>
+            TrungNoOp
         }
       }
     }

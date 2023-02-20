@@ -7566,8 +7566,9 @@ object Bot {
           flipCard(params, didSpecial)
         else
           US_Bot.patrolOp(params) match {
-            case Some(_) => TrungComplete(didSpecial)
-            case None    => TrungNoOp
+            case Some(_)            => TrungComplete(didSpecial)
+            case None if didSpecial => TrungComplete(true)
+            case None               => TrungNoOp
           }
       }
     }

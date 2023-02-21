@@ -756,6 +756,7 @@ object FireInTheLake {
   val CoinTroops          = List(USTroops, ARVNTroops)
   val NVAForces           = List(NVATroops, NVAGuerrillas_A, NVAGuerrillas_U)
   val InsurgentForces     = List(NVATroops, NVAGuerrillas_A, NVAGuerrillas_U, VCGuerrillas_A, VCGuerrillas_U)
+  val FlippablePieces     = Guerrillas ::: SpecialForces
   
   val factionPieces: Map[Faction, List[PieceType]] = Map(
     US   -> USPieces,
@@ -819,6 +820,20 @@ object FireInTheLake {
     case t if ARVNPieces contains t => ARVN
     case t if NVAPieces contains t  => NVA
     case _                          => VC
+  }
+
+  def getFlippedPieceType(pieceType: PieceType): PieceType = {
+    pieceType match {
+      case NVAGuerrillas_U => NVAGuerrillas_A
+      case NVAGuerrillas_A => NVAGuerrillas_U
+      case VCGuerrillas_U  => VCGuerrillas_A
+      case VCGuerrillas_A  => VCGuerrillas_U
+      case Irregulars_U    => Irregulars_A
+      case Irregulars_A    => Irregulars_U
+      case Rangers_U       => Rangers_A
+      case Rangers_A       => Rangers_U
+      case _ => throw new IllegalArgumentException(s"getFlippedPieceType called with $pieceType")
+    }
   }
 
   def getInsurgentCounterPart(pieceType: PieceType): PieceType = {
@@ -6470,6 +6485,8 @@ object FireInTheLake {
     val CASUALTY = "Casualties"
     val OOPLAY   = "Out of Play"
     val SPACE    = "Space"
+    val FLIP     = "Flip"
+    val TUNNEL   = "Tunnel"
     val DONE     = "Done"
     
     def isBox(location: String) = List(AVAIL, CASUALTY, OOPLAY) contains location
@@ -6578,7 +6595,7 @@ object FireInTheLake {
           println(separator())
           wrap("", destPieces.descriptions) foreach (l => println(l))
         
-          val typePrompt = s"\nSelect type of piece to move from $source to $dest:"
+          val typePrompt = s"\nMoving pieces from $source to $dest\nSelect type of piece to place in $dest:"
           askMenu(choices, typePrompt, allowAbort = false).head match {
             case Some(pieceType) =>
               val maxNum  = {
@@ -6599,10 +6616,10 @@ object FireInTheLake {
                 nextMove(sourcePieces - movedOut, destPieces + movedIn)              
               }
               else
-                nextMove(sourcePieces, destPieces)              
+                nextMove(sourcePieces, destPieces)
 
             case None =>
-              (sourcePieces, destPieces)        
+              (sourcePieces, destPieces)
           }
         }
       
@@ -6631,27 +6648,125 @@ object FireInTheLake {
       }
     }
     
+    def flipPieces(): Unit = {
+      def nextFlip(pieces: Pieces): Pieces = {
+        val pieceChoices: List[(Option[PieceType], String)] = FlippablePieces filter pieces.has map { pieceType =>
+            Some(pieceType) -> pieceType.plural
+        }
+        val choices = pieceChoices :+ (None -> s"Finished flipping pieces in $name")
+  
+        println(s"\nPieces in $name")
+        println(separator())
+        wrap("", pieces.descriptions) foreach (l => println(l))
+    
+        val typePrompt = s"\nSelect type of piece to flip:"
+        askMenu(choices, typePrompt, allowAbort = false).head match {
+          case Some(pieceType) =>
+            val maxNum     = pieces.totalOf(pieceType)
+            val numPrompt  = s"Flip how many ${pieceType.plural}"
+            val num        = askInt(numPrompt, 0, maxNum, allowAbort = false)
+            val updated    = if (num > 0)
+              pieces.remove(num, pieceType).add(num, getFlippedPieceType(pieceType))
+            else
+              pieces
+            nextFlip(updated)
+
+          case None =>
+            pieces
+        }
+      }
+      
+      val origPieces = getPieces(name)
+      val pieces     = nextFlip(origPieces)
+      
+      if (pieces != origPieces) {
+        loggingControlChanges {
+          setPieces(name, pieces)
+          
+          val flipped = Pieces.fromTypes((origPieces - pieces).explode(FlippablePieces))
+          log(s"\nAdjustment: Flip pieces in $name")
+          log(separator())
+          wrap("Flip: ", flipped.descriptions) foreach (l => log(l))
+          saveGameState(s"Adjustment: Flipped pieces in $name")
+        }
+      }
+    }
+    
+    def tunnelBases(): Unit = {
+      val swappedType: Map[PieceType, PieceType] = Map(NVABase -> NVATunnel, NVATunnel -> NVABase, VCBase -> VCTunnel, VCTunnel -> VCBase)
+      def nextSwap(pieces: Pieces): Pieces = {
+        val pieceChoices: List[(Option[PieceType], String)] = InsurgentBases filter pieces.has map { pieceType =>
+            val desc = if (InsurgentTunnels contains pieceType)
+              "Remove tunnel marker"
+            else
+              "Add tunnel marker"
+            Some(pieceType) -> s"${pieceType.singular}: ${desc}"
+        }
+        val choices = pieceChoices :+ (None -> s"Finished adjusting tunnel markers in $name")
+  
+        println(s"\nPieces in $name")
+        println(separator())
+        wrap("", pieces.descriptions) foreach (l => println(l))
+    
+        val typePrompt = s"\nSelect one:"
+        askMenu(choices, typePrompt, allowAbort = false).head match {
+          case Some(pieceType) =>
+              nextSwap(pieces.remove(1, pieceType).add(1, swappedType(pieceType)))
+
+          case None =>
+            pieces
+        }
+      }
+      
+      val origPieces = getPieces(name)
+      val pieces     = nextSwap(origPieces)
+      
+      if (pieces != origPieces) {
+        loggingControlChanges {
+          setPieces(name, pieces)
+          
+          val swapped = (origPieces - pieces).explode(InsurgentBases)
+          val descriptions = swapped map { pieceType =>
+            if (InsurgentTunnels contains pieceType)
+              s"Remove tunnel marker from ${pieceType.singular}"
+            else
+              s"Add tunnel marker to ${pieceType.singular}"
+          }
+          log(s"\nAdjustment: Tunnel markers in $name")
+          log(separator())
+          wrap("", descriptions) foreach (l => log(l))
+          saveGameState(s"Adjustment: Tunnel markers in $name")
+        }
+      }
+    }
+    
     //  We allow the user to add pieces from the Available box, Casualties box, Out of Play Box
     //  We allow the user to remove pieces to the Available box, Casualties box, Out of Play Box
     //  We allow the user to move pieces in from another space
     //  We allow the user to move pieces out to another space
     def nextAdjustment(): Unit = {
-      val pieces = game.getSpace(name).pieces
-      val other  = game.allPiecesOnMap - pieces
-      val choices = List(
-        choice(canMove(AVAIL, name),    (AVAIL, name),     "Add  pieces from Available"),
-        choice(canMove(SPACE, name),    (SPACE, name),     "Get  pieces from another space"),
-        choice(canMove(CASUALTY, name), (CASUALTY, name),  "Add  pieces from Casualties"),
-        choice(canMove(OOPLAY, name),   (OOPLAY, name),    "Add  pieces from Out of Play"),
+      val pieces    = game.getSpace(name).pieces
+      val other     = game.allPiecesOnMap - pieces
+      val canFlip   = pieces.has(FlippablePieces)
+      val canTunnel = pieces.has(InsurgentBases)
+      val choices   = List(
+        choice(canMove(AVAIL, name),    (AVAIL, name),     "Add    pieces from Available"),
         choice(canMove(name, AVAIL),    (name, AVAIL),     "Remove pieces to Available"),
+        choice(canMove(SPACE, name),    (SPACE, name),     "Get    pieces from another space"),
         choice(canMove(name, SPACE),    (name, SPACE),     "Send   pieces to another space"),
+        choice(canMove(CASUALTY, name), (CASUALTY, name),  "Add    pieces from Casualties"),
         choice(canMove(name, CASUALTY), (name, CASUALTY),  "Remove pieces to Casualties"),
+        choice(canMove(OOPLAY, name),   (OOPLAY, name),    "Add    pieces from Out of Play"),
         choice(canMove(name, OOPLAY),   (name, OOPLAY),    "Remove pieces to Out of Play"),
+        choice(canFlip,                 (FLIP, ""),       s"Flip   pieces in $name"),
+        choice(canTunnel,               (TUNNEL, ""),     s"Adjust tunnel markers in $name"),
         choice(true,                    (DONE, ""),        "Finished adjusting pieces")
       ).flatten
       
       askMenu(choices, s"\nAdjust pieces in $name:", allowAbort = false).head match {
-        case (DONE, _)      => 
+        case (DONE, _)      =>
+        case (FLIP, _)      => flipPieces();             nextAdjustment()
+        case (TUNNEL, _)    => tunnelBases();            nextAdjustment()
         case (source, dest) => movePieces(source, dest); nextAdjustment()
       }
     }

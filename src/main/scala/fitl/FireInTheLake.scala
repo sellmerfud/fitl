@@ -4983,9 +4983,14 @@ object FireInTheLake {
     b.toList
   }
 
-  def pause(): Unit = {
-    if (!loggingSuspended)
-      readLine("\n>>>>> [ Press Enter to continue... ] <<<<<")
+  //  Return true if the user enters skip.
+  //  This is a hidden feature to skip future pauses when showing
+  //  game state differences.
+  def pause(): Boolean = {
+    if (loggingSuspended)
+      false
+    else
+      readLine("\n>>>>> [ Press Enter to continue... ] <<<<<") == "skip"
   }
 
   def pauseIfBot(faction: Faction): Unit = if (game.isBot(faction)) pause()
@@ -5053,6 +5058,10 @@ object FireInTheLake {
     var removedFrom = Set.empty[String]
     var piecesMoved = false
     var headingDisplayed = false
+    var skipPause = false
+    
+    def _pause(): Unit = if (!skipPause)
+      skipPause = pause()
 
     def showMarker(marker: String, oldValue: Any, newValue: Any, displayValue: Any = null): Unit = {
       if (oldValue != newValue) {
@@ -5104,7 +5113,7 @@ object FireInTheLake {
         println(s"\nRemove from ${name} to Available:")
         println(separator())
         b foreach println
-        pause()
+        _pause()
       }
     }
 
@@ -5125,7 +5134,7 @@ object FireInTheLake {
     }
     
     if (casualtiesToRemove.nonEmpty || oopToRemove.nonEmpty)
-      pause()
+      _pause()
 
     //  Next show updates to each space
     //  -------------------------------------------------------------------------------
@@ -5160,7 +5169,7 @@ object FireInTheLake {
       
       if (b.nonEmpty || removedFrom(name)) {
         printSummary(spaceSummary(name, prefix = "Current Status: "))
-        pause()
+        _pause()
       }
     }
 
@@ -5190,7 +5199,7 @@ object FireInTheLake {
     // If any pieces were moved then show the currently available pieces for reference
     if (piecesMoved) {
       printSummary(piecesSummary("Current Available Pieces", to.availablePieces))
-      pause()
+      _pause()
     }
     
     //  -------------------------------------------------------------------------------
@@ -5216,7 +5225,7 @@ object FireInTheLake {
       println(s"\nChanges to markers on the score track:")
       println(separator())
       b foreach println
-      pause()
+      _pause()
     }
     
     
@@ -5231,7 +5240,7 @@ object FireInTheLake {
       println(s"\nChanges to faction eligibility:")
       println(separator())
       b foreach println
-      pause()
+      _pause()
     }
     
     b.clear()
@@ -5254,7 +5263,7 @@ object FireInTheLake {
       println(s"\nOther changes:")
       println(separator())
       b foreach println
-      pause()
+      _pause()
     }
     
     if (!headingDisplayed) 

@@ -7,7 +7,7 @@ You can play as any faction and the bots will play the other three factions.
 
 ## Downloading the executable package
 
-You can use this link to download the latest release: [Version 0.28][1]
+You can use this link to download the latest release: [Version 0.29][1]
 
 If you are upgrading to a newer version and the **major** version numbers of the two versions
 are the same, then any saved games in progress will be compatible.
@@ -15,7 +15,7 @@ are the same, then any saved games in progress will be compatible.
 Simply copy the *games* folder from the older *fitl-x.x* directory to the 
 new *fitl-x.x* directory.
 
-[1]: https://www.dropbox.com/s/979bwuin526a4q6/fitl-0.28.zip?dl=0
+[1]: null
 
 ## Running the program
 

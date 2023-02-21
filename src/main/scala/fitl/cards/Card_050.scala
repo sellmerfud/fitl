@@ -101,7 +101,6 @@ object Card_050 extends EventCard(50, "Uncle Ho",
         Human.executeOp(ARVN, params)
       else
         Bot.executeOp(ARVN, params)
-      pause()
     }
   }
 
@@ -117,7 +116,6 @@ object Card_050 extends EventCard(50, "Uncle Ho",
           Human.executeOp(f, params)
         else
           Bot.executeOp(f, params)
-        pause()
       }
     }
   }

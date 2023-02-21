@@ -6541,7 +6541,7 @@ object FireInTheLake {
           (sourceName, destName)
       }
       
-      // If use enters blank then we abandon this move operation 
+      // If user enters blank then we abandon this move operation 
       if (source != "" && dest != "") {
         val origSourcePieces = getPieces(source)
         val origDestPieces   = getPieces(dest)

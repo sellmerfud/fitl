@@ -575,32 +575,29 @@ object EventHelpers {
             println()
             wrap("Remaining pieces: ", remainingPieces.descriptions) foreach println
             val destName = askCandidate("\nSelect a destination space: ", dests)
-            val num      = askInt(s"Move how many pieces to $destName", 0, remainingPieces.total)
             val validPieces = if (canTakeBase(destName)) remainingPieces else remainingPieces.except(BasePieces)
+            val num      = askInt(s"Move how many pieces to $destName", 0, validPieces.total)
             val movers   = askPieces(validPieces, num)
             movePieces(movers, originName, destName)
             nextMove(remainingPieces - movers)
           }
 
-          loggingControlChanges {
-            nextMove(pieces)
-          }
         }
+        
+        nextMove(pieces)
       }
       else { // Bot
         val destCandidates = spaces(validDestinations)
         var remainingPieces = pieces
 
-        loggingControlChanges {
-          while (remainingPieces.nonEmpty) {
-            val mover = Bot.selectFriendlyToPlaceOrMove(remainingPieces, 1)
-            val sp    = if (isBase(mover.getTypes.head))
-              Bot.pickSpacePlaceBases(faction)(destCandidates)
-            else
-              Bot.pickSpacePlaceForces(faction)(destCandidates)
-            movePieces(mover, originName, sp.name)
-            remainingPieces = remainingPieces - mover
-          }
+        while (remainingPieces.nonEmpty) {
+          val mover = Bot.selectFriendlyToPlaceOrMove(remainingPieces, 1)
+          val sp    = if (isBase(mover.getTypes.head))
+            Bot.pickSpacePlaceBases(faction)(destCandidates)
+          else
+            Bot.pickSpacePlaceForces(faction)(destCandidates)
+          movePieces(mover, originName, sp.name)
+          remainingPieces = remainingPieces - mover
         }
       }
     }

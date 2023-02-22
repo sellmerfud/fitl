@@ -90,17 +90,60 @@ commit_release() {
 }
 
 
+# If the Dropbox API refresh token expires, this is how to get a new one:
+# Paste the following URL into a brower.  (Login to dropbox if not already)
+# (Note: the token_access_type=offline parameter is what ensures that the code 
+# returned will generate a refresh token when making the oauth2 call)
+#  https://www.dropbox.com/oauth2/authorize?client_id=ztg2fnip9tk27mt&response_type=code&code_challenge=a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447&code_challenge_method=plain&token_access_type=offline
+# Copy the code on the returned web page from the above URL and paste it into 
+# into the value of the ACCESS_CODE variable below replacing the previous value.
+# then execute the code in the oauth2() function.
+# If successful, it will spit out some json to stdout.  Find the refresh_token
+# field in the json and copy itto the local refresh_token variable in the
+# get_access_token() function below.
+
+ACCESS_CODE="CJ3yzjwMdF8AAAAAAABb6CG1W4eGrHDGTsh-KhPAuzs"
+APP_KEY="ztg2fnip9tk27mt"
+
+oauth2() {
+
+  curl -X POST https://api.dropbox.com/oauth2/token \
+      -d code="$ACCESS_CODE" \
+      -d grant_type=authorization_code \
+      -d code_verifier="a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447" \
+      -d client_id="$APP_KEY" | \
+        jq .
+  
+}
+
+
+# Get a short term access token for the dropbox api using our refresh token.
+# We must do this because the access tokens are shot term and will expire
+# in about 4 hours.
+get_access_token() {
+  local refresh_token="Oq7lAlr5RPkAAAAAAAAAAQx0vdPfnEzKdySptimTPGTsczVIojUtkBse-RNmEYR-"
+
+  curl -s https://api.dropbox.com/oauth2/token \
+      -d grant_type=refresh_token \
+      -d refresh_token="$refresh_token" \
+      -d client_id="$APP_KEY" | \
+        jq .access_token | \
+        sd '^"|"$' ''
+}
+
+
+
 # Get the sharable url for the zip file and echo it to stdout
 get_zipfile_url() {
   local version="$1"
   local dropbox_zip_file_path="/fitl/fitl-${version}.zip"
-  local DROPBOX_ACCESS_TOKEN=$(head -n1 /Users/curt/.dropbox/game_bots_access_token)
-
+  local access_token="$(get_access_token)"
+  
   # If the url already exists then an error object is returned with the url buried
   # several layers down.  Otherwise it is in the field .url at top level.
 
   curl -s -X POST https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings \
-      --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+      --header "Authorization: Bearer $access_token" \
       --header "Content-Type: application/json" \
       --data "{\"path\":\"${dropbox_zip_file_path}\"}" | \
   jq 'if .url then .url else .error.shared_link_already_exists.metadata.url end' | \
@@ -111,10 +154,10 @@ upload_zipfile() {
   local version="$1"
   local local_zip_file_path="target/fitl-${version}.zip"
   local dropbox_zip_file_path="/fitl/fitl-${version}.zip"
-  local DROPBOX_ACCESS_TOKEN=$(head -n1 /Users/curt/.dropbox/game_bots_access_token)
+  local access_token="$(get_access_token)"
   
   curl -s -X POST https://content.dropboxapi.com/2/files/upload \
-      --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+      --header "Authorization: Bearer $access_token" \
       --header "Dropbox-API-Arg: {\"autorename\":false,\"mode\":\"add\",\"mute\":false,\"path\":\"${dropbox_zip_file_path}\",\"strict_conflict\":false}" \
       --header "Content-Type: application/octet-stream" \
       --data-binary @"$local_zip_file_path" >/dev/null

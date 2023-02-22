@@ -23,8 +23,6 @@ usage() {
   exit 1
 }
 
-BUILD_DIR=/Users/curt/dev/projects/fitl
-
 repo_dirty() {
   test -n "$(git status --porcelain)"
 }
@@ -68,7 +66,6 @@ create_package() {
     find target/$PKG -name .DS_Store -exec rm {} \+
     rm -f target/${PKG}.zip
     (cd target; zip -rq ${PKG}.zip $PKG)
-    cp target/${PKG}.zip /Users/curt/Library/CloudStorage/Dropbox/fitl/
   else
     printf "Target directory: 'target/$PKG' does not exist\n"
     exit 1
@@ -90,43 +87,17 @@ commit_release() {
 }
 
 
-# If the Dropbox API refresh token expires, this is how to get a new one:
-# Paste the following URL into a brower.  (Login to dropbox if not already)
-# (Note: the token_access_type=offline parameter is what ensures that the code 
-# returned will generate a refresh token when making the oauth2 call)
-#  https://www.dropbox.com/oauth2/authorize?client_id=ztg2fnip9tk27mt&response_type=code&code_challenge=a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447&code_challenge_method=plain&token_access_type=offline
-# Copy the code on the returned web page from the above URL and paste it into 
-# into the value of the ACCESS_CODE variable below replacing the previous value.
-# then execute the code in the oauth2() function.
-# If successful, it will spit out some json to stdout.  Find the refresh_token
-# field in the json and copy itto the local refresh_token variable in the
-# get_access_token() function below.
-
-ACCESS_CODE="CJ3yzjwMdF8AAAAAAABb6CG1W4eGrHDGTsh-KhPAuzs"
-APP_KEY="ztg2fnip9tk27mt"
-
-oauth2() {
-
-  curl -X POST https://api.dropbox.com/oauth2/token \
-      -d code="$ACCESS_CODE" \
-      -d grant_type=authorization_code \
-      -d code_verifier="a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447" \
-      -d client_id="$APP_KEY" | \
-        jq .
-  
-}
-
 
 # Get a short term access token for the dropbox api using our refresh token.
 # We must do this because the access tokens are shot term and will expire
 # in about 4 hours.
 get_access_token() {
-  local refresh_token="Oq7lAlr5RPkAAAAAAAAAAQx0vdPfnEzKdySptimTPGTsczVIojUtkBse-RNmEYR-"
+  local refresh_token="$(head -n1 ~/.dropbox/game_bots_refresh_token)"
 
   curl -s https://api.dropbox.com/oauth2/token \
       -d grant_type=refresh_token \
       -d refresh_token="$refresh_token" \
-      -d client_id="$APP_KEY" | \
+      -d client_id=ztg2fnip9tk27mt | \
         jq .access_token | \
         sd '^"|"$' ''
 }
@@ -176,6 +147,8 @@ update_readme() {
   
 }
 
+# Start of main script
+
 # Commit changes by default
 DO_COMMIT=yes
 
@@ -194,7 +167,6 @@ case "$1" in
     ;;
 esac
 
-# Start of main script
 # The deafault action if no paramter is given is to update the minor version number
 case "$1" in
   "") 
@@ -283,8 +255,11 @@ sbt stage
 create_package $NEW_VERSION
 upload_zipfile $NEW_VERSION
 update_readme  $NEW_VERSION
-[[ $DO_COMMIT == yes ]] && commit_release $NEW_VERSION
-
-printf "Version $NEW_VERSION successfully created and pushed to Github!"
+if [[ $DO_COMMIT == yes ]]; then
+  commit_release $NEW_VERSION
+  printf "Version $NEW_VERSION successfully created and pushed to Github!"
+else
+  printf "Version $NEW_VERSION successfully created!"
+fi
 
 trap - DEBUG EXIT

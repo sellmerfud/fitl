@@ -15,7 +15,7 @@ are the same, then any saved games in progress will be compatible.
 Simply copy the *games* folder from the older *fitl-x.x* directory to the 
 new *fitl-x.x* directory.
 
-[1]: null
+[1]: https://www.dropbox.com/s/vuath4w6a3nutwf/fitl-0.29.zip?dl=0
 
 ## Running the program
 

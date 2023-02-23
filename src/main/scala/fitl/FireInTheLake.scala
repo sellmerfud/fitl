@@ -2294,6 +2294,29 @@ object FireInTheLake {
     }
   }
 
+  //  Produce a summary of the number of cards draw,
+  //  Which campaign is current
+  //  The chance that the next card drawn will be a Coup! card.
+  def drawPileSummary: Seq[String] = {
+    val b = new ListBuffer[String]
+    val (coupChance, nextCardCampaign, cardsRemaining, coupStatus) = chanceOfDrawingACoupCard
+    val coupCardChance = if (game.isFinalCampaign && game.isCoupRound)
+      s"0.00%  (Final Coup! round)"
+    else
+      f"${coupChance*100}%.2f%%  (${amountOf(cardsRemaining, "card")} remaining in ${ordinal(nextCardCampaign)} pile of ${game.cardsPerCampaign})"
+    
+    if (game.gameOver)
+      b += s"Campaign       : Game Over - ${game.scores.head.faction} Victory"
+    else
+      b += s"Campaign       : ${ordinal(game.coupCardsPlayed+1)} of ${game.totalCoupCards} ${if (game.isFinalCampaign) " -- Final campaign" else ""}"
+    b += f"Cards/Pile     : ${game.cardsPerCampaign}%2d"
+    b += f"Cards drawn    : ${game.numCardsDrawn}%2d"
+    b += s"Coup card      : $coupStatus"
+    b += f"Coup next draw : $coupCardChance"
+    b.toList
+  }
+  
+  
   def statusSummary: Seq[String] = {
     val scoreLabels: Map[Faction, String] = Map(
       US   -> "US   - Total Support + Avail US",
@@ -2356,14 +2379,7 @@ object FireInTheLake {
     }
 
     b += separator()
-    if (game.gameOver)
-      b += s"Campaign       : Game Over - ${game.scores.head.faction} Victory"
-    else
-      b += s"Campaign       : ${ordinal(game.coupCardsPlayed+1)} of ${game.totalCoupCards} ${if (game.isFinalCampaign) " -- Final campaign" else ""}"
-    b += f"Cards/Pile     : ${game.cardsPerCampaign}%2d"
-    b += f"Cards drawn    : ${game.numCardsDrawn}%2d"
-    b += s"Coup card      : $coupStatus"
-    b += f"Coup chance    : $coupCardChance"
+    b ++= drawPileSummary
 
     if (game.humanFactions.nonEmpty) {
       val desc = if (game.humanWinInVictoryPhase)
@@ -3762,7 +3778,7 @@ object FireInTheLake {
   // Return the list of factions that may play their pivotal event.
   // The factions are returned in the order: VC, ARVN, NVA, US
   // (Factions in this order can Trump those that follow)
-  def getPlayablePivotalEvents: List[Faction] = {
+  def getPlayablePivotalEventFactions: List[Faction] = {
 
     def canPlayPivotal(faction: Faction): Boolean = {
       val pivotCard = eventDeck(faction.pivotCard)
@@ -3797,30 +3813,59 @@ object FireInTheLake {
       game.isActingFaction(faction) &&
       eventDeck(game.currentCard).isCritical(faction)
 
-    def askHumanPivot(factions: List[Faction], pivotBot: Option[Faction]): Option[Faction] = {
-      factions match {
-        case Nil   =>
-          None
-
-        case f::fs =>
-          pivotBot foreach { bot =>
-            println()
-            println(separator(char = '='))
-            println(s"$bot Bot plans to play its pivotal event")
-            println(separator(char = '='))
-          }
-          val prompt = pivotBot match {
-            case None      => s"\nDoes $f wish to play their Pivotal Event? (y/n) "
-            case Some(bot) => s"\nDoes $f wish to trump $bot and play their Pivotal Event? (y/n) "
-          }
-          if (askYorN(prompt))
-            Some(f)
-          else
-            askHumanPivot(fs, pivotBot)
+    def askHumanPivot(eligible: List[Faction], pivotBot: Option[Faction]): Option[Faction] = {
+      
+      // Find all eligible human factions
+      // that could play their pivotal event without
+      // being trumped by the Bot.
+      val humanFactions = pivotBot match {
+        case None      => eligible filter game.isHuman
+        case Some(bot) => eligible takeWhile (_ != bot) filter game.isHuman
       }
+      
+      val declinedBots = eligible filter { f => game.isBot(f) && Some(f) != pivotBot }
+                
+      def promptUser(human: Faction, declined: List[Faction]): Boolean = {
+        val choices = List(
+          "yes"     -> "Yes",
+          "no"      -> "No",
+          "status"  -> "Show Coup status"
+        )
+        
+        println()
+        println(s"Eligible to play pivotal event: ${andList(eligible)}")
+        pivotBot foreach { bot =>
+          println(s"Elected  to play pivotal event: $bot")
+        }
+        if (declined.nonEmpty)
+          println(s"Declined to play pivotal event: ${andList(declined)}")
+        
+        val prompt = pivotBot match {
+          case Some(bot) => s"\nDoes $human wish to play their pivotal event (trumping $bot)?"
+          case None      => s"\nDoes $human wish to play their pivotal?"
+        }
+        askMenu(choices, prompt).head match {
+          case "yes" => true
+          case "no"  => false
+          case _     => 
+            println()
+            println(separator())
+            drawPileSummary foreach println
+            println(separator())
+            promptUser(human, declined)
+        }        
+      }
+      
+      def askNextHuman(humans: List[Faction], declined: List[Faction]): Option[Faction] = humans match {
+        case Nil                             => None
+        case h::_ if promptUser(h, declined) => Some(h)
+        case h::hs                           => askNextHuman(hs, declined :+ h)
+      }
+      
+      askNextHuman(humanFactions, declinedBots)
     }
 
-    val eligible = getPlayablePivotalEvents
+    val eligible = getPlayablePivotalEventFactions
     def botPivotalRoll(faction: Faction): Boolean = {
         val die = d6
         val result = if (die < game.numCardsInLeaderBox) "Success" else "Failure"
@@ -3836,18 +3881,7 @@ object FireInTheLake {
       botPivotalRoll(faction)
     }
 
-    // Next find all eligible human factions
-    // that could play their pivotal event without
-    // being trumped by the Bot.
-
-    val pivotHumans = pivotBot match {
-      case None      => eligible filter game.isHuman
-      case Some(bot) => eligible takeWhile (_ != bot) filter game.isHuman
-    }
-
-    val pivotPlayer = askHumanPivot(pivotHumans, pivotBot)
-
-    pivotPlayer orElse pivotBot
+    askHumanPivot(eligible, pivotBot) orElse pivotBot
   }
 
 

@@ -3823,7 +3823,14 @@ object FireInTheLake {
         case Some(bot) => eligible takeWhile (_ != bot) filter game.isHuman
       }
       
-      val declinedBots = eligible filter { f => game.isBot(f) && Some(f) != pivotBot }
+      val eligibleBots =  eligible filter game.isBot
+      val (declinedBots, trumpedBots) = pivotBot match {
+        case Some(bot) =>
+          val piv = eligibleBots.indexOf(bot)
+          val (d, t) = eligibleBots.splitAt(piv)
+          (d, t.tail)  // tail so we don't include the pivot pbot
+        case None => (Nil, eligibleBots)
+      }
                 
       def promptUser(human: Faction, declined: List[Faction]): Boolean = {
         val choices = List(
@@ -3833,12 +3840,16 @@ object FireInTheLake {
         )
         
         println()
-        println(s"Eligible to play pivotal event: ${andList(eligible)}")
+        println("Pivotal Events can be played")
+        println(separator())
+        println(s"Eligible: ${andList(eligible)}")
         pivotBot foreach { bot =>
-          println(s"Elected  to play pivotal event: $bot")
+          println(s"Elected : $bot")
         }
+        if (trumpedBots.nonEmpty)
+          println(s"Trumped : ${andList(trumpedBots)}")
         if (declined.nonEmpty)
-          println(s"Declined to play pivotal event: ${andList(declined)}")
+          println(s"Declined: ${andList(declined)}")
         
         val prompt = pivotBot match {
           case Some(bot) => s"\nDoes $human wish to play their pivotal event (trumping $bot)?"

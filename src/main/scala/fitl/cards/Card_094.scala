@@ -54,7 +54,7 @@ object Card_094 extends EventCard(94, "Tunnel Rats",
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Performed   -> Unshaded),
-          VC   -> (NotExecuted -> Unshaded))) {
+          VC   -> (Ignored -> Unshaded))) {
 
   val tunnelWithUSTroops = (sp: Space) =>
     sp.pieces.has(InsurgentTunnels) &&

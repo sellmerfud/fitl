@@ -60,7 +60,7 @@ object Card_033 extends EventCard(33, "MiGs",
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Critical    -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean = game.isHuman(NVA)

@@ -58,7 +58,7 @@ object Card_048 extends EventCard(48, "Nam Dong",
   List(NVA, ARVN, VC, US),
   ListMap(US   -> (Critical    -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
   val unshadedCandidate = (sp: Space) =>

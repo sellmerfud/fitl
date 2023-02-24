@@ -64,9 +64,9 @@ import fitl.Human
 object Card_124 extends EventCard(124, "Tet Offensive",
   SingleEvent,
   List(VC, NVA, US, ARVN),
-  ListMap(US   -> (NotExecuted -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
-          NVA  -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
+          NVA  -> (Ignored -> Unshaded),
           VC   -> (Critical    -> Unshaded))) {
 
   def numVCGuerrillasInSouth: Int =

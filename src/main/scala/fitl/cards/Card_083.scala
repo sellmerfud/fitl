@@ -55,8 +55,8 @@ object Card_083 extends EventCard(83, "Election",
   DualEvent,
   List(ARVN, VC, US, NVA),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          ARVN -> (Ignored -> Unshaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
   val unshadedCandidate = (sp: Space) =>

@@ -55,7 +55,7 @@ object Card_082 extends EventCard(82, "Domino Theory",
   DualEvent,
   List(ARVN, VC, US, NVA),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 

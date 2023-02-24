@@ -54,7 +54,7 @@ object Card_064 extends EventCard(64, "Honolulu Conference",
   SingleEvent,
   List(ARVN, US, NVA, VC),
   ListMap(US   -> (Performed   -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Unshaded),
           VC   -> (Performed   -> Unshaded))) {
 

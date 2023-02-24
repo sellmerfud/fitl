@@ -57,9 +57,9 @@ import fitl.Human
 object Card_016 extends EventCard(16, "Blowtorch Komer",
   DualEvent,
   List(US, ARVN, VC, NVA),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
   val isBlowtorchKomerSpace = (sp: Space) =>

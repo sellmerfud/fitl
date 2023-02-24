@@ -57,10 +57,10 @@ import fitl.Human
 object Card_067 extends EventCard(67, "Amphib Landing",
   DualEvent,
   List(ARVN, US, VC, NVA),
-  ListMap(US   -> (NotExecuted -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+  ListMap(US   -> (Ignored -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
+          NVA  -> (Ignored -> Shaded),
+          VC   -> (Ignored -> Shaded))) {
 
 
   def coastalSpaces = game.spaces filter (sp => sp.coastal && !sp.isNorthVietnam)

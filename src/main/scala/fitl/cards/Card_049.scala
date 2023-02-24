@@ -57,10 +57,10 @@ import fitl.Human
 object Card_049 extends EventCard(49, "Russian Arms",
   DualEvent,
   List(NVA, ARVN, VC, US),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          NVA  -> (Ignored -> Shaded),
+          VC   -> (Ignored -> Shaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean = game.availablePieces.has(ARVNPieces)

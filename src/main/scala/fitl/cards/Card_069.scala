@@ -55,7 +55,7 @@ object Card_069 extends EventCard(69, "MACV",
   SingleEvent,
   List(ARVN, US, VC, NVA),
   ListMap(US   -> (Performed   -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Unshaded),
           VC   -> (Performed   -> Unshaded))) {
 

@@ -57,10 +57,10 @@ import fitl.Human
 object Card_006 extends EventCard(6, "Aces",
   DualEvent,
   List(US, NVA, VC, ARVN),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
   def unshadedEffective(faction: Faction): Boolean = {
     val validSpaces = spaces(NorthVietnam::LaosCambodia)

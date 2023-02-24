@@ -60,7 +60,7 @@ object Card_066 extends EventCard(66, "Ambassador Taylor",
   DualEvent,
   List(ARVN, US, VC, NVA),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 

@@ -59,7 +59,7 @@ object Card_092 extends EventCard(92, "SEALORDS",
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
   val adjacentToCanTho = spaces(getAdjacent(CanTho))
   val SweepOp   = "Sweep"

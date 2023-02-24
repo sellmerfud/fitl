@@ -55,9 +55,9 @@ import fitl.Human
 object Card_107 extends EventCard(107, "Burning Bonze",
   DualEvent,
   List(VC, NVA, ARVN, US),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Critical    -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
 

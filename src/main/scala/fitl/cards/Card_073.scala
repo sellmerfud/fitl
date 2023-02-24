@@ -58,8 +58,8 @@ import fitl.Human
 object Card_073 extends EventCard(73, "Great Society",
   DualEvent,
   List(ARVN, NVA, US, VC),
-  ListMap(US   -> (NotExecuted -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 

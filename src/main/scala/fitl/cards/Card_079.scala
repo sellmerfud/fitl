@@ -53,7 +53,7 @@ import fitl.Human
 object Card_079 extends EventCard(79, "Henry Cabot Lodge",
   DualEvent,
   List(ARVN, NVA, VC, US),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Critical    -> Shaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {

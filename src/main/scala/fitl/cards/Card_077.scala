@@ -58,7 +58,7 @@ object Card_077 extends EventCard(77, "Detente",
   DualEvent,
   List(ARVN, NVA, VC, US),
   ListMap(US   -> (Performed   -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 

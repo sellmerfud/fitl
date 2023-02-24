@@ -57,9 +57,9 @@ object Card_074 extends EventCard(74, "Lam Son 719",
   DualEvent,
   List(ARVN, NVA, US, VC),
   ListMap(US   -> (Performed   -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          ARVN -> (Ignored -> Unshaded),
+          NVA  -> (Ignored -> Shaded),
+          VC   -> (Ignored -> Shaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean =

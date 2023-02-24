@@ -55,8 +55,8 @@ object Card_041 extends EventCard(41, "Bombing Pause",
   List(NVA, ARVN, US, VC),
   ListMap(US   -> (Critical    -> Unshaded),
           ARVN -> (Critical    -> Unshaded),
-          NVA  -> (NotExecuted -> Unshaded),
-          VC   -> (NotExecuted -> Unshaded))) {
+          NVA  -> (Ignored -> Unshaded),
+          VC   -> (Ignored -> Unshaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean = true

@@ -64,8 +64,8 @@ object Card_059 extends EventCard(59, "Plei Mei",
   List(NVA, VC, ARVN, US),
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          NVA  -> (Ignored -> Shaded),
+          VC   -> (Ignored -> Shaded))) {
 
   def adjacentToCoinBase(name: String) =
     spaces(getAdjacentNonLOCs(name)) exists (_.pieces.has(CoinBases))

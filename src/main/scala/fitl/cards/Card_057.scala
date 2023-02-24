@@ -55,8 +55,8 @@ object Card_057 extends EventCard(57, "International Unrest",
   DualEvent,
   List(NVA, VC, ARVN, US),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          ARVN -> (Ignored -> Unshaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
 

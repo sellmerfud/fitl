@@ -57,8 +57,8 @@ import fitl.Human
 object Card_072 extends EventCard(72, "Body Count",
   DualEvent,
   List(ARVN, NVA, US, VC),
-  ListMap(US   -> (NotExecuted -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 

@@ -58,7 +58,7 @@ object Card_022 extends EventCard(22, "Da Nang",
   DualEvent,
   List(US, VC, NVA, ARVN),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Critical    -> Shaded))) {
             

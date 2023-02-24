@@ -61,8 +61,8 @@ object Card_055 extends EventCard(55, "Trucks",
   List(NVA, VC, US, ARVN),
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          NVA  -> (Ignored -> Shaded),
+          VC   -> (Ignored -> Shaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean =

@@ -58,8 +58,8 @@ object Card_113 extends EventCard(113, "Ruff Puff",
   List(VC, ARVN, US, NVA),
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          NVA  -> (Ignored -> Shaded),
+          VC   -> (Ignored -> Shaded))) {
 
 
   def humanPlacePolice(faction: Faction): Unit = {

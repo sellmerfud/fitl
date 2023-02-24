@@ -56,10 +56,10 @@ import fitl.Human
 object Card_056 extends EventCard(56, "Vo Nguyen Giap",
   DualEvent,
   List(NVA, VC, ARVN, US),
-  ListMap(US   -> (NotExecuted -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+  ListMap(US   -> (Ignored -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
+          NVA  -> (Ignored -> Shaded),
+          VC   -> (Ignored -> Shaded))) {
 
   val unshadedCandidate = (sp: Space) => sp.pieces.has(Guerrillas)
 

@@ -59,7 +59,7 @@ object Card_050 extends EventCard(50, "Uncle Ho",
   List(NVA, ARVN, VC, US),
   ListMap(US   -> (Critical    -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
 

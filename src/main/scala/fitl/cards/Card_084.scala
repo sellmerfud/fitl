@@ -57,8 +57,8 @@ import fitl.Human
 object Card_084 extends EventCard(84, "To Quoc",
   DualEvent,
   List(ARVN, VC, US, NVA),
-  ListMap(US   -> (NotExecuted -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 

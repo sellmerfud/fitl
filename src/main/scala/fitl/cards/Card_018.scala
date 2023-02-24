@@ -58,7 +58,7 @@ import fitl.Human
 object Card_018 extends EventCard(18, "Combined Action Platoons", DualEvent,
       List(US, ARVN, VC, NVA),
       ListMap(US   -> (Critical    -> Unshaded),
-              ARVN -> (NotExecuted -> Unshaded),
+              ARVN -> (Ignored -> Unshaded),
               NVA  -> (Critical    -> Shaded),
               VC   -> (Critical    -> Shaded))) {
 

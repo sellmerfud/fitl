@@ -55,7 +55,7 @@ import fitl.Human
 object Card_080 extends EventCard(80, "Light at the End of the Tunnel",
   SingleEvent,
   List(ARVN, NVA, VC, US),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Critical    -> Unshaded),
           NVA  -> (Performed   -> Unshaded),
           VC   -> (Critical    -> Unshaded))) {

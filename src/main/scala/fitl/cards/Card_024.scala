@@ -55,9 +55,9 @@ import fitl.Human
 
 object Card_024 extends EventCard(24, "Operation Starlite", DualEvent,
       List(US, VC, NVA, ARVN),
-      ListMap(US   -> (NotExecuted -> Unshaded),
+      ListMap(US   -> (Ignored -> Unshaded),
               ARVN -> (Performed   -> Unshaded),
-              NVA  -> (NotExecuted -> Shaded),
+              NVA  -> (Ignored -> Shaded),
               VC   -> (Performed   -> Shaded))) {
   
   val isStarliteUnshadedSpace = (sp: Space) =>

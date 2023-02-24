@@ -56,8 +56,8 @@ import fitl.Human
 
 object Card_023 extends EventCard(23, "Operation Attleboro", DualEvent,
       List(US, VC, NVA, ARVN),
-      ListMap(US   -> (NotExecuted -> Unshaded),
-              ARVN -> (NotExecuted -> Unshaded),
+      ListMap(US   -> (Ignored -> Unshaded),
+              ARVN -> (Ignored -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded))) {
 

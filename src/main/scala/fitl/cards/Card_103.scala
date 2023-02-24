@@ -58,9 +58,9 @@ object Card_103 extends EventCard(103, "Kent State",
   DualEvent,
   List(VC, NVA, US, ARVN),
   ListMap(US   -> (Performed   -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean = game.casualties.has(USPieces)

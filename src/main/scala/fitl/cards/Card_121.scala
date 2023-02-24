@@ -58,9 +58,9 @@ object Card_121 extends EventCard(121, "Linebacker II",
   SingleEvent,
   List(US, ARVN, VC, NVA),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
-          NVA  -> (NotExecuted -> Unshaded),
-          VC   -> (NotExecuted -> Unshaded))) {
+          ARVN -> (Ignored -> Unshaded),
+          NVA  -> (Ignored -> Unshaded),
+          VC   -> (Ignored -> Unshaded))) {
 
   // Is US pivotal event playable?
   def unshadedEffective(faction: Faction): Boolean = {

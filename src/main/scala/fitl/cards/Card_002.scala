@@ -55,7 +55,7 @@ import fitl.Human
 object Card_002 extends EventCard(2, "Kissinger",
   DualEvent,
   List(US, ARVN, NVA, VC),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Critical    -> Shaded),
           VC   -> (Performed   -> Shaded))) {

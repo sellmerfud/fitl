@@ -57,7 +57,7 @@ import fitl.Human
 object Card_017 extends EventCard(17, "Claymores",
   DualEvent,
   List(US, ARVN, VC, NVA),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {

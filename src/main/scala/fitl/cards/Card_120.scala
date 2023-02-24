@@ -60,9 +60,9 @@ object Card_120 extends EventCard(120, "US Press Corps",
   DualEvent,
   List(VC, ARVN, NVA, US),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
   def unshadedEffective(faction: Faction): Boolean = game.outOfPlay.has(USPieces)
 

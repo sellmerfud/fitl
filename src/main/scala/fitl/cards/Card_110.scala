@@ -56,9 +56,9 @@ object Card_110 extends EventCard(110, "No Contact",
   DualEvent,
   List(VC, NVA, ARVN, US),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
   val ActiveSpecials = Set(Irregulars_A, Rangers_A)
 

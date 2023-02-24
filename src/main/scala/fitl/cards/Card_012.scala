@@ -57,10 +57,10 @@ import fitl.Human
 object Card_012 extends EventCard(12, "Capt Buck Adams",
     DualEvent,
     List(US, ARVN, NVA, VC),
-    ListMap(US   -> (NotExecuted -> Unshaded),
+    ListMap(US   -> (Ignored -> Unshaded),
     ARVN -> (Performed   -> Unshaded),
     NVA  -> (Critical    -> Shaded),
-    VC   -> (NotExecuted -> Shaded))) {
+    VC   -> (Ignored -> Shaded))) {
     
   def unshadedEffective(faction: Faction): Boolean =
     game.spaces exists { sp =>

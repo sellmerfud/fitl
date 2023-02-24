@@ -60,7 +60,7 @@ import fitl.Human
 object Card_086 extends EventCard(86, "Mandate of Heaven",
   DualEvent,
   List(ARVN, VC, NVA, US),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Critical    -> Unshaded),
           NVA  -> (Critical    -> Shaded),
           VC   -> (Critical    -> Shaded))) {

@@ -54,7 +54,7 @@ object Card_106 extends EventCard(106, "Binh Duong",
   List(VC, NVA, ARVN, US),
   ListMap(US   -> (Critical    -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Unshaded),
+          NVA  -> (Ignored -> Unshaded),
           VC   -> (Critical    -> Unshaded))) {
 
   def candidates     = spaces(getAdjacent(Saigon)) filter (_.isProvince)

@@ -57,10 +57,10 @@ import fitl.Human
 object Card_122 extends EventCard(122, "Easter Offensive",
   SingleEvent,
   List(NVA, VC, ARVN, US),
-  ListMap(US   -> (NotExecuted -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Critical    -> Unshaded),
-          VC   -> (NotExecuted -> Unshaded))) {
+          VC   -> (Ignored -> Unshaded))) {
 
 
   def humanMoveTroops(locsWithTroops: List[String]): Unit = {

@@ -36,7 +36,8 @@ package fitl
 import java.io.IOException
 import FUtil.Pathname
 import FireInTheLake.{ GameState, SequenceOfPlay, Space, Pieces, Faction, Action, SpaceType,
-                       Actor, Capability, GameSegment, PieceType, SupportType, SOFTWARE_VERSION }
+                       Actor, Capability, GameSegment, PieceType, SupportType, SOFTWARE_VERSION,
+                       BotIntents, BotIntentsVerbose }
 import Bot.{ TrungCard, trungFromId }
 
 object SavedGame {
@@ -248,6 +249,7 @@ object SavedGame {
       "peaceTalks"             -> gameState.peaceTalks,
       "botDebug"               -> gameState.botDebug,
       "logTrung"               -> gameState.logTrung,
+      "botIntents"             -> gameState.botIntents.toString,
       "history"                -> (gameState.history map gameSegmentToMap)
     )
   }
@@ -287,6 +289,7 @@ object SavedGame {
       asBoolean(data("peaceTalks")),
       asBoolean(data("botDebug")),
       asBoolean(data.get("logTrung") getOrElse true),
+      BotIntents(asString(data.get("botIntents") getOrElse BotIntentsVerbose.toString)),
       (asList(data("history")) map (s => gameSegmentFromMap(asMap(s)))).toVector
     )
   }

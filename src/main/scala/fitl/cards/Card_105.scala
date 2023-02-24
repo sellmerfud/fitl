@@ -57,7 +57,7 @@ object Card_105 extends EventCard(105, "Rural Pressure",
   List(VC, NVA, US, ARVN),
   ListMap(US   -> (Critical    -> Unshaded),
           ARVN -> (Critical    -> Shaded),
-          NVA  -> (NotExecuted -> Shaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
 

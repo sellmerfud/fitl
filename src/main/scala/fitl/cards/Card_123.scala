@@ -55,10 +55,10 @@ import fitl.Human
 object Card_123 extends EventCard(123, "Vietnamization",
   SingleEvent,
   List(ARVN, US, NVA, VC),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Critical    -> Unshaded),
-          NVA  -> (NotExecuted -> Unshaded),
-          VC   -> (NotExecuted -> Unshaded))) {
+          NVA  -> (Ignored -> Unshaded),
+          VC   -> (Ignored -> Unshaded))) {
 
   // Is VC pivotal event playable?
   def unshadedEffective(faction: Faction): Boolean =

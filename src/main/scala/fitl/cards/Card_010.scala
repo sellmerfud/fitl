@@ -57,7 +57,7 @@ import fitl.Human
 object Card_010 extends EventCard(10, "Rolling Thunder",
   DualEvent,
   List(US, NVA, VC, ARVN),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {

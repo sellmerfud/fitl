@@ -61,7 +61,7 @@ object Card_039 extends EventCard(39, "Oriskany",
   List(NVA, US, VC, ARVN),
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
   

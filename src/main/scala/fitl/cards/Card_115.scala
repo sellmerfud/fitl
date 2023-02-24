@@ -56,7 +56,7 @@ object Card_115 extends EventCard(115, "Typhoon Kate",
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Performed   -> Unshaded),
-          VC   -> (NotExecuted -> Unshaded))) {
+          VC   -> (Ignored -> Unshaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean = true

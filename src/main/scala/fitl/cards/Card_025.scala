@@ -59,9 +59,9 @@ import fitl.Human
 object Card_025 extends EventCard(25, "TF-116 Riverines",
   DualEvent,
   List(US, VC, NVA, ARVN),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
   val LowlandTouchingMekong = List(KienPhong, KienHoa_VinhBinh, BaXuyen, KienGiang_AnXuyen)

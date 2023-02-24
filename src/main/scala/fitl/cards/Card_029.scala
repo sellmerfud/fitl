@@ -58,9 +58,9 @@ import fitl.Human
 object Card_029 extends EventCard(29, "Tribesmen",
   DualEvent,
   List(US, VC, ARVN, NVA),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
 

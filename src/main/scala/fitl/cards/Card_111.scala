@@ -59,7 +59,7 @@ object Card_111 extends EventCard(111, "Agent Orange",
   List(VC, ARVN, US, NVA),
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
 

@@ -53,10 +53,10 @@ import fitl.Human
 object Card_093 extends EventCard(93, "Senator Fulbright",
   DualEvent,
   List(VC, US, NVA, ARVN),
-  ListMap(US   -> (NotExecuted -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean = false  // Bots never execute

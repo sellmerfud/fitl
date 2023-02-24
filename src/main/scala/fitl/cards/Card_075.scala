@@ -60,7 +60,7 @@ object Card_075 extends EventCard(75, "Sihanouk",
   DualEvent,
   List(ARVN, NVA, US, VC),
   ListMap(US   -> (Performed   -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 

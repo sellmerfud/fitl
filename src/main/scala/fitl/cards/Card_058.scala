@@ -61,8 +61,8 @@ object Card_058 extends EventCard(58, "Pathet Lao",
   List(NVA, VC, ARVN, US),
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          NVA  -> (Ignored -> Shaded),
+          VC   -> (Ignored -> Shaded))) {
 
   val unshadedCandidate = (sp: Space) =>
     (sp.isNorthVietnam || Laos.contains(sp.name)) &&

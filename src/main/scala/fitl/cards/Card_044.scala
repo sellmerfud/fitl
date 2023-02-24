@@ -58,8 +58,8 @@ object Card_044 extends EventCard(44, "la Drang",
   DualEvent,
   List(NVA, ARVN, US, VC),
   ListMap(US   -> (Performed   -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          ARVN -> (Ignored -> Unshaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
   val unshadedCandidate = (sp: Space) =>

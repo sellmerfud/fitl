@@ -56,9 +56,9 @@ object Card_003 extends EventCard(3, "Peace Talks",
   DualEvent,
   List(US, ARVN, NVA, VC),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
   def unshadedEffective(faction: Faction): Boolean = game.pivotCardsAvailable(US)
 

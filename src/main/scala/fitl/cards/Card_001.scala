@@ -57,7 +57,7 @@ object Card_001 extends EventCard(1, "Gulf of Tonkin",
   DualEvent,
   List(US, NVA, ARVN, VC),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 

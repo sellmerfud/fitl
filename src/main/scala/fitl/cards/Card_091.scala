@@ -57,9 +57,9 @@ object Card_091 extends EventCard(91, "Bob Hope",
   DualEvent,
   List(VC, US, NVA, ARVN),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
   val unshadedOriginCandidate = (sp: Space) => sp.isProvince && sp.pieces.has(USTroops)
   val unshadedDestCandidate   = (sp: Space) => sp.isCity && sp.coinControlled

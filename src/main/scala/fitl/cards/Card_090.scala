@@ -57,8 +57,8 @@ import fitl.Human
 object Card_090 extends EventCard(90, "Walt Rostow",
   DualEvent,
   List(ARVN, VC, NVA, US),
-  ListMap(US   -> (NotExecuted -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 

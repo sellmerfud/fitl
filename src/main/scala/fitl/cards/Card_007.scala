@@ -57,10 +57,10 @@ import fitl.Human
 object Card_007 extends EventCard(7, "ADSID",
   DualEvent,
   List(US, NVA, VC, ARVN),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
   def unshadedEffective(faction: Faction): Boolean = game.trackResources(NVA)
       

@@ -58,7 +58,7 @@ object Card_036 extends EventCard(36, "Hamburger Hill",
   List(NVA, US, VC, ARVN),
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
   val hasHighlandUntunneledBase = (sp: Space) =>

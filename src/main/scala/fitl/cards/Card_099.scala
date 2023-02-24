@@ -66,7 +66,7 @@ object Card_099 extends EventCard(99, "Masher/White Wing",
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
   
   val unshadedCandidate = (sp: Space) => !(sp.isLoC || sp.isJungle)

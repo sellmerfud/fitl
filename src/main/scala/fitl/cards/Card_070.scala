@@ -63,8 +63,8 @@ object Card_070 extends EventCard(70, "ROKs",
   DualEvent,
   List(ARVN, US, VC, NVA),
   ListMap(US   -> (Performed   -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          ARVN -> (Ignored -> Unshaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
   val unshadedNames = getAdjacent(PhuBon_PhuYen) + PhuBon_PhuYen

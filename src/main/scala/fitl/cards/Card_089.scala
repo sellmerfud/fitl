@@ -54,7 +54,7 @@ import fitl.Human
 object Card_089 extends EventCard(89, "Tam Chau",
   DualEvent,
   List(ARVN, VC, NVA, US),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Critical    -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Critical    -> Shaded))) {

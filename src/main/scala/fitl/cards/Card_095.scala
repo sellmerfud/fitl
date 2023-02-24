@@ -61,8 +61,8 @@ object Card_095 extends EventCard(95, "Westmoreland",
   DualEvent,
   List(VC, US, NVA, ARVN),
   ListMap(US   -> (Performed   -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          ARVN -> (Ignored -> Unshaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 
 

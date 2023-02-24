@@ -56,9 +56,9 @@ object Card_062 extends EventCard(62, "Cambodian Civil War",
   DualEvent,
   List(ARVN, US, NVA, VC),
   ListMap(US   -> (Performed   -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean =

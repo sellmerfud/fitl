@@ -57,8 +57,8 @@ object Card_081 extends EventCard(81, "CIDG",
   DualEvent,
   List(ARVN, VC, US, NVA),
   ListMap(US   -> (Performed   -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          ARVN -> (Ignored -> Unshaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Performed   -> Shaded))) {
 
   val CoinTypes = ARVNPolice::Rangers_U::Irregulars_U::Nil

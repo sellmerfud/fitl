@@ -61,10 +61,10 @@ import fitl.Human
 object Card_047 extends EventCard(47, "Chu Luc",
   DualEvent,
   List(NVA, ARVN, VC, US),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          NVA  -> (Ignored -> Shaded),
+          VC   -> (Ignored -> Shaded))) {
 
   val doubleCandidate = (sp: Space) =>
     sp.pieces.has(NVAPieces) && sp.pieces.has(ARVNPieces)

@@ -58,7 +58,7 @@ object Card_032 extends EventCard(32, "Long Range Guns",
   ListMap(US   -> (Critical    -> Unshaded),
           ARVN -> (Critical    -> Unshaded),
           NVA  -> (Critical    -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean = true

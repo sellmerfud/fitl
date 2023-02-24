@@ -61,9 +61,9 @@ object Card_071 extends EventCard(71, "An Loc",
   DualEvent,
   List(ARVN, NVA, US, VC),
   ListMap(US   -> (Performed   -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
   val unshadedCandidate = (sp: Space) =>
     isInSouthVietnam(sp.name) &&

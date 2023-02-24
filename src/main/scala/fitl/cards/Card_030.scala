@@ -61,9 +61,9 @@ import fitl.Human
 object Card_030 extends EventCard(30, "USS New Jersey",
   DualEvent,
   List(US, VC, ARVN, NVA),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
+          NVA  -> (Ignored -> Shaded),
           VC   -> (Critical    -> Shaded))) {
   
   val unshadedCandidate = (sp: Space) =>

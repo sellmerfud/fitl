@@ -58,8 +58,8 @@ import fitl.Human
 object Card_021 extends EventCard(21, "Americal", DualEvent,
       List(US, VC, NVA, ARVN),
       ListMap(US   -> (Critical    -> Unshaded),
-              ARVN -> (NotExecuted -> Unshaded),
-              NVA  -> (NotExecuted -> Shaded),
+              ARVN -> (Ignored -> Unshaded),
+              NVA  -> (Ignored -> Shaded),
               VC   -> (Critical    -> Shaded))) {
       
   def unshadedEffective(faction: Faction): Boolean =

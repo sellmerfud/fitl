@@ -58,8 +58,8 @@ object Card_038 extends EventCard(38, "McNamara Line",
   List(NVA, US, VC, ARVN),
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Unshaded),
-          VC   -> (NotExecuted -> Unshaded))) {
+          NVA  -> (Ignored -> Unshaded),
+          VC   -> (Ignored -> Unshaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean = true

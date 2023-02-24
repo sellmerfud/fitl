@@ -56,8 +56,8 @@ object Card_035 extends EventCard(35, "Thanh Hoa",
   List(NVA, US, ARVN, VC),
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          NVA  -> (Ignored -> Shaded),
+          VC   -> (Ignored -> Shaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean = game.trail > TrailMin

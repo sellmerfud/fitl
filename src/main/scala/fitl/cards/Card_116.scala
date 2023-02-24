@@ -60,7 +60,7 @@ object Card_116 extends EventCard(116, "Cadres",
   DualEvent,
   List(VC, ARVN, NVA, US),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
+          ARVN -> (Ignored -> Unshaded),
           NVA  -> (Critical    -> Shaded),
           VC   -> (Critical    -> Shaded))) {
 

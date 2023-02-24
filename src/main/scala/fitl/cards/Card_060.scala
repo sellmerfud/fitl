@@ -57,9 +57,9 @@ object Card_060 extends EventCard(60, "War Photographer",
   DualEvent,
   List(NVA, VC, ARVN, US),
   ListMap(US   -> (Critical    -> Unshaded),
-          ARVN -> (NotExecuted -> Unshaded),
-          NVA  -> (NotExecuted -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          ARVN -> (Ignored -> Unshaded),
+          NVA  -> (Ignored -> Shaded),
+          VC   -> (Ignored -> Shaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean = game.outOfPlay.has(USPieces)

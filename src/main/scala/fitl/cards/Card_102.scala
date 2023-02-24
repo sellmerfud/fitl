@@ -58,7 +58,7 @@ object Card_102 extends EventCard(102, "Cu Chi",
   ListMap(US   -> (Performed   -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
   val unshadedCandidate = (sp: Space) =>
     sp.coinControlled &&

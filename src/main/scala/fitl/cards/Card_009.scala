@@ -55,7 +55,7 @@ import fitl.Human
 object Card_009 extends EventCard(9, "Psychedelic Cookie", DualEvent,
       List(US, NVA, VC, ARVN),
       ListMap(US   -> (Critical    -> Unshaded),
-              ARVN -> (NotExecuted -> Unshaded),
+              ARVN -> (Ignored -> Unshaded),
               NVA  -> (Performed   -> Shaded),
               VC   -> (Performed   -> Shaded))) {
 

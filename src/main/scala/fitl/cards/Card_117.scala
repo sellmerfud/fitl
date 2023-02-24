@@ -55,10 +55,10 @@ import fitl.Human
 object Card_117 extends EventCard(117, "Corps Commanders",
   DualEvent,
   List(VC, ARVN, NVA, US),
-  ListMap(US   -> (NotExecuted -> Unshaded),
+  ListMap(US   -> (Ignored -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Performed   -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
   def humanUnshaded(): Unit = {
     val candidates = spaceNames(game.spaces filterNot (_.isNorthVietnam))

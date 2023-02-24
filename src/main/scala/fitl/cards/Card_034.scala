@@ -63,7 +63,7 @@ object Card_034 extends EventCard(34, "SA-2s",
   ListMap(US   -> (Critical    -> Unshaded),
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Critical    -> Shaded),
-          VC   -> (NotExecuted -> Shaded))) {
+          VC   -> (Ignored -> Shaded))) {
 
 
   def unshadedEffective(faction: Faction): Boolean = true

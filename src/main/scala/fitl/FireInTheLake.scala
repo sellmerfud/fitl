@@ -109,7 +109,7 @@ object FireInTheLake {
   }
 
   sealed trait BotEventPriority
-  case object NotExecuted extends BotEventPriority
+  case object Ignored extends BotEventPriority
   case object Critical    extends BotEventPriority
   case object Performed   extends BotEventPriority
 
@@ -157,7 +157,7 @@ object FireInTheLake {
 
     def isCritical(faction: Faction)  = botPriority(faction) == Critical
     def isPerformed(faction: Faction) = botPriority(faction) == Performed
-    def isIgnored(faction: Faction)   = botPriority(faction) == NotExecuted
+    def isIgnored(faction: Faction)   = botPriority(faction) == Ignored
   }
 
   // Sort by card number
@@ -2042,6 +2042,21 @@ object FireInTheLake {
     vcBases         = 9,
     vcTunnels       = 0)
 
+  sealed trait BotIntents {
+    def description: String
+  }
+  case object BotIntentsVerbose extends BotIntents { val description = "Verbose" }
+  case object BotIntentsConcise extends BotIntents { val description = "Concise" }
+  case object BotIntentsNone    extends BotIntents { val description = "Off" }
+  
+  object BotIntents {
+    val ALL       = Set[BotIntents](BotIntentsVerbose, BotIntentsConcise, BotIntentsNone)
+    def apply(name: String): BotIntents = ALL find (_.toString.toLowerCase == name.toLowerCase) getOrElse {
+      throw new IllegalArgumentException(s"Invalid BotIntents name: $name")
+    }
+  }
+  
+  
   // A game segment containing a file name for the segment,
   // a short description and the log messages that were generated
   // during the game segment.
@@ -2083,6 +2098,7 @@ object FireInTheLake {
     peaceTalks: Boolean               = false,
     botDebug: Boolean                 = false,
     logTrung: Boolean                 = true, // Log Trung decisions
+    botIntents: BotIntents            = BotIntentsVerbose,
     history: Vector[GameSegment]      = Vector.empty,
     log: Vector[String]               = Vector.empty) {  // Log of the cuurent game segment
 
@@ -2242,6 +2258,9 @@ object FireInTheLake {
   }
 
 
+  def getCurrentCard = eventDeck(game.currentCard)
+  def getOnDeckCard  = if (game.onDeckCard > 0) Some(eventDeck(game.onDeckCard)) else None
+  def coupCardOnDeck = getOnDeckCard map (_.isCoup) getOrElse false
   // Calculate percentage chance that the next card drawn will
   // be a Coup card.
   //
@@ -2371,11 +2390,11 @@ object FireInTheLake {
       b += separator()
     }
     if (game.numCardsDrawn > 0) {
-      b += s"Current card   : ${eventDeck(game.currentCard).fullString}"
-      if (game.onDeckCard > 0)
-        b += s"On Deck card   : ${eventDeck(game.onDeckCard).fullString}"
-      else
-        b += "On Deck card   : None (Last Coup round)"
+      b += s"Current card   : ${getCurrentCard.fullString}"
+      getOnDeckCard match {
+        case Some(card) => b += s"On Deck card   : ${card.fullString}"
+        case None       => b += "On Deck card   : None (Last Coup round)"
+      }
     }
 
     b += separator()
@@ -2498,15 +2517,85 @@ object FireInTheLake {
     b.toList
   }
 
-  def sequenceList(card: EventCard, sequence: SequenceOfPlay): Seq[String] = {
-    def actorDisp(faction: Faction) = if (sequence.eligibleNextTurn(faction))
-      s"${faction}(+)"
-      else if (sequence.ineligibleNextTurn(faction))
-      s"${faction}(-)"
-    else
-      faction.toString
+  def sequenceList(card: EventCard, nextCard: Option[EventCard], sequence: SequenceOfPlay, showIntents: Boolean = false): Seq[String] = {
     val b = new ListBuffer[String]
-    b += s"Current card  : ${card.fullString}"
+    
+    
+    def actorDisp(faction: Faction) = {
+      if (sequence.eligibleNextTurn(faction))
+        s"${faction}(+)"
+      else if (sequence.ineligibleNextTurn(faction))
+        s"${faction}(-)"
+      else
+        faction.toString
+    }
+    
+    def cardDisplay(eventCard: EventCard, prefix: String): Unit = {
+      
+      //  Show the card on the first line
+      //  The the verbose bot intents on the next line
+      def verboseDisplay(): Unit = {
+        def desc(f: Faction) = {
+          val (pri, part) = eventCard.botPriorities(f)
+          eventCard.eventType match {
+            case SingleEvent                     => s"$f -> ($pri)"
+            case DualEvent if pri == Ignored => s"$f -> ($pri)"
+            case DualEvent                       => s"$f -> ($pri, $part)"
+          }
+        }
+        
+        b += s"${prefix}${eventCard.fullString}"
+        val descriptions = eventCard.factionOrder filter game.isBot map desc
+        wrap(" " * prefix.length, descriptions) foreach (b += _)
+      }
+    
+      // Append the concise bot intents to each Bot faction in the card faction order
+      // c = critical, p = performed, i = ignored
+      // For dual events the intent is followed by s for shaded or u for unshaded
+      // Example: (NVA-cs, ARVN-i, US-pu, VC)
+      def conciseDisplay(): Unit = {
+        val priSymbols  = Map[BotEventPriority, String](Ignored -> "i", Critical -> "c", Performed -> "p")
+        val partSymbols = Map[EventPart, String](Unshaded -> "u", Shaded -> "s")
+        
+        def desc(f: Faction) = {
+          val (pri, part) = eventCard.botPriorities(f)
+          val priSymbol  = priSymbols(pri)
+          val partSymbol = partSymbols(part)
+          eventCard.eventType match {
+            case _ if game.isHuman(f)            => f.name
+            case SingleEvent                     => s"${f}-${priSymbol}"
+            case DualEvent if pri == Ignored => s"${f}-${priSymbol}"
+            case DualEvent                       => s"${f}-${priSymbol}${partSymbol}"
+          }
+        }
+      
+        val factionDisplay = (eventCard.factionOrder map desc) mkString ", "
+        b += s"${prefix}${eventCard.numAndName} ($factionDisplay)"
+      }
+      
+      
+      
+      
+      val intents = if (showIntents == false || eventCard.isCoup)
+        BotIntentsNone
+      else
+        game.botIntents
+      
+      
+      intents match {
+        case BotIntentsNone    => b += s"${prefix}${eventCard.fullString}"
+        case BotIntentsVerbose => verboseDisplay()
+        case BotIntentsConcise => conciseDisplay()
+      }
+    }
+    
+    //  Show Current Card and next card (if given)
+    cardDisplay(card, "Current card  : ")
+    nextCard match {
+      case Some(next) => cardDisplay(next, "On Deck card  : ")
+      case None       => b +=  "On Deck card   : None (Last Coup round)"
+    }
+    
     if (!card.isCoup) {
       val actors     = sequence.actors map (a => s"${actorDisp(a.faction)} -> ${a.action.name}")
       val eligible   = card.factionOrder filter sequence.eligibleThisTurn   map (_.name)
@@ -2525,7 +2614,7 @@ object FireInTheLake {
     if (game.numCardsDrawn > 0) {
       b += "Sequence of Play"
       b += separator()
-      b ++= sequenceList(eventDeck(game.currentCard), game.sequence)
+      b ++= sequenceList(getCurrentCard, getOnDeckCard, game.sequence)
     }
     b.toList
   }
@@ -2752,7 +2841,7 @@ object FireInTheLake {
   def saveGameDescription(): Unit = {
     assert(gameName.nonEmpty, "saveGameDescription(): called with gameName not set!")
     val summary = game.actionSummary.headOption getOrElse ""
-    val desc = s"${game.scenarioName}  [${eventDeck(game.currentCard)}] $summary"
+    val desc = s"${game.scenarioName}  [${getCurrentCard}] $summary"
     val path = gamesDir/gameName.get/"description"
 
     path.writeFile(desc)
@@ -2776,7 +2865,7 @@ object FireInTheLake {
       game.actionSummary
     else
       game.actionSummary :+ desc
-    val segment = GameSegment(save_number, eventDeck(game.currentCard).toString, summary)
+    val segment = GameSegment(save_number, getCurrentCard.toString, summary)
 
     // Make sure that the game directory exists
     save_path.dirname.mkpath()
@@ -2918,8 +3007,11 @@ object FireInTheLake {
                   |  adjust momentum        - Momentum events currently in play
                   |  adjust rvnLeaders      - Stack of RVN Leaders
                   |  adjust pivotal         - Adjust available Pivotal event cards
-                  |  adjust trung           - Adjust Trung deck
+                  |  adjust human win       - Toggle whether human factions can win before final Coup
+                  |  adjust trung deck      - Adjust Trung deck
+                  |  adjust trung log       - Toggle display of Trung conditions
                   |  adjust bot debug       - Toggle debug output of bot logic
+                  |  adjust bot intents     - Set display of Bot event intentions
                   |  adjust <space>         - Space specific settings""".stripMargin
 
   }
@@ -2976,8 +3068,8 @@ object FireInTheLake {
       // moved to the eligible box
       if (!game.isCoupRound)
         updateFactionEligibility(false)
-      
-      if ((game.coupCardsPlayed == game.totalCoupCards - 1 && game.onDeckCard > 0 && eventDeck(game.onDeckCard).isCoup)) {
+            
+      if (game.coupCardsPlayed == game.totalCoupCards - 1 && coupCardOnDeck) {
         //  Last Coup card is on deck, so no need to draw a card
         game = game.copy(currentCard     = game.onDeckCard,
                          onDeckCard      = 0,
@@ -2993,13 +3085,6 @@ object FireInTheLake {
                          cardsSeen       = game.cardsSeen :+ nextCard)
       }
     }
-
-    log()
-    log(s"Current card: ${eventDeck(game.currentCard)}")
-    if (game.onDeckCard > 0)
-      log(s"On Deck card: ${eventDeck(game.onDeckCard)}")
-    else
-      log("On Deck card: None (Last Coup round)")
   }
 
 
@@ -3021,7 +3106,7 @@ object FireInTheLake {
 
   // Resolve Coup Round
   def resolveCoupCard(): Unit = {
-    val coupCard         = eventDeck(game.currentCard)
+    val coupCard         = getCurrentCard
     val isFailedCoup     = game.currentCard == 129 || game.currentCard == 130
     val skipCoupRound    = game.prevCardWasCoup
     val newLeader        = rvnLeaderForCard(game.currentCard)
@@ -3699,7 +3784,7 @@ object FireInTheLake {
   @tailrec def processCoupCommand(): Unit = {
     val opts      = orList(List(CoupCmd.name, "?"))
     val coupNum   = game.coupCardsPlayed + 1
-    val card      = eventDeck(game.currentCard)
+    val card      = getCurrentCard
     val prompt = {
       val promptLines = new ListBuffer[String]
       promptLines += ""
@@ -3745,7 +3830,7 @@ object FireInTheLake {
       promptLines += ""
       promptLines += mainPrompt
       promptLines += separator(char = '=')
-      promptLines ++= sequenceList(eventDeck(game.currentCard), game.sequence)
+      promptLines ++= sequenceList(getCurrentCard, getOnDeckCard, game.sequence, showIntents = true)
       promptLines += s"($opts): "
       promptLines.mkString("\n", "\n", "")
     }
@@ -3754,7 +3839,7 @@ object FireInTheLake {
 
     cmd match {
       case DiscardCmd =>
-        val card = eventDeck(game.currentCard).fullString
+        val card = getCurrentCard.fullString
         log(s"\n ${card} discarded with no effect.  There are no eligible factions.")
       
       case ActCmd  =>
@@ -3811,7 +3896,7 @@ object FireInTheLake {
   def getPivotalFaction: Option[Faction] = {
     def currentEventIsCritical(faction: Faction) =
       game.isActingFaction(faction) &&
-      eventDeck(game.currentCard).isCritical(faction)
+      getCurrentCard.isCritical(faction)
 
     def askHumanPivot(eligible: List[Faction], pivotBot: Option[Faction]): Option[Faction] = {
       
@@ -5016,7 +5101,7 @@ object FireInTheLake {
 
   // Format the given sequence of strings in a comma separated list
   // such that we do not exceed the given number of columns.
-  def wrap[T](prefix: String, values: Seq[T], columns: Int = 78, showNone: Boolean = true): Seq[String] = {
+  def wrap[T](prefix: String, values: Seq[T], columns: Int = 100, showNone: Boolean = true): Seq[String] = {
     val stringValues = values map (_.toString)
     val b = new ListBuffer[String]
     val s = new StringBuilder(prefix)
@@ -5861,7 +5946,7 @@ object FireInTheLake {
     val options = (
       List("resources", "aid", "patronage", "econ", "trail", "uspolicy", "casualties",
       "on deck card", "out of play", "capabilities", "momentum", "rvnLeaders", "pivotal",
-      "eligibility", "trung", "bot log", "trung log", "human win") ::: agitate
+      "eligibility", "trung deck", "bot log", "trung log", "human win", "bot intents") ::: agitate
     ).sorted ::: SpaceNames
 
     val choice = askOneOf("[Adjust] (? for list): ", options, param, allowNone = true, allowAbort = false)
@@ -5885,6 +5970,7 @@ object FireInTheLake {
       case "bot log"      => adjustBotDebug()
       case "trung log"    => adjustLogTrung()
       case "human win"    => adjustHumanWinInVictoryPhase()
+      case "bot intents"  => adjustBotIntentDisplay()
       case name           => adjustSpace(name)
     }
 
@@ -6121,16 +6207,21 @@ object FireInTheLake {
   def adjustOnDeckCard(): Unit = {
     if (game.numCardsDrawn <= 1)
       println("\nNo on deck card has been drawn")
-    else {
-      println(s"\nThe on deck card is: ${eventDeck(game.onDeckCard)}")
-      val oldOnDeckNum = game.onDeckCard
-      val newOnDeckNum = askCardNumber("\nEnter the number of the on deck card: ")
-      if (newOnDeckNum != oldOnDeckNum) {
-        game = game.copy(onDeckCard = newOnDeckNum, cardsSeen = game.cardsSeen.dropRight(1) :+ newOnDeckNum)
-        log(adjustmentDesc(s"On Deck Card", eventDeck(oldOnDeckNum).toString, eventDeck(newOnDeckNum).toString))
-        saveGameState("Adjusted On Deck Card")
+    else
+      getOnDeckCard match {
+        case Some(card) =>
+          println(s"\nThe on deck card is: ${card}")
+          val oldOnDeckNum = game.onDeckCard
+          val newOnDeckNum = askCardNumber("\nEnter the number of the on deck card: ")
+          if (newOnDeckNum != oldOnDeckNum) {
+            game = game.copy(onDeckCard = newOnDeckNum, cardsSeen = game.cardsSeen.dropRight(1) :+ newOnDeckNum)
+            log(adjustmentDesc(s"On Deck Card", eventDeck(oldOnDeckNum).toString, eventDeck(newOnDeckNum).toString))
+            saveGameState("Adjusted On Deck Card")
+          }
+          
+        case None =>
+          println("\nNo on deck card: Final Coup! round")
       }
-    }
   }
 
   def adjustRvnLeaders(): Unit = {
@@ -6348,7 +6439,7 @@ object FireInTheLake {
 
       println("\nAdjusting Faction Eligibility")
       println(separator())
-      sequenceList(eventDeck(game.currentCard), seq) foreach println
+      sequenceList(getCurrentCard, getOnDeckCard, seq) foreach println
 
       askMenu(choices, "\nSelect faction:", allowAbort = false).head match {
         case None =>
@@ -6451,9 +6542,24 @@ object FireInTheLake {
     game = game.copy(humanWinInVictoryPhase = newValue)
     log(desc)
     saveGameState("Adjust Human Win in Victory Phase")
-    
   }
 
+  
+  def adjustBotIntentDisplay(): Unit = {
+      val choices = List(
+        BotIntentsVerbose -> BotIntentsVerbose.description,
+        BotIntentsConcise -> BotIntentsConcise.description,
+        BotIntentsNone    -> BotIntentsNone.description,
+      )
+      
+      val newValue = askMenu(choices, "\nChoose how to display Bot event intentions:", allowAbort = false).head
+      val desc = adjustmentDesc("Bot event intention display", game.botIntents.description, newValue.description)
+      game = game.copy(botIntents = newValue)
+      log(desc)
+      saveGameState("Adjust Bot event intention display")
+  }
+  
+  
   // case class Space(
   // name:       String,
   // spaceType:  SpaceType,

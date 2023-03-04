@@ -3,16 +3,15 @@ This is a console application that implements the Tru'ng AI Bots for the board g
 *Fire In The Lake*, designed by Mark Herman and Volko Ruhnke and published by GMT Games.
 The Tru'ng Bots were designed by Bruce Mansfield.
 
-You can play as any faction and the bots will play the other three factions.
-
 ## Downloading the executable package
 
 You can use this link to download the latest release: [Version 0.29][1]
 
-If you are upgrading to a newer version and the **major** version numbers of the two versions
-are the same, then any saved games in progress will be compatible.
+This will download a zip file called `fitl-x.x.zip` (where *x.x* is the version number).
+Extracting the zip file will create a folder called `fitl-x.x`.
 
-Simply copy the *games* folder from the older *fitl-x.x* directory to the 
+If you are upgrading to a newer version you can continue any games that you started with
+the previous version.  To do so, Simply copy the *games* folder below the older *fitl-x.x* directory to the 
 new *fitl-x.x* directory.
 
 [1]: https://www.dropbox.com/s/vuath4w6a3nutwf/fitl-0.29.zip?dl=0
@@ -20,7 +19,7 @@ new *fitl-x.x* directory.
 ## Running the program
 
 This is a Scala program, so you will need to have the Java JVM installed and make sure that
-the `java` command is on your `PATH`
+the `java` command is on your `PATH`.
 
 There are two scripts provided that will start the program.
 
@@ -38,7 +37,8 @@ When you first run the program, it will prompt you to enter:
 
 Your game is saved after each turn or Coup! round is completed.
 
-The next time you run the program, it will ask if you want to resume a saved game.
+The next time you run the program, it will ask if you want to resume a saved game and will list all
+of your saved games.  You can pick one or start a new game.
 
 
 ## Entering commands
@@ -62,9 +62,16 @@ will show the log for the most recent save point.
 
 The `rollback` command will let you restart the game from the beginning of any turn.
 
-You can also abort the current action that you are playing at most prompts by entering `abort`.
-This will take you back to the start of your turn.  And changes needed to the physical game
-board are displayed so you can keep your board in sync with the software.
+When it a Bot faction's turn to play you will used the `bot` command.  The results of the Bot turn
+are displayed so that you can follow along and update your physical game board.
+
+When it is human faction's turn to play you will use the `act` command to take your turn.  The program
+will then ask you how you wish to proceed.
+
+During your turn you can enter `abort` at most prompts if you wish to cancel what you have done
+and start your turn over. This will take you back to the start of your turn.  And any changes 
+needed to the physical game board will be displayed so you can keep your physical board in sync
+with the software.
 
 ## Command Abbreviations
 
@@ -73,9 +80,10 @@ command is actually shorthand for `history`.
 
 In fact this use of abbreviated prefixes works at every prompt in the game.  For example, if you are
 executing an operation and the software prompts you for the space in which to perform that operation
-you could enter `sai` to indicate `Saigon`.
+you could enter `sai` to indicate `Saigon`. (You do not need to distinguish between uppercase and lowercase
+letters)
 
-If you were to enter an ambiguous prefix such as `quang`, the the software will display a menu to
+If you were to enter an ambiguous prefix such as `quang`, then the software will display a menu to
 allow you to clarify which space you wish to select.
 
     'quang' is ambiguous.  Choose one:
@@ -90,6 +98,16 @@ allow you to clarify which space you wish to select.
 
 Also, when at a prompt, you can see all of choices that are valid for the current operation by entering a question mark `?`.
 
+For example if you are playing the VC and are prompted to select a space to Terrorize, you could enter `?` and you
+will see a list of all valid spaces that can be terrorized by the VC faction:
+
+    Terrorize which space: ?
+    Enter one of:
+    Binh Dinh, Binh Tuy-Binh Thuan, Kien Giang-An Xuyen, Kien Phong, Pleiku-Darlac, Quang Duc-Long Khanh, Tay Ninh, or abort
+
+    Terrorize which space: 
+
+
 ### Selecting LOC's
 
 The names of LOCs are quite long as they include all endpoints of the LOC.
@@ -102,7 +120,18 @@ So when selecting an LOC you can simply enter "LOC" as the prefix and the
 software will provide a menu of all LOCs that can be selected for the current game function.
 You can then simply enter the number next to the LOC that you wish to select.
 
-
+    Terrorize which space: loc
+    
+    'loc' is ambiguous.  Choose one:
+    ====================================================
+    1) LOC Hue -- Da Nang
+    2) LOC Saigon -- An Loc -- Ban Me Thuot
+    3) None of the above
+    ----------------------------------------------------
+    Selection:
+    
+In the above example, only the LOCs with underground guerrillas are included in the list.
+    
 ## License
 
     Copyright (c) 2023 Curt Sellmer

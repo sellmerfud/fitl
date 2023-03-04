@@ -2251,9 +2251,19 @@ object FireInTheLake {
     val b = new ListBuffer[String]
     val len = Faction.maxNameLen
     b += s"Scenario: ${game.scenarioName}"
-    b += separator()
+    b += separator(char = '=')
     for (f <- Faction.ALL.toList.sorted)
       b += s"${padLeft(f, len)}: ${if (game.isHuman(f)) "Human" else "Bot" }"
+      
+    if (game.humanFactions.nonEmpty) {
+      val desc = if (game.humanWinInVictoryPhase)
+        "allowed during Victory phase of any Coup! round"
+      else
+        "not allowed until final Coup! round"
+      b += separator()
+      b += s"Human Victory $desc"      
+    }
+    
     b.toList
   }
 
@@ -2359,7 +2369,7 @@ object FireInTheLake {
       f"${coupChance*100}%.2f%%  (${amountOf(cardsRemaining, "card")} remaining in ${ordinal(nextCardCampaign)} pile of ${game.cardsPerCampaign})"
 
     b += "Game Summary"
-    b += separator()
+    b += separator(char = '=')
     game.scores foreach { s => b += displayScore(s) }
     b += separator()
     if (game.trackResources(ARVN))
@@ -2399,15 +2409,7 @@ object FireInTheLake {
 
     b += separator()
     b ++= drawPileSummary
-
-    if (game.humanFactions.nonEmpty) {
-      val desc = if (game.humanWinInVictoryPhase)
-        "Allowed during Victory phase of any Coup! round"
-      else
-        "Not allowed until final Coup! round"
-      b += separator()
-      b += s"Human Victory  : $desc"      
-    }
+    b += separator()
 
     b.toList
   }
@@ -2421,20 +2423,19 @@ object FireInTheLake {
       VC   -> List(VCGuerrillas_U, VCBase)
     )
     
-    def hasPieces(faction: Faction): Boolean = game.availablePieces.has(pieceTypes(faction))
-
-    def addPieces(faction: Faction): Unit = if (hasPieces(faction)) {
-      b += separator()
+    def addPieces(faction: Faction, showSep: Boolean): Unit = {
+      if (showSep)
+        b += separator()
       for (t <- pieceTypes(faction); name = t.genericPlural; count = game.availablePieces.totalOf(t))
         b += f"${name}%-15s: ${count}%2d"
     }
 
     b += "Available Pieces"
-    if (factions exists hasPieces) 
-      factions foreach addPieces
-    else {
-      b += separator()
-      b += "None"
+    b += separator(char = '=')
+    var showSep = false
+    for (f <- factions) {
+      addPieces(f, showSep)
+      showSep = true
     }
 
     b.toList
@@ -2449,19 +2450,24 @@ object FireInTheLake {
 
     def hasPieces(faction: Faction): Boolean = game.casualties.has(pieceTypes(faction))
     
-    def addPieces(faction: Faction): Unit = if (hasPieces(faction)) {
-      b += separator()
+    def addPieces(faction: Faction, showSep: Boolean): Unit = if (hasPieces(faction)) {
+      if (showSep)
+        b += separator()
       for (t <-pieceTypes(faction); name = t.genericPlural; count = game.casualties.totalOf(t) if count > 0)
         b += f"${name}%-15s: ${count}%2d"
     }
     
     b += "Casualties"
-    if (factions exists hasPieces)
-      factions foreach addPieces
-    else {
-      b += separator()
-      b += "None"
+    b += separator(char = '=')
+    if (factions exists hasPieces) {
+      var showSep = false
+      for (f <- factions) {
+        addPieces(f, showSep)
+        showSep = true
+      }
     }
+    else
+      b += "None"
 
     b.toList
   }
@@ -2475,19 +2481,25 @@ object FireInTheLake {
 
     def hasPieces(faction: Faction): Boolean = game.outOfPlay.has(pieceTypes(faction))
 
-    def addPieces(faction: Faction): Unit = if (hasPieces(faction)) {
-      b += separator()
+    def addPieces(faction: Faction, showSep: Boolean): Unit = if (hasPieces(faction)) {
+      if (showSep)
+        b += separator()
       for (t <- pieceTypes(faction); name = t.genericPlural; count = game.outOfPlay.totalOf(t) if count > 0)
         b += f"${name}%-15s: ${count}%2d"
     }
     
     b += "Out of Play"
-    if (factions exists hasPieces)
-      factions foreach addPieces
-    else {
-      b += separator()
-      b += "None"
+    b += separator(char = '=')
+    if (factions exists hasPieces) {
+      var showSep = false
+      for (f <- factions) {
+        addPieces(f, showSep)
+        showSep = true
+      }
     }
+    else 
+      b += "None"
+
     b.toList
   }
 
@@ -2509,7 +2521,7 @@ object FireInTheLake {
     }
     
     b += "Active Events"
-    b += separator()
+    b += separator(char = '=')
     wrap("Capabilities: ", game.capabilities map (_.toString)) foreach (b += _)
     wrap("Momentum    : ", game.momentum)     foreach (b += _)
     wrap("Pivotal     : ", pivotal) foreach (b += _)
@@ -5704,11 +5716,13 @@ object FireInTheLake {
     val names = cmds map (_.name)
     param match {
       case None =>
-        println(s"Available commands: ${orList(names)}")
+        println(s"\nAvailable commands: ${orList(names)}")
         println("Type help <command> for more detail")
       case Some(p) =>
-        for (name <- matchOne(p, names); cmd <- cmds find (_.name == name))
+        for (name <- matchOne(p, names); cmd <- cmds find (_.name == name)) {
+          println()
           println(cmd.desc)
+        }
     }
   }
 

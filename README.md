@@ -11,7 +11,7 @@ This will download a zip file called `fitl-x.x.zip` (where *x.x* is the version 
 Extracting the zip file will create a folder called `fitl-x.x`.
 
 If you are upgrading to a newer version you can continue any games that you started with
-the previous version.  To do so, Simply copy the *games* folder below the older *fitl-x.x* directory to the 
+the previous version.  To do so, simply copy the *games* folder below the older *fitl-x.x* directory to the 
 new *fitl-x.x* directory.
 
 [1]: https://www.dropbox.com/s/vuath4w6a3nutwf/fitl-0.29.zip?dl=0
@@ -23,8 +23,13 @@ the `java` command is on your `PATH`.
 
 There are two scripts provided that will start the program.
 
-* `filt` -- As bash script used on Mac and Linux
-* `filt.cmd` -- A Windows command file
+<dl>
+  <dt><pre>filt</pre></dt>
+  <dd>A bash script used on Mac and Linux</dd>
+
+  <dt><pre>filt.cmd</pre></dt>
+  <dd>A Windows command file</dd>
+</dl>
 
 ## Using the program
 
@@ -47,7 +52,7 @@ The program does not maintain the deck of event cards.  You must setup and shuff
 tell the program which card has been drawn.  You will be prompted to enter a card number each time
 a new event card must be drawn.
 
-The Trung deck is maintained by the program.  You will see messages indicating when ad Trung card
+The Trung deck is maintained by the program.  You will see messages indicating when a Trung card
 is drawn but you do not need to use the physical Trung cards.
 
 Use the `help` command to see all of the the available commands.  You can get further help for 
@@ -62,21 +67,26 @@ will show the log for the most recent save point.
 
 The `rollback` command will let you restart the game from the beginning of any turn.
 
-When it a Bot faction's turn to play you will used the `bot` command.  The results of the Bot turn
+When it is a Bot faction's turn to play you will use the `bot` command.  The results of the Bot turn
 are displayed so that you can follow along and update your physical game board.
 
-When it is human faction's turn to play you will use the `act` command to take your turn.  The program
+When it is a human faction's turn to play you will use the `act` command to take your turn.  The program
 will then ask you how you wish to proceed.
 
 During your turn you can enter `abort` at most prompts if you wish to cancel what you have done
 and start your turn over. This will take you back to the start of your turn.  And any changes 
 needed to the physical game board will be displayed so you can keep your physical board in sync
-with the software.
+with the software. 
+
+If you enter `abort` while you are conducting a *Special Activity* only the
+special activity is aborted.  This allows you to change your mind and select another special activity,
+or to not perform a special activity at the current moment.  Once you have backed out of the
+special activity, you can enter `abort` again to abort the entire turn.
 
 ## Command Abbreviations
 
-All commands can be shorted to the prefix of the command name that is unique.  The `h` 
-command is actually shorthand for `history`.
+All commands can be shortened to the prefix of the command name that is unique.  For example `hi` 
+is shorthand for `history`.
 
 In fact this use of abbreviated prefixes works at every prompt in the game.  For example, if you are
 executing an operation and the software prompts you for the space in which to perform that operation
@@ -99,7 +109,8 @@ allow you to clarify which space you wish to select.
 Also, when at a prompt, you can see all of choices that are valid for the current operation by entering a question mark `?`.
 
 For example if you are playing the VC and are prompted to select a space to Terrorize, you could enter `?` and you
-will see a list of all valid spaces that can be terrorized by the VC faction:
+will see a list of all valid spaces that can be terrorized by the VC faction.  Then you will be prompted
+again to enter a space.
 
     Terrorize which space: ?
     Enter one of:

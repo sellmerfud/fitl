@@ -51,7 +51,7 @@ import Bot.{ TrungCard, TrungDeck }
 
 object FireInTheLake {
 
-  val SOFTWARE_VERSION = "0.29"
+  val SOFTWARE_VERSION = "1.0"
   val INTEGER = """(\d+)""".r
 
   def d6 = nextInt(6) + 1

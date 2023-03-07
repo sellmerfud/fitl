@@ -24,10 +24,10 @@ the `java` command is on your `PATH`.
 There are two scripts provided that will start the program.
 
 <dl>
-  <dt><pre>filt</pre></dt>
+  <dt><pre>fitl</pre></dt>
   <dd>A bash script used on Mac and Linux</dd>
 
-  <dt><pre>filt.cmd</pre></dt>
+  <dt><pre>fitl.cmd</pre></dt>
   <dd>A Windows command file</dd>
 </dl>
 

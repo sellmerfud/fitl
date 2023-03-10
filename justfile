@@ -8,8 +8,8 @@ default:
   grep '^\s*version' build.sbt
 
 # Package up a new version
-package COMMIT="--commit" VERSION="next_minor":
-  scripts/package.sh {{COMMIT}} {{VERSION}}
+release COMMIT="--commit" VERSION="next_minor":
+  scripts/release.sh {{COMMIT}} {{VERSION}}
 
 
 

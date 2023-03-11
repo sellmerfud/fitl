@@ -31,13 +31,12 @@ lazy val fitl = (project in file("."))
     // Task to create the distribution zip file
     Compile / stage := {
       val log = streams.value.log
-      (loader / Compile / packageBin).value  // Depends on the package being built
-      (Compile / packageBin).value  // Depends on the package being built
+      (loader / Compile / packageBin).value  // Depends on the loader package being built
+      (Compile / packageBin).value           // Depends on the main package being built
       def rebaseTo(directory: File)(origfile: File): Option[File] = {
         val mapper: FileMap = Path.flat(directory)
         mapper(origfile)
       }
-      //  Full classpath including our own built jar file
       val pkgDir     = target.value / s"fitl-${version.value}"
       val lib        = pkgDir / "lib"
       val loader_jar = (loader / Compile / packageBin / artifactPath).value

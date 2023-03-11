@@ -9,9 +9,10 @@ shopt -s extglob
 
 usage() {
   {
-    printf "usage: release.sh [--commit|--no_commit] [version]\n"
+    printf "usage: release.sh [--commit|--no_commit|-n] [version]\n"
     printf "  --commit    - Commit changes and push them to Github (Default)\n"
     printf "  --no-commit - Do not commit changes\n"
+    printf "  -n          - Do not commit changes (same as --no-commit)\n"
     printf "\n"
     printf "  version     - Can be one of:\n"
     printf "                next_minor: Bump the minor version number (Default)\n"
@@ -93,7 +94,7 @@ get_access_token() {
 # Get the sharable url for the zip file and echo it to stdout
 get_zipfile_url() {
   local version="$1"
-  local dropbox_zip_file_path="/$drobox_folder/$program_name-${version}.zip"
+  local dropbox_zip_file_path="/$dropbox_folder/$program_name-${version}.zip"
   local access_token=""
   local response=/tmp/get_zipfile_url_response.$$
   local result=1
@@ -129,7 +130,7 @@ get_zipfile_url() {
 upload_zipfile() {
   local version="$1"
   local local_zip_file_path="target/$program_name-${version}.zip"
-  local dropbox_zip_file_path="/$drobox_folder/$program_name-${version}.zip"
+  local dropbox_zip_file_path="/$dropbox_folder/$program_name-${version}.zip"
   local access_token=""
   local response=/tmp/upload_response.$$
   local result=1
@@ -227,7 +228,7 @@ cd $(dirname $0)/..
 # Program name and dropbox folder are used to
 # upload the zip file to dropbox
 program_name=fitl
-drobox_folder=fitl
+dropbox_folder=fitl
 
 # Make sure we are on the master branch
 branch=$(git branch --show-current 2>/dev/null)

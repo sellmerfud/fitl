@@ -8,8 +8,8 @@ lazy val commonSettings = Seq(
   scalaVersion := "2.13.10"
 )
 
-lazy val stage       = taskKey[Unit]("Create distribution zip file")
-lazy val sourceOther = settingKey[File]("Other source file included in the package")
+lazy val stage        = taskKey[Unit]("Create distribution zip file")
+lazy val sourceOther  = settingKey[File]("Other source file included in the package")
 
 
 lazy val fitl = (project in file("."))
@@ -22,26 +22,34 @@ lazy val fitl = (project in file("."))
       "org.scala-lang.modules" %% "scala-parser-combinators" % "2.1.1"
     ),
     sourceOther := sourceDirectory.value / "other",
+    Compile / resourceGenerators += Def.task {
+      val versFile = (Compile / resourceManaged).value / "version"
+      IO.write(versFile, version.value)
+      Seq(versFile)
+      }.taskValue,
     
     // Task to create the distribution zip file
     Compile / stage := {
       val log = streams.value.log
+      (loader / Compile / packageBin).value  // Depends on the package being built
       (Compile / packageBin).value  // Depends on the package being built
       def rebaseTo(directory: File)(origfile: File): Option[File] = {
         val mapper: FileMap = Path.flat(directory)
         mapper(origfile)
       }
       //  Full classpath including our own built jar file
-      val pkgDir  = target.value / s"fitl-${version.value}"
-      val lib     = pkgDir / "lib"
-      val zipfile = file(s"${pkgDir.getAbsolutePath}.zip")
-      val jars    = (Compile / fullClasspathAsJars).value.files
-      val others  = (sourceOther.value * "*").get
-      val assets  = (others pair rebaseTo(pkgDir)) ++ (jars pair rebaseTo(lib))
+      val pkgDir     = target.value / s"fitl-${version.value}"
+      val lib        = pkgDir / "lib"
+      val loader_jar = (loader / Compile / packageBin / artifactPath).value
+      val zipfile    = file(s"${pkgDir.getAbsolutePath}.zip")
+      val jars       = (Compile / fullClasspathAsJars).value.files
+      val others     = (sourceOther.value * "*").get
+      val assets     = (others pair rebaseTo(pkgDir)) ++ (jars pair rebaseTo(lib))
       
       log.info(s"Staging to $pkgDir ...")
       IO.delete(pkgDir)
       IO.createDirectory(lib)
+      IO.copyFile(loader_jar, lib / loader_jar.getName)
       IO.copy(assets, CopyOptions().withOverwrite(true))
       IO.setPermissions(pkgDir / "fitl", "rwxr-xr-x") // Make bash script executable
       // Create zip file
@@ -51,6 +59,15 @@ lazy val fitl = (project in file("."))
     }
   )
   
+  lazy val loader = (project in file("loader"))
+    .settings(
+      commonSettings,
+      name        := "Loader",
+      description := "Bootstrap loader",
+      // Make loader.jar generic without version number so the fitl scripts can find it.
+      (Compile / packageBin / artifactPath) := (Compile / target).value / "loader.jar"
+    )
+
 
 
 

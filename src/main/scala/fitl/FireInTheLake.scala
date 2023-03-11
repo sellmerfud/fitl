@@ -33,7 +33,7 @@
 
 package fitl
 
-import java.io.IOException
+import java.io.{ IOException, BufferedReader, InputStreamReader }
 import scala.annotation.tailrec
 import scala.collection.immutable.ListMap
 import scala.collection.mutable.ListBuffer
@@ -51,7 +51,31 @@ import Bot.{ TrungCard, TrungDeck }
 
 object FireInTheLake {
 
-  val SOFTWARE_VERSION = "1.0"
+  lazy val SOFTWARE_VERSION: String = {
+    def classLoader: ClassLoader =
+      Thread.currentThread.getContextClassLoader match {
+        case null => this.getClass.getClassLoader match {
+          case null => ClassLoader.getSystemClassLoader
+          case cl => cl
+        }
+        case cl => cl
+      }
+    
+    Option(classLoader.getResourceAsStream("version")) match {
+      case None           => "Missing"
+      case Some(resource) =>
+        try {
+          val reader = new BufferedReader(new InputStreamReader(resource))
+          val version = reader.readLine.trim
+          reader.close
+          version
+        }
+        catch {
+          case e: IOException => "Error"
+        }
+    }
+  }
+  
   val INTEGER = """(\d+)""".r
 
   def d6 = nextInt(6) + 1
@@ -2806,7 +2830,6 @@ object FireInTheLake {
       case ExitGame =>
     }
   }
-
 
   def initialGameState(scenario: Scenario, humanFactions: Set[Faction], usePeriodCapabilities: Boolean, humanCanWinEarly: Boolean) = {
     val trungDeck = shuffle(TrungDeck filterNot (card => humanFactions(card.faction)))

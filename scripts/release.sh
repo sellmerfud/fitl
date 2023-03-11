@@ -41,15 +41,13 @@ getYorN() {
 }
 
 
-# Update the version in all build.sbt, source files, and scripts
+# Update the version in build.sbt
 # Note we cannot update the README.md file until we have uploaded the
 # zip file to Dropbox so that we can get its download URL. (see the update_readme() function)
 set_version() {
   local version=$1
   
   ruby -p -i -e 'gsub(/(version\s*:=\s*)("\d+\.\d+")/, "\\1\"'$version'\"")' build.sbt
-  ruby -p -i -e 'gsub(/'$jarfile_prefix'_2.13-(\d+\.\d+)\.jar/, "'$jarfile_prefix'_2.13-'$version'.jar")' src/other/$program_name src/other/$program_name.cmd
-  ruby -p -i -e 'gsub(/(val\s+SOFTWARE_VERSION\s*=\s*)("\d+\.\d+")/, "\\1\"'$version'\"")' ${main_class}
   printf "Version set to $version\n"
 }
 
@@ -95,7 +93,7 @@ get_access_token() {
 # Get the sharable url for the zip file and echo it to stdout
 get_zipfile_url() {
   local version="$1"
-  local dropbox_zip_file_path="/$program_name/$program_name-${version}.zip"
+  local dropbox_zip_file_path="/$drobox_folder/$program_name-${version}.zip"
   local access_token=""
   local response=/tmp/get_zipfile_url_response.$$
   local result=1
@@ -131,7 +129,7 @@ get_zipfile_url() {
 upload_zipfile() {
   local version="$1"
   local local_zip_file_path="target/$program_name-${version}.zip"
-  local dropbox_zip_file_path="/$program_name/$program_name-${version}.zip"
+  local dropbox_zip_file_path="/$drobox_folder/$program_name-${version}.zip"
   local access_token=""
   local response=/tmp/upload_response.$$
   local result=1
@@ -226,35 +224,10 @@ esac
 ## This is important because sbt' must be run from the top level directory
 cd $(dirname $0)/..
 
-ID_FILE="$(dirname $0)/local_package_vars.sh"
-[[ -f "$ID_FILE" ]] || {
-  printf "File not found: $ID_FILE\n"
-  exit 1
-}
-
-# Sets the program_name and main_class variables
-source $ID_FILE
-
-
-[[ -z ${program_name+x} ]] && {
-  printf "variable 'program_name' is not set in $ID_FILE\n"
-  exit 1
-}
-
-[[ -z ${main_class+x} ]] && {
-  printf "variable 'main_class' is not set in $ID_FILE\n"
-  exit 1
-}
-
-[[ -z ${jarfile_prefix+x} ]] && {
-  printf "variable 'jarfile_prefix' is not set in $ID_FILE\n"
-  exit 1
-}
-
-
-
-# Make sure the main_class includes the .scala extentsion
-main_class="${main_class%.scala}.scala"
+# Program name and dropbox folder are used to
+# upload the zip file to dropbox
+program_name=fitl
+drobox_folder=fitl
 
 # Make sure we are on the master branch
 branch=$(git branch --show-current 2>/dev/null)

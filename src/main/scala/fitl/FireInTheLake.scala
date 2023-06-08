@@ -5584,7 +5584,7 @@ object FireInTheLake {
         println(separator(char = '='))
         val indexMap = (itemsRemaining.keys.zipWithIndex map (_.swap)).toMap
         for ((key, i) <- itemsRemaining.keysIterator.zipWithIndex) {
-          val prefix = String.format(s"%${width}d) ", new Integer(i+1))
+          val prefix = String.format(s"%${width}d) ", i+1)
           println(s"${prefix}${itemsRemaining(key)}")
         }
         val prompt = if (numChoices > 1) s"${ordinal(num)} Selection: "
@@ -5626,7 +5626,7 @@ object FireInTheLake {
         println(separator(char = '='))
         val indexMap = (itemsRemaining.keys.zipWithIndex map (_.swap)).toMap
         for ((key, i) <- itemsRemaining.keysIterator.zipWithIndex) {
-          val number = String.format(s"%${width}d) ", new Integer(i+1))
+          val number = String.format(s"%${width}d) ", i+1)
           val (desc, detail) = itemsRemaining(key)
           val prefix = s"${number}${desc} "
           wrap(prefix, detail, showNone = false) foreach println

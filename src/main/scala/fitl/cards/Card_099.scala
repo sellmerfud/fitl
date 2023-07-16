@@ -85,19 +85,19 @@ object Card_099 extends EventCard(99, "Masher/White Wing",
     else
       faction
       
-      if (game.isHuman(actor)) {
-        val target = askSimpleMenu(unshadedCandidates, "Sweep and Assault in which (non Jungle) space:").head
-                
-        val params = Params(
-          event         = true, 
-          free          = true,
-          cubeTreatment = AllTroopsAsUS,
-          maxSpaces     = Some(1),
-          sweep         = SweepParams(explicitSpaces = Set(target)))
-        Human.initTurnVariables(specialActivity = false)
-        Human.executeSweep(actor, params)
-        Human.performAssault(actor, target, params)
-      }
+    if (game.isHuman(actor)) {
+      val target = askSimpleMenu(unshadedCandidates, "Sweep and Assault in which (non Jungle) space:").head
+              
+      val params = Params(
+        event         = true, 
+        free          = true,
+        cubeTreatment = AllTroopsAsUS,
+        maxSpaces     = Some(1),
+        sweep         = SweepParams(explicitSpaces = Set(target)))
+      Human.initTurnVariables(specialActivity = false)
+      Human.executeSweep(actor, params)
+      Human.performAssault(actor, target, params)
+    }
     else {
       val name = Bot.bestSweepAssaultTarget(actor, AllTroopsAsUS, unshadedCandidates).get._1
       // M48Unshaded is checked by the Bot assault code

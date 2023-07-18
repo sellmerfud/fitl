@@ -1053,8 +1053,7 @@ object Human {
       val canAdvise = Special.selectedSpaces.size < maxAdvise
 
       val canSweep   = canAdvise && !game.inMonsoon && sweepCandidates.nonEmpty
-      val canAssault = canAdvise && !momentumInPlay(Mo_GeneralLansdale) &&
-                                    assaultCandidates.nonEmpty
+      val canAssault = canAdvise && assaultCandidates.nonEmpty
       val canSpecial = canAdvise && specialForcesCandidates.nonEmpty
       val choices = List(
         choice(canSweep,   "sweep",   "Sweep a space with ARVN forces"),

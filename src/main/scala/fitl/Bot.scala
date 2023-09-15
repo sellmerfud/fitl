@@ -3658,7 +3658,9 @@ object Bot {
         !prohibited(sp) &&
         assaultWouldRemoveBase(ARVN, params.cubeTreatment, params.vulnerableTunnels)(sp)
 
-      val canRemoveBaseWithSpecialForces = (sp: Space) => !prohibited(sp) && specialForcesWouldRemoveBase(sp)
+      val canRemoveBaseWithSpecialForces = (sp: Space) =>
+        !prohibited(sp) &&
+        specialForcesWouldRemoveBase(sp)
 
       val canArvnSweep = (sp: Space) =>
         !prohibited(sp) &&
@@ -3666,6 +3668,7 @@ object Bot {
         sp.sweepActivations(ARVN, params.cubeTreatment) > 0
 
       val canRemoveEnemies = (sp: Space) =>
+        !prohibited(sp) &&
         hasUndergroundForces(sp) &&
         sp.pieces.has(InsurgentForces:::InsurgentNonTunnels)
 

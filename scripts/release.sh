@@ -69,9 +69,14 @@ commit_release() {
 # We must do this because the access tokens are shot term and will expire
 # in about 4 hours.
 get_access_token() {
-  local response=/tmp/access_token_response.$$
   local result=1
   local refresh_token client_id
+  local response
+
+  if ! response="$(mktemp -q /tmp/access_token_response.XXXX)"; then
+    printf "get_access_token: Unable to create a temporary file\n" >&2
+    return 1
+  fi
 
   refresh_token="$(head -n1 ~/.dropbox/game_bots_refresh_token)"
   client_id="$(head -n1 ~/.dropbox/game_bots_client_id)"
@@ -79,17 +84,17 @@ get_access_token() {
   curl -s https://api.dropbox.com/oauth2/token \
       -d grant_type=refresh_token \
       -d refresh_token="$refresh_token" \
-      -d client_id="$client_id" > $response
+      -d client_id="$client_id" >"$response"
 
-  if grep -F --quiet '"error":' $response; then
+  if grep -F --quiet '"error":' "$response"; then
     printf "Error getting access token\n" >&2
-    jq . $response >&2
+    jq . "$response" >&2
   else
-    jq --raw-output .access_token $response
+    jq --raw-output .access_token "$response"
     result=0
   fi
 
-  rm -f $response
+  rm -f "$response"
   return $result
 }
 
@@ -98,8 +103,13 @@ get_zipfile_url() {
   local version="$1"
   local dropbox_zip_file_path="/$dropbox_folder/$program_name-${version}.zip"
   local access_token=""
-  local response=/tmp/get_zipfile_url_response.$$
   local result=1
+  local response
+
+  if ! response="$(mktemp -q /tmp/get_zipfile_url_response.XXXX)"; then
+    printf "get_zipfile_url: Unable to create a temporary file\n" >&2
+    return 1
+  fi
 
   # NOTE:  We cannot assign this in the local variable declaration
   #        because we would lose the returned error code and would
@@ -112,20 +122,20 @@ get_zipfile_url() {
   curl -s -X POST https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings \
       --header "Authorization: Bearer $access_token" \
       --header "Content-Type: application/json" \
-      --data "{\"path\":\"${dropbox_zip_file_path}\"}" > $response
+      --data "{\"path\":\"${dropbox_zip_file_path}\"}" >"$response"
 
-  if grep -F --quiet '"shared_link_already_exists":' $response; then
-    jq --raw-output '.error.shared_link_already_exists.metadata.url' $response
+  if grep -F --quiet '"shared_link_already_exists":' "$response"; then
+    jq --raw-output '.error.shared_link_already_exists.metadata.url' "$response"
     result=0
-  elif grep -F --quiet '"error":' $response; then
+  elif grep -F --quiet '"error":' "$response"; then
     printf "Error getting zipfile url\n" >&2
-    jq . $response >&2
+    jq . "$response" >&2
   else
-    jq --raw-output '.url' $response
+    jq --raw-output '.url' "$response"
     result=0
   fi
   
-  rm -f $response
+  rm -f "$response"
   return $result
 }
 
@@ -134,10 +144,15 @@ upload_zipfile() {
   local local_zip_file_path="target/$program_name-${version}.zip"
   local dropbox_zip_file_path="/$dropbox_folder/$program_name-${version}.zip"
   local access_token=""
-  local response=/tmp/upload_response.$$
   local result=1
+  local response
 
-  [[ -f $local_zip_file_path ]] || {
+  if ! response="$(mktemp -q /tmp/upload_response.XXXX)"; then
+    printf "upload_zipfile: Unable to create a temporary file\n" >&2
+    return 1
+  fi
+
+  [[ -f "$local_zip_file_path" ]] || {
     printf "zip file does not exist: %s\n" "$local_zip_file_path"
     return 1
   }
@@ -270,7 +285,7 @@ else
   exit 1
 fi
 
-if [[ $CURRENT_VERSION != "$NEW_VERSION" ]]; then
+if [[ "$CURRENT_VERSION" != "$NEW_VERSION" ]]; then
   if getYorN "Set version to $NEW_VERSION and create a release?"; then
     set_version "$NEW_VERSION"
   else
@@ -282,7 +297,7 @@ fi
 
 
 set -euo pipefail
-current_command=$BASH_COMMAND
+current_command="$BASH_COMMAND"
 # keep track of the last executed command
 trap 'last_command=$current_command; current_command=$BASH_COMMAND' DEBUG
 # echo an error message before exiting
@@ -291,7 +306,7 @@ trap 'printf "\"${last_command:?unknown}\" command failed with exit code $?.\n"'
 sbt stage
 upload_zipfile "$NEW_VERSION"
 update_readme  "$NEW_VERSION"
-if [[ $DO_COMMIT == yes ]]; then
+if [[ "$DO_COMMIT" == "yes" ]]; then
   commit_release "$NEW_VERSION"
   printf "Version %s successfully created and pushed to Github!" "$NEW_VERSION"
 else

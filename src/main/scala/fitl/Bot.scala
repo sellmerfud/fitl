@@ -213,7 +213,7 @@ object Bot {
   //  Function to make a comparison against the dice roll of a number of d6.
   //  This is used so we can log the dice roll
   def trungDiceCheck(numd6: Int, targetValue: Int, compareOp: CompareOp, desc: String): Boolean = {
-    val diceValue = rollDice(3)
+    val diceValue = rollDice(numd6)
     val result    = compareOp.compare(diceValue, targetValue)
 
     logCheck(result, s"${numd6}d6 $compareOp $desc ($targetValue): $diceValue")

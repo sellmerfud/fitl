@@ -59,8 +59,9 @@ commit_release() {
 
   git add  --update .
   git ci   -m"Update version number to $version"
-  git tag  -m"Release v$version" v"$version"
+  git tag  -m"Release v$version" "v$version"
   git push --tags origin master
+  gh release create --generate-notes --title "Version $version" "v$version"
 }
 
 

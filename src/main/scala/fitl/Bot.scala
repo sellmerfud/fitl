@@ -231,6 +231,11 @@ object Bot {
     logCheck(result, "Support + Available >= 42?")
   }
 
+  def arvnPoints_GE_42: Boolean = {
+    val result = game.arvnPoints >= 42
+    logCheck(result, "COIN-Controlled Pop + Patronage >= 42?")
+  }
+
   def logOpChoice(faction: Faction, op: Operation, notes: Iterable[String] = Nil): Unit = {
     log(s"\n$faction chooses $op operation")
     log(separator(char = '='))
@@ -7384,7 +7389,7 @@ object Bot {
         US_Bot.airStrikeActivity(params)
       }
 
-      if (!usPoints_GE_42)
+      if (!arvnPoints_GE_42)
         TrungDraw
       else if (!US_Bot.usPiecesWith4PlusNVATroopsOrVulnerableBase)
         flipCard(params)
@@ -7794,7 +7799,7 @@ object Bot {
         ARVN_Bot.raidActivity(params)   ||
         ARVN_Bot.transportActivity(params)
 
-      if (!usPoints_GE_42)
+      if (!arvnPoints_GE_42)
         TrungDraw
       else if (!allLocRoutesCanTho_HueBlocked)
         flipCard(params)
@@ -8063,7 +8068,7 @@ object Bot {
     def executeFront(params: Params): TrungResult = {
       def doSpecialActivity(): Boolean = NVA_Bot.bombardActivity(params)
 
-      if (!usPoints_GE_42)
+      if (!arvnPoints_GE_42)
         TrungDraw
       else if (!NVA_Bot.atleastTwentyNVATroopsOnMap)
         flipCard(params)

@@ -1965,6 +1965,10 @@ object FireInTheLake {
 
     def canDo(action: Action) = availableActions contains action
 
+    //  Return true if the given faction will be eligible to
+    //  act on the next card.
+    //  ie. The faction has not acted on the current card and
+    //      the faction is not forcibly ineligible on the next card
     def willBeEligibeNextTurn(faction: Faction) =
       !ineligibleNextTurn(faction) &&
       !(actors exists (_.faction == faction))

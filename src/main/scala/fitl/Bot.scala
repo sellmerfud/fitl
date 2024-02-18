@@ -7011,7 +7011,15 @@ object Bot {
 
   def isFirstOnNextCard(faction: Faction) = {
     val nextCard = eventDeck(game.onDeckCard)
-    !nextCard.isCoup && faction == nextCard.factionOrder.head
+    if (nextCard.isCoup)
+      false
+    else {
+      val eligibleOrder = nextCard.factionOrder.filter(game.sequence.willBeEligibeNextTurn)
+      eligibleOrder match {
+        case first :: _  if first == faction => true
+        case _ => false
+      }
+    }
   }
 
   val firstEligibileTable = List(

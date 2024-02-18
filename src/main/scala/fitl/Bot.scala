@@ -7015,10 +7015,7 @@ object Bot {
       false
     else {
       val eligibleOrder = nextCard.factionOrder.filter(game.sequence.willBeEligibeNextTurn)
-      eligibleOrder match {
-        case first :: _  if first == faction => true
-        case _ => false
-      }
+      eligibleOrder.headOption == Some(faction)
     }
   }
 

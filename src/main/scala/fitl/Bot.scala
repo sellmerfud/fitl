@@ -865,7 +865,7 @@ object Bot {
       if (low == NO_SCORE)
         Nil
       else {
-        botDebug(s"$desc): score = $low")
+        botDebug(s"$desc: score = $low")
         entries filter (score(_) == low)
       }
     }

@@ -2125,6 +2125,7 @@ object FireInTheLake {
     gameOver: Boolean                 = false,
     peaceTalks: Boolean               = false,
     botDebug: Boolean                 = false,
+    botTest: Boolean                  = false,
     logTrung: Boolean                 = true, // Log Trung decisions
     botIntents: BotIntents            = BotIntentsVerbose,
     history: Vector[GameSegment]      = Vector.empty,
@@ -4133,18 +4134,30 @@ object FireInTheLake {
   //  The game state is updated and the topmost card
   //  is returned.
   def drawTrungCard(faction: Faction): TrungCard = {
-    var trungDeck = game.trungDeck
-
-    // First the topmost card is place on the bottom
-    // Then continue drawing until we get a card for the
-    // given faction.
-    do {
-      trungDeck = trungDeck.tail :+ trungDeck.head
-    } while (trungDeck.head.faction != faction)
-
-    game = game.copy(trungDeck = trungDeck)
-    trungDeck.head
+    // In bot test mode prompt the user for the Trung card
+    if (game.botTest) {
+      val candidates = (game.trungDeck
+        .filter(_.faction == faction)
+        .sortBy(_.id))
+    
+      val choices = candidates.map(c => (c, c.toString))
+      askMenu(choices, "\nChoose Trung card:", allowAbort = false).head
+    }
+    else {
+      var trungDeck = game.trungDeck
+  
+      // First the topmost card is place on the bottom
+      // Then continue drawing until we get a card for the
+      // given faction.
+      do {
+        trungDeck = trungDeck.tail :+ trungDeck.head
+      } while (trungDeck.head.faction != faction)
+  
+      game = game.copy(trungDeck = trungDeck)
+      trungDeck.head
+    }
   }
+
 
   def factionPasses(faction: Faction): Unit = {
     log(s"\n$faction faction passes")
@@ -5987,7 +6000,7 @@ object FireInTheLake {
     val options = (
       List("resources", "aid", "patronage", "econ", "trail", "uspolicy", "casualties",
       "on deck card", "out of play", "capabilities", "momentum", "rvnLeaders", "pivotal",
-      "eligibility", "trung deck", "bot log", "trung log", "human win", "bot intents") ::: agitate
+      "eligibility", "trung deck", "bot log", "bot test", "trung log", "human win", "bot intents") ::: agitate
     ).sorted ::: SpaceNames
 
     val choice = askOneOf("[Adjust] (? for list): ", options, param, allowNone = true, allowAbort = false)
@@ -6009,6 +6022,7 @@ object FireInTheLake {
       case "eligibility"  => adjustEligibility()
       case "trung"        => adjustTrungDeck()
       case "bot log"      => adjustBotDebug()
+      case "bot test"     => adjustBotTest()
       case "trung log"    => adjustLogTrung()
       case "human win"    => adjustHumanWinInVictoryPhase()
       case "bot intents"  => adjustBotIntentDisplay()
@@ -6566,6 +6580,14 @@ object FireInTheLake {
     game = game.copy(botDebug = newValue)
     log(desc)
     saveGameState("Bot Debug Logging")
+  }
+  
+  def adjustBotTest(): Unit = {
+    val newValue = !game.botTest
+    val desc = adjustmentDesc("Bot Test mode", game.botTest, newValue)
+    game = game.copy(botTest = newValue)
+    log(desc)
+    saveGameState("Bot Test mode")
   }
   
   //  Whether or not to log dice rolls in Trung decisions

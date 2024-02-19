@@ -5729,7 +5729,8 @@ object Bot {
             pause()
             rallyToPlaceBase(candidates filterNot (_.name == sp.name))
           }
-          false // Failed activation
+          else
+            false // Failed activation
         }
         else
           true  // No failed activation, just ran out of candidates
@@ -5751,11 +5752,11 @@ object Bot {
             pause()
             rallyToPlaceGuerrillas(candidates filterNot (_.name == sp.name))
           }
-          false // Failed activation
+          else
+            false // Failed activation
         }
         else
           true  // No failed activation, just ran out of candidates
-
       }
 
       def improveTrailForFree():  Unit = {

@@ -5,5 +5,7 @@
   },
   "gitlens.currentLine.enabled": false,
   "gitlens.hovers.currentLine.over": "line",
-  "gitlens.codeLens.enabled": false
+  "gitlens.codeLens.enabled": false,
+  "editor.fontFamily": "'Consolas Nerd Font', Menlo, Monaco, 'Courier New', monospace",
+  "editor.fontSize": 13
 }

@@ -106,7 +106,7 @@ object FireInTheLake {
     val ALL       = Set[Faction](US, ARVN, VC, NVA)
     val INSURGENT = Set[Faction](VC, NVA)
     val COIN      = ALL -- INSURGENT
-    implicit val FactionOrdering = Ordering.by { faction: Faction => faction.sortOrder }
+    implicit val FactionOrdering: Ordering[Faction] = Ordering.by { faction: Faction => faction.sortOrder }
     val names = ALL.toSeq map (_.name)
     val maxNameLen = (names map (_.length)).max
     def apply(name: String): Faction = ALL find (_.name.toLowerCase == name.toLowerCase) getOrElse {
@@ -121,7 +121,7 @@ object FireInTheLake {
   // Order scores from highest to lowest
   // With ties, Bot beat Humans
   // Then ties are resolved VC, ARVN, NVA, then US
-  implicit val ScoreOrdering = new Ordering[Score] {
+  implicit val ScoreOrdering: Ordering[Score] = new Ordering[Score] {
     def compare(x: Score, y: Score) = {
       if (x.score != y.score)
         y.score - x.score  // Highest comes first
@@ -185,7 +185,7 @@ object FireInTheLake {
   }
 
   // Sort by card number
-  implicit val CardOrdering = new Ordering[EventCard] {
+  implicit val CardOrdering: Ordering[EventCard] = new Ordering[EventCard] {
     def compare(x: EventCard, y: EventCard) = x.number compare y.number
   }
 

@@ -2804,7 +2804,7 @@ object Bot {
         coinFirepower(NormalTroops)(sp) < sp.pieces.totalOf(NVATroops) &&
         sp.pieces.has(USTroops::USBase::Nil)
       }
-      logCheck(result, "Any space were COIN FP < NVA Troops where US Troops or US Base?")
+      logCheck(result, "Any space where COIN FP < NVA Troops where US Troops or US Base?")
     }
       
     def usPolicyIsLBJ: Boolean = {

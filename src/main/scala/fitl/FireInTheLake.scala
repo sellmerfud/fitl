@@ -6020,13 +6020,16 @@ object FireInTheLake {
       case "rvnLeaders"   => adjustRvnLeaders()
       case "pivotal"      => adjustPivotalCards()
       case "eligibility"  => adjustEligibility()
-      case "trung"        => adjustTrungDeck()
       case "bot log"      => adjustBotDebug()
       case "bot test"     => adjustBotTest()
+      case "trung deck"   => adjustTrungDeck()
       case "trung log"    => adjustLogTrung()
       case "human win"    => adjustHumanWinInVictoryPhase()
       case "bot intents"  => adjustBotIntentDisplay()
-      case name           => adjustSpace(name)
+      case name if game.spaces.exists(_.name == name) => adjustSpace(name)
+      case name => {
+        println(s"Internal Error - Invalid adjust command: $name")
+      }
     }
 
     // We throw an Adjustment exception to return to
@@ -6553,8 +6556,8 @@ object FireInTheLake {
           (game.trungDeck map (tc =>  Some(tc) -> tc.toString)) :+
           (None -> "Finished adjusting the Trung deck")
 
-      println(s"\n$current is second from the top")
-      askMenu(choices, "\nChoose which Trung card should second from the top:").head match {
+      println(s"\n$current is second from the top (will be drawn next)")
+      askMenu(choices, "\nChoose which Trung card be should second from the top:").head match {
         case None =>
         case Some(tc) =>
           //  The top card is alwasy put on the bottom of the deck

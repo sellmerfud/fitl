@@ -2320,6 +2320,45 @@ object Bot {
     }
   }
 
+  def mustKeepInOrigin(
+    originName: String,
+    destName: String,
+    faction: Faction,
+    action: MoveAction,
+    moveTypes: Set[PieceType],
+    params: Params): Pieces = {
+
+    val toKeep = selectPiecesToKeep(originName, destName, faction, action, moveTypes, params)
+
+    // If this is an Air Lift we must limit the number of non USTroops moved to 4
+    // Higher priority others come first in the list.
+    val airLiftKeep = if (action == AirLift) {
+      val otherTypes = List(ARVNTroops, Rangers_U, Irregulars_U, Rangers_A, Irregulars_A)
+      val canMove    = (game.getSpace(originName).pieces - toKeep).explode(otherTypes)
+      val numAllowd  = 4 - movedPieces.allPieces.totalOf(otherTypes)
+      Pieces.fromTypes(canMove drop numAllowd)
+    }
+    else
+      Pieces()
+
+    toKeep + airLiftKeep
+  }
+
+  def maxMoveablePieces(
+    originName: String,
+    destName: String,
+    faction: Faction,
+    action: MoveAction,
+    moveTypes: Set[PieceType],
+    params: Params): Int = {
+
+    val mustKeep = selectPiecesToKeep(originName, destName, faction, action, moveTypes, params)
+    val nonMovedMustKeep = mustKeep - movedPieces(originName)
+    val moveablePieces   = notYetMoved(originName).only(moveTypes) - nonMovedMustKeep
+    
+    moveablePieces.total
+  }
+
   // Determine which pieces will move to the destination from the
   // given origin space using the Move Priorities Table.
   //
@@ -2339,18 +2378,8 @@ object Bot {
                               params: Params): Pieces = {
 
     // First we determine which pieces to keep in the origin space
-    val toKeep = selectPiecesToKeep(originName, destName, faction, action, moveTypes, params)
-    // If this is an Air Lift we must limit the number of non USTroops moved to 4
-    // Higher priority others come first in the list.
-    val airLiftKeep = if (action == AirLift) {
-      val otherTypes = List(ARVNTroops, Rangers_U, Irregulars_U, Rangers_A, Irregulars_A)
-      val canMove    = (game.getSpace(originName).pieces - toKeep).explode(otherTypes)
-      val numAllowd  = 4 - movedPieces.allPieces.totalOf(otherTypes)
-      Pieces.fromTypes(canMove drop numAllowd)
-    }
-    else
-      Pieces()
-    selectPiecesToMove(originName, destName, faction, action, moveTypes, maxPieces, toKeep + airLiftKeep, params)
+    val mustKeep = mustKeepInOrigin(originName, destName, faction, action, moveTypes, params);
+    selectPiecesToMove(originName, destName, faction, action, moveTypes, maxPieces, mustKeep, params)
   }
 
 
@@ -2377,9 +2406,8 @@ object Bot {
       case March                    => getAdjacent(destName) filter params.march.canMarchFrom
     }
     
-    def numMoveablePieces(sp: Space) = movePiecesFromOneOrigin(sp.name, destName, faction, action, moveTypes, 1000, params).total
+    def numMoveablePieces(sp: Space) = maxMoveablePieces(sp.name, destName, faction, action, moveTypes, params)
     
-
     val isOrigin = (sp: Space) => {
       numMoveablePieces(sp) > 0 &&
       !(moveDestinations.contains(sp.name) || previousOrigins(sp.name))

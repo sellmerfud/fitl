@@ -2684,9 +2684,13 @@ object Bot {
                 revealPieces(destName, underground)
 
                 if (momentumInPlay(Mo_Claymores)) {
-                  log(s"\nMust remove Guerrilla that activated [Momentum: $Mo_Claymores")
+                  log(s"\nMust remove 1 Guerrilla that activated [Momentum: $Mo_Claymores]")
                   log(separator())
-                  removeToAvailable(destName, Pieces().set(1, underground.getTypes.head))
+                  val activeGuerrilla = if (faction == VC)
+                    Pieces(vcGuerrillas_A = 1)
+                  else
+                    Pieces(nvaGuerrillas_A = 1)
+                  removeToAvailable(destName, activeGuerrilla)
                 }
                 log()  // Add blank line separator
               }

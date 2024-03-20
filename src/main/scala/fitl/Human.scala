@@ -2802,12 +2802,12 @@ object Human {
     val boobyTraps      = capabilityInPlay(BoobyTraps_Shaded)
     val defaultMax      = if (platoonsShaded) 2 else NO_LIMIT
     val maxSpaces       = params.maxSpaces getOrElse defaultMax
-    val cubeTypes       = sweepCubeTypes(faction, params.cubeTreatment).toList
-    val cubeDesc        = andList(cubeTypes)
+    val moveTypes       = sweepCubeTypes(faction, SweepMove, params.cubeTreatment).toList
+    val moveDesc        = andList(moveTypes)
 
     def canSpecial = Special.allowed
     
-    def moveTroopsTo(destName: String): Unit = {
+    def moveTroopsTo(destName: String, count: Int): Unit = {
       val candidates = spaceNames(sweepSources(destName, faction, alreadyMoved))
       val choices = (candidates map (name => name -> name)) :+ ("finished" -> s"Finished moving troops to $destName")
 
@@ -2815,15 +2815,17 @@ object Human {
         case "finished" =>
 
         case srcName =>
-          val troops    = game.getSpace(srcName).pieces.only(cubeTypes) - alreadyMoved(srcName)
-          val num       = askInt(s"Move how many $cubeDesc", 0, troops.total)
+          val troops    = game.getSpace(srcName).pieces.only(moveTypes) - alreadyMoved(srcName)
+          val num       = askInt(s"Move how many $moveDesc", 0, troops.total)
 
           if (num > 0) {
             val movers = askPieces(troops, num)
             alreadyMoved.add(destName, movers)
+            if (count == 1)
+              log("\n")
             movePieces(movers, srcName, destName)
           }
-          moveTroopsTo(destName)
+          moveTroopsTo(destName, count + 1)
       }
     }
 
@@ -2839,7 +2841,7 @@ object Human {
       askMenu(choices, s"\n$faction Sweep Troops into:").head match {
         case "finished" =>
         case name =>
-          moveTroopsTo(name)
+          moveTroopsTo(name, 1)
           moveTroops()
       }
     }
@@ -2872,6 +2874,7 @@ object Human {
         case "sweep" =>
           askCandidateOrBlank("\nSweep in which space: ", candidates) foreach { name =>
             sweepSpaces = sweepSpaces + name
+            log(s"\n$name selected for Sweep")
             if (faction == ARVN && !params.free)
               decreaseResources(ARVN, 3)
           }

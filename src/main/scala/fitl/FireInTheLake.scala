@@ -1362,9 +1362,6 @@ object FireInTheLake {
       }
     }
 
-    def sweepForces(faction: Faction, cubeTreatment: CubeTreatment): Pieces =
-      pieces.only(sweepForceTypes(faction, cubeTreatment))
-
     def assaultMultiplier(faction: Faction): Double = faction match {
       case US if pieces.has(USBase) => 2.0
       case US if isHighland         => 1.0/2.0
@@ -1384,7 +1381,7 @@ object FireInTheLake {
     // The number of underground guerrillas that would
     // be activated by the given faction
     def sweepActivations(faction: Faction, cubeTreatment: CubeTreatment): Int = {
-      val numForces   = sweepForces(faction, cubeTreatment).total
+      val numForces   = pieces.only(sweepForceTypes(faction, SweepActivate, cubeTreatment)).total
       val numActivate = if (isJungle) numForces / 2 else numForces
 
       numActivate min pieces.totalOf(UndergroundGuerrillas)
@@ -1845,6 +1842,10 @@ object FireInTheLake {
     explicitSpaces: Set[String] = Set.empty  // Used by Human only, for bot use Params.onlyIn
   )
 
+  sealed trait SweepPurpose
+  case object SweepMove extends SweepPurpose
+  case object SweepActivate extends SweepPurpose
+
   // Some events treat all cubes as US Troops
   // Some event treat all troops as US Troops
   sealed trait CubeTreatment
@@ -1852,17 +1853,25 @@ object FireInTheLake {
   case object AllTroopsAsUS extends CubeTreatment
   case object NormalTroops  extends CubeTreatment
 
-  def sweepCubeTypes(faction: Faction, cubeTreatment: CubeTreatment): Set[PieceType] = {
-    cubeTreatment match {
-      case NormalTroops if faction == US => Set(USTroops)
-      case NormalTroops                  => Set(ARVNTroops)
-      case AllTroopsAsUS                 => Set(USTroops, ARVNTroops)
-      case AllCubesAsUS                  => Set(USTroops, ARVNTroops, ARVNPolice)
+  def sweepCubeTypes(
+    faction: Faction,
+    purpose: SweepPurpose,
+    cubeTreatment: CubeTreatment): Set[PieceType] = {
+      
+      cubeTreatment match {
+        case NormalTroops if faction == US => Set(USTroops)
+        case NormalTroops if purpose == SweepMove => Set(ARVNTroops)
+        case NormalTroops  => Set(ARVNTroops, ARVNPolice)  // SweepActivate
+        case AllTroopsAsUS => Set(USTroops, ARVNTroops)
+        case AllCubesAsUS => Set(USTroops, ARVNTroops, ARVNPolice)
+      }
     }
-  }
-
-  def sweepForceTypes(faction: Faction, cubeTreatment: CubeTreatment): Set[PieceType] = {
-    val cubeTypes = sweepCubeTypes(faction, cubeTreatment)
+    
+    def sweepForceTypes(
+      faction: Faction,
+      purpose: SweepPurpose,
+      cubeTreatment: CubeTreatment): Set[PieceType] = {
+    val cubeTypes = sweepCubeTypes(faction, purpose, cubeTreatment)
     faction match {
         case US   => cubeTypes ++ Irregulars.toSet
         case ARVN => cubeTypes ++ Rangers.toSet

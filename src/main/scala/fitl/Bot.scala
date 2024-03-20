@@ -3466,7 +3466,7 @@ object Bot {
     //
     //  Sweep not allowed in Monsoon.
     def sweepOp(params: Params): Option[CoinOp] = {
-      val cubeTypes = sweepCubeTypes(US, params.cubeTreatment)
+      val moveTypes = sweepCubeTypes(US, SweepMove, params.cubeTreatment)
 
       if (!params.event && game.inMonsoon)
         None
@@ -3491,7 +3491,7 @@ object Bot {
         if (!params.event)
           logOpChoice(US, Sweep)
 
-        movePiecesToDestinations(US, Sweep, cubeTypes , false, params, maxDests = maxSweep)(nextSweepCandidate)
+        movePiecesToDestinations(US, Sweep, moveTypes , false, params, maxDests = maxSweep)(nextSweepCandidate)
         val maxCobras = 2  // Unshaded cobras can be used in up to 2 spaces
         var numCobras = 0
         if (moveDestinations.nonEmpty) {
@@ -4927,7 +4927,7 @@ object Bot {
     //
     //  Sweep not allowed in Monsoon.
     def sweepOp(params: Params, actNum: Int): Option[CoinOp] = {
-      val cubeTypes = sweepCubeTypes(ARVN, params.cubeTreatment)
+      val moveTypes = sweepCubeTypes(ARVN, SweepMove, params.cubeTreatment)
       if (!params.event && game.inMonsoon)
         None
       else {
@@ -4962,7 +4962,7 @@ object Bot {
           if (!params.event)
             logOpChoice(ARVN, Sweep)
 
-          movePiecesToDestinations(ARVN, Sweep, cubeTypes, false, params, maxDests = maxSweep)(nextSweepCandidate)
+          movePiecesToDestinations(ARVN, Sweep, moveTypes, false, params, maxDests = maxSweep)(nextSweepCandidate)
           val maxCobras = 2  // Unshaded cobras can be used in up to 2 spaces
           var numCobras = 0
           if (moveDestinations.nonEmpty) {

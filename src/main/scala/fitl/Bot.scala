@@ -2508,14 +2508,12 @@ object Bot {
     val otherTypes = (ARVNTroops::Irregulars:::Rangers).toSet filter allowedType
     val usTroops   = (USTroops::Nil).toSet filter allowedType
     val numOthers  = 4 - movedPieces.allPieces.totalOf(otherTypes)
-    val moveTypes  = if (numOthers < 4)
+    val moveTypes  = if (numOthers <= 4)
       otherTypes ++ usTroops
     else
       usTroops
 
-
     def hasMoveablePieces(sp: Space) = movePiecesFromOneOrigin(sp.name, destName, US, AirLift, moveTypes, 1, params).nonEmpty
-
 
     val newCandidates = game.spaces filter { sp =>
       sp.name != destName                 &&

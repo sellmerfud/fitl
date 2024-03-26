@@ -2533,10 +2533,8 @@ object Bot {
 
     val priorities = List(
       new HighestScore[Space]("Most Moveable Pieces",
-      sp => {
-        val others = sp.pieces.totalOf(otherTypes) min numOthers
-        sp.pieces.totalOf(usTroops) + others
-      })
+        sp => maxMoveablePieces(sp.name, destName, US, AirLift, moveTypes, params)
+      )
     )
 
     botDebug(s"\nSelect Air Lift origin space with moveable: [${andList(moveTypes.toList)}]")

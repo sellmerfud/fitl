@@ -2507,8 +2507,7 @@ object Bot {
     // Can only move up to 4 ARVNTroop, Irregulars, Rangers
     val otherTypes = (ARVNTroops::Irregulars:::Rangers).toSet filter allowedType
     val usTroops   = (USTroops::Nil).toSet filter allowedType
-    val numOthers  = 4 - movedPieces.allPieces.totalOf(otherTypes)
-    val moveTypes  = if (numOthers <= 4)
+    val moveTypes  = if (movedPieces.allPieces.totalOf(otherTypes) < 4)
       otherTypes ++ usTroops
     else
       usTroops

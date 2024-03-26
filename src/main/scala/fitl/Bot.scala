@@ -2327,14 +2327,16 @@ object Bot {
     action: MoveAction,
     moveTypes: Set[PieceType],
     params: Params): Pieces = {
-
+      
+    import params.airlift.allowedType
     val toKeep = selectPiecesToKeep(originName, destName, faction, action, moveTypes, params)
 
+    
     // If this is an Air Lift we must limit the number of non USTroops moved to 4
     // Higher priority others come first in the list.
     val airLiftKeep = if (action == AirLift) {
-      val otherTypes = List(ARVNTroops, Rangers_U, Irregulars_U, Rangers_A, Irregulars_A)
-      val canMove    = (game.getSpace(originName).pieces - toKeep).explode(otherTypes)
+      val otherTypes = (ARVNTroops::Irregulars:::Rangers).toSet filter allowedType
+      val canMove    = (game.getSpace(originName).pieces - toKeep).explode(otherTypes.toList)
       val numAllowd  = 4 - movedPieces.allPieces.totalOf(otherTypes)
       Pieces.fromTypes(canMove drop numAllowd)
     }
@@ -2352,7 +2354,7 @@ object Bot {
     moveTypes: Set[PieceType],
     params: Params): Int = {
 
-    val mustKeep = selectPiecesToKeep(originName, destName, faction, action, moveTypes, params)
+    val mustKeep = mustKeepInOrigin(originName, destName, faction, action, moveTypes, params)
     val nonMovedMustKeep = mustKeep - movedPieces(originName)
     val moveablePieces   = notYetMoved(originName).only(moveTypes) - nonMovedMustKeep
     

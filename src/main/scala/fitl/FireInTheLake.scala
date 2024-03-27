@@ -1139,13 +1139,16 @@ object FireInTheLake {
   // the number of pieces removed during a US Assault (with added ARVN assault)
   // If no US Troops are present, then there can be no US Assault.
   def coinFirepower(cubeTreatment: CubeTreatment)(sp: Space) = {
-    val usPower = usFirepower(cubeTreatment)(sp)
-    if (cubeTreatment == AllCubesAsUS || cubeTreatment == AllTroopsAsUS)
-      usPower
-    else if (usPower > 0)
-      usPower + arvnFirepower(NormalTroops)(sp)
+    if (sp.pieces.has(USTroops)) {
+      val usPower = usFirepower(cubeTreatment)(sp)
+      if (cubeTreatment == AllCubesAsUS || cubeTreatment == AllTroopsAsUS)
+        usPower
+      else
+        usPower + arvnFirepower(NormalTroops)(sp)
+    }
     else
       0
+
   }
 
   def assaultFirepower(faction: Faction, cubeTreatment: CubeTreatment)(sp: Space): Int = {

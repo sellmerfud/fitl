@@ -60,8 +60,8 @@ object Card_005 extends EventCard(5, "Wild Weasels",
   DualEvent,
   List(US, ARVN, NVA, VC),
   ListMap(US   -> (Ignored -> Unshaded),
-          ARVN -> (Performed   -> Unshaded),
           NVA  -> (Performed   -> Shaded),
+          ARVN -> (Performed   -> Unshaded),
           VC   -> (Performed   -> Shaded))) {
 
   def unshadedEffective(faction: Faction): Boolean =

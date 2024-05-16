@@ -5,7 +5,7 @@ import java.nio.file.attribute.PosixFilePermissions
 lazy val commonSettings = Seq(
   organization := "org.sellmerfud",
   version      := "1.12",
-  scalaVersion := "2.13.11"
+  scalaVersion := "2.13.14"
 )
 
 lazy val stage        = taskKey[Unit]("Create distribution zip file")

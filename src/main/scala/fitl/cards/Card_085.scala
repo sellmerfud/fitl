@@ -84,7 +84,7 @@ object Card_085 extends EventCard(85, "USAID",
     if (selectedSpaces.isEmpty)
       log("There are no spaces that qualify for the event")
     else {
-      println()
+      log()
       loggingPointsChanges {
         for (name <- selectedSpaces)
           increaseSupport(name, 1)

@@ -151,7 +151,7 @@ object Bot {
 
     def flipCard(params: Params, specialDone: Boolean = false): TrungResult = {
       if (game.logTrung || game.botDebug) {
-        log("\nTrung card flipped to its back side")
+        log("\nTrung card flipped to its back side", Color.Event)
         log(separator())
         log(display(id * 2))        
       }
@@ -240,7 +240,7 @@ object Bot {
     log(s"\n$faction chooses $op operation")
     log(separator(char = '='))
     for (note <- notes)
-      log(note)
+      log(note, Color.Event)
   }
 
   def logNoOp(faction: Faction, op: Operation): Unit = {
@@ -251,7 +251,7 @@ object Bot {
     log(s"\n$faction chooses $sa special activity")
     log(separator(char = '='))
     for (note <- notes)
-      log(note)
+      log(note, Color.Event)
   }
 
   def logNoActivity(faction: Faction, sa: SpecialActivity): Unit = {
@@ -354,7 +354,7 @@ object Bot {
     if (isPossible) {
       val (deadPiece, _) = selectRemoveEnemyInsurgentBasesLast(sp.pieces, 1)
 
-      log(s"\nUsing $Cobras_Unshaded")
+      log(s"\nUsing $Cobras_Unshaded", Color.Event)
       log(separator())
       removeToAvailable(name, deadPiece)
       true
@@ -424,7 +424,7 @@ object Bot {
   // and logs a message if it is in play.
   def generalLandsdale(faction: Faction): Boolean = {
     if (faction == US && momentumInPlay(Mo_GeneralLansdale)) {
-      log(s"\n$faction cannot assault [Momentum: $Mo_GeneralLansdale]")
+      log(s"\n$faction cannot assault [Momentum: $Mo_GeneralLansdale]", Color.Event)
       true
     }
     else
@@ -630,7 +630,7 @@ object Bot {
           log(separator())
 
           if (deadPieces.total == 2) {
-            log(s"$faction elects to remove 2 enemy pieces [$MainForceBns_Shaded]")
+            log(s"$faction elects to remove 2 enemy pieces [$MainForceBns_Shaded]", Color.Event)
             mainForceBnsUsed = true
           }
 
@@ -756,20 +756,20 @@ object Bot {
 
       if (faction == ARVN && !params.free && game.trackResources(ARVN)) {
         if (momentumInPlay(Mo_BodyCount))
-          log(s"ARVN Assault costs zero resources [Momentum: $Mo_BodyCount]")
+          log(s"ARVN Assault costs zero resources [Momentum: $Mo_BodyCount]", Color.Event)
         else
           decreaseResources(ARVN, 3)
       }
 
       log(s"The assault inflicts ${amountOf(totalLosses, "hit")}")
       if (usedPatton)
-        log(s"$faction removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
+        log(s"$faction removes up to 2 extra enemy pieces [$M48Patton_Unshaded]", Color.Event)
 
       if (losses.baseFirst)
-        log(s"$faction removes a base first [$Abrams_Unshaded]")
+        log(s"$faction removes a base first [$Abrams_Unshaded]", Color.Event)
 
       if (losses.dead.has(UndergroundGuerrillas))
-        log(s"$faction removes an underground guerrilla [$SearchAndDestroy_Unshaded]")
+        log(s"$faction removes an underground guerrilla [$SearchAndDestroy_Unshaded]", Color.Event)
 
       if (losses.dead.isEmpty && losses.exposedTunnel.isEmpty)
         log("\nNo insurgemnt pieces were removed in the assault")
@@ -789,7 +789,7 @@ object Bot {
 
       // Body Count momentum
       if (momentumInPlay(Mo_BodyCount) && losses.dead.has(Guerrillas)) {
-        log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]")
+        log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]", Color.Event)
         increaseUsAid(3 * losses.dead.totalOf(Guerrillas))
       }
 
@@ -804,7 +804,7 @@ object Bot {
       if (asUS && sp.pieces.has(USTroops) && capabilityInPlay(Cobras_Shaded)) {
         val die = d6
         val success = die < 4
-        log(s"\nCheck for loss of US Troop [$Cobras_Shaded]")
+        log(s"\nCheck for loss of US Troop [$Cobras_Shaded]", Color.Event)
         log(s"Die roll is: ${die} [${if (success) "Troop eliminated" else "No effect"}]")
         if (success) {
           removeToCasualties(name, Pieces(usTroops = 1))
@@ -814,7 +814,7 @@ object Bot {
       // SearchAndDestroy_Shaded
       //    Each US and ARVN assault Province shifts support one level toward Active Opposition
       if (searchDestroy && sp.isProvince && sp.canHaveSupport && sp.support != ActiveOpposition) {
-        log(s"\nEach assault shifts support toward Active Opposition [$SearchAndDestroy_Shaded]")
+        log(s"\nEach assault shifts support toward Active Opposition [$SearchAndDestroy_Shaded]", Color.Event)
         decreaseSupport(name, 1)
       }
     }
@@ -2683,7 +2683,7 @@ object Bot {
                 revealPieces(destName, underground)
 
                 if (momentumInPlay(Mo_Claymores)) {
-                  log(s"\nMust remove 1 Guerrilla that activated [Momentum: $Mo_Claymores]")
+                  log(s"\nMust remove 1 Guerrilla that activated [Momentum: $Mo_Claymores]", Color.Event)
                   log(separator())
                   val activeGuerrilla = if (faction == VC)
                     Pieces(vcGuerrillas_A = 1)
@@ -3318,7 +3318,7 @@ object Bot {
           }
 
           if (dest.nonEmpty && placePolice) {
-            log(s"US places 1 ARVN Police with US Troops [$CombActionPlatoons_Unshaded]")
+            log(s"US places 1 ARVN Police with US Troops [$CombActionPlatoons_Unshaded]", Color.Event)
             log(separator())
             toAvail foreach { sp =>
               removeToAvailable(sp.name, Pieces(arvnPolice = 1))
@@ -3927,7 +3927,7 @@ object Bot {
             log(separator())
 
             if (capabilityInPlay(TopGun_Shaded))
-              log(s"Die roll ($TopGun_Shaded): $die [${if (success) "Success!" else "Failure"}]")
+              log(s"Die roll ($TopGun_Shaded): $die [${if (success) "Success!" else "Failure"}]", Color.Event)
 
 
             // Hits applied even if Top Gun die roll failed
@@ -3937,7 +3937,7 @@ object Bot {
               degradeTrail(numBoxes)
 
               if (adsid) {
-                log(s"Momentum: $Mo_ADSID reduces NVA resources at trail change")
+                log(s"Momentum: $Mo_ADSID reduces NVA resources at trail change", Color.Event)
                 decreaseResources(NVA, 6)
               }
 
@@ -3946,7 +3946,7 @@ object Bot {
 
               if (capabilityInPlay(SA2s_Unshaded)) {
                 val CanRemove = List(NVABase, NVATroops, NVAGuerrillas_U, NVAGuerrillas_A)
-                log(s"\n$SA2s_Unshaded triggers")
+                log(s"\n$SA2s_Unshaded triggers", Color.Event)
                 val sa2Candidates = spaces(OutsideSouth) filter (_.pieces.has(CanRemove))
                 if (sa2Candidates.isEmpty)
                   log("There are no NVA outside the south that can be removed") // Very unlikely!
@@ -4024,12 +4024,12 @@ object Bot {
             else if (numKills == 0)
               log(s"\n$name: No shift [No pieces removed]")
             else if (numKills > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
-                log(s"\n$name: Shift 2 levels [$ArcLight_Shaded]")
+                log(s"\n$name: Shift 2 levels [$ArcLight_Shaded]", Color.Event)
                 log(separator())
                 decreaseSupport(name, 2)
             }
             else if (numKills == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded))
-              log(s"\n$name: No shift [$LaserGuidedBombs_Unshaded]")
+              log(s"\n$name: No shift [$LaserGuidedBombs_Unshaded]", Color.Event)
             else {
               log(s"\n$name: Shift 1 level toward Active Opposition")
               log(separator())
@@ -4576,7 +4576,7 @@ object Bot {
       // General Landsdale prohibits assault
       if (capabilityInPlay(ArmoredCavalry_Unshaded) && !momentumInPlay(Mo_GeneralLansdale) && candidates.nonEmpty) {
         val sp = pickSpaceRemoveReplace(candidates)
-        log(s"\n$ArmoredCavalry_Unshaded triggers a free Assault")
+        log(s"\n$ArmoredCavalry_Unshaded triggers a free Assault", Color.Event)
         performAssault(ARVN, sp.name, Params(free = true))
       }
     }
@@ -4843,7 +4843,7 @@ object Bot {
 
       if (trained) {
         if (isRVNLeader(RVN_Leader_DuongVanMinh)) {
-          log(s"\nLeader: $RVN_Leader_DuongVanMinh effect triggers")
+          log(s"\nLeader: $RVN_Leader_DuongVanMinh effect triggers", Color.Event)
           log(separator())
           increaseUsAid(5)
           pause()
@@ -5200,7 +5200,7 @@ object Bot {
               increasePatronage(num)
               mandateSpace match {
                 case Some(mandate) if mandate == name =>
-                  log(s"No shift in support. Using [$MandateOfHeaven_Unshaded]")
+                  log(s"No shift in support. Using [$MandateOfHeaven_Unshaded]", Color.Event)
                 case _ =>
                   decreaseSupport(sp.name, 1)
               }
@@ -5215,7 +5215,7 @@ object Bot {
         
         //  Young turks always applies if in play
         if (isRVNLeader(RVN_Leader_YoungTurks)) {
-          log(s"$RVN_Leader_YoungTurks leader effect triggers")
+          log(s"$RVN_Leader_YoungTurks leader effect triggers", Color.Event)
           increasePatronage(2)
         }
         
@@ -5792,11 +5792,11 @@ object Bot {
 
       def improveTrailForFree():  Unit = {
         if (momentumInPlay(Mo_McNamaraLine))
-          log(s"\nNo trail improvement. Momentum: $Mo_McNamaraLine")
+          log(s"\nNo trail improvement. Momentum: $Mo_McNamaraLine", Color.Event)
         else if (game.trail == TrailMax)
           log("\nNo trail improvement. The Trail is at 4.")
         else if (aaa && rallySpaces.size > 1)
-            log(s"\nNo trail improvement. Rallied in more than one space. [$AAA_Unshaded]")
+            log(s"\nNo trail improvement. Rallied in more than one space. [$AAA_Unshaded]", Color.Event)
         else {
           val maxNum = if (capabilityInPlay(SA2s_Shaded)) 2 else 1
           val num    = maxNum min (TrailMax - game.trail)
@@ -5964,7 +5964,7 @@ object Bot {
         val attrition    = Pieces(nvaTroops = attritionNum)
         val disp         = pluralize(pt76.delta, "piece")
 
-        log(s"\nNVA elects to use [$PT76_Shaded] in ${pt76.name}")
+        log(s"\nNVA elects to use [$PT76_Shaded] in ${pt76.name}", Color.Event)
         log(separator())
         log(s"This eliminates ${pt76.delta} more COIN $disp")
         loggingControlChanges {
@@ -7187,7 +7187,7 @@ object Bot {
 
     val action = if (game.executingPivotalEvent) {
       //  The Pivotal events are single events which are always in the executeUnshaded() function.
-      log(s"\n$faction executes its Pivotal Event: ${card.name}")
+      log(s"\n$faction executes its Pivotal Event: ${card.name}", Color.Event)
       card.executeUnshaded(faction)
       Event
     }
@@ -7228,7 +7228,7 @@ object Bot {
       }
     }
 
-    log(s"\nMove the $faction cylinder to the ${actorBoxName(action)} box")
+    log(s"\nMove the $faction cylinder to the ${actorBoxName(action)} box", Color.GameMarker)
     game = game.copy(sequence = game.sequence.addActor(faction, action))
 }
 
@@ -7251,7 +7251,7 @@ object Bot {
     val firstCard = drawTrungCard(faction)
 
     def logTrungDraw(card: TrungCard): Unit = if (game.logTrung || game.botDebug) {
-      log(s"\nDrawing Trung Card for $faction")
+      log(s"\nDrawing Trung Card for $faction", Color.Event)
       log(separator())
       log(card.toString)
     }

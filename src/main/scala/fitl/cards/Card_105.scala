@@ -83,7 +83,7 @@ object Card_105 extends EventCard(105, "Rural Pressure",
       if (selectedSpaces.isEmpty)
         log("There are no spaces that qualify for the event")
       else {
-        println()
+        log()
         for (name <- selectedSpaces)
           increaseSupport(name, 1)
       }

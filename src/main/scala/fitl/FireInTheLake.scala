@@ -697,7 +697,7 @@ object FireInTheLake {
     if (capabilityInPlay(BoobyTraps_Shaded) && sp.pieces.has(troopType)) {
       //  Roll a d6.  On a 1-3, remove one of the sweeping factions troops.
       //  ARVN to available, US to casualties
-      log(s"\nResolving $BoobyTraps_Shaded in $name")
+      log(s"\nResolving $BoobyTraps_Shaded in $name", Color.Event)
       log(separator())
       val die = d6
       val success = die < 4
@@ -2041,7 +2041,7 @@ object FireInTheLake {
   //  Move the faction to the eligible box.
   def makeEligible(faction: Faction): Unit = {
     if (!game.sequence.eligibleThisTurn(faction)) {
-      log(s"Move the $faction cylinder to the Eligible Factions box")
+      log(s"Move the $faction cylinder to the Eligible Factions box", Color.GameMarker)
       game = game.copy(sequence = game.sequence.makeEligible(faction))
     }
   }
@@ -2049,7 +2049,7 @@ object FireInTheLake {
   def makeIneligibleThroughNextTurn(faction: Faction, currentlyActing: Boolean): Unit = {
     log(s"\n$faction is ineligible through the next card")
     if (game.sequence.eligibleThisTurn(faction) && !currentlyActing)
-      log(s"Move the $faction cylinder to the Ineligible Factions box")
+      log(s"Move the $faction cylinder to the Ineligible Factions box", Color.GameMarker)
 
     game = game.copy(sequence = game.sequence.ineligibleThroughNextTurn(faction))
   }
@@ -2096,7 +2096,36 @@ object FireInTheLake {
     }
   }
   
+
+  sealed trait Color {
+    val name: String
+    val sequence: String
+  }
   
+  object Color {
+    lazy val all = List(Red, Blue, Cyan, Magenta, Yellow, Green)    
+
+    def fromName(name: String): Color = {
+      all.find(c => c.name.toLowerCase == name.toLowerCase).getOrElse {
+        throw new IllegalArgumentException(s"Invalid color name: $name")
+      }
+    }
+
+    case object Red extends Color { val name: String = "Red"; val sequence: String = Console.RED; }
+    case object Blue extends Color { val name: String = "Blue"; val sequence: String = Console.BLUE; }
+    case object Cyan extends Color { val name: String = "Cyan"; val sequence: String = Console.CYAN; }
+    case object Magenta extends Color { val name: String = "Magenta"; val sequence: String = Console.MAGENTA; }
+    case object Yellow extends Color { val name: String = "Yellow"; val sequence: String = Console.YELLOW; }
+    case object Green extends Color { val name: String = "Green"; val sequence: String = Console.GREEN; }
+
+    val GameMarker: Option[Color] = Some(Blue)
+    val MapMarker: Option[Color] = Some(Yellow)
+    val MapPieces: Option[Color] = Some(Magenta)
+    val FlipPieces: Option[Color] = Some(Cyan)
+    val Event: Option[Color] = Some(Red)
+    val Info: Option[Color] = Some(Yellow)
+  }
+
   // A game segment containing a file name for the segment,
   // a short description and the log messages that were generated
   // during the game segment.
@@ -2141,6 +2170,7 @@ object FireInTheLake {
     logTrung: Boolean                 = true, // Log Trung decisions
     botIntents: BotIntents            = BotIntentsVerbose,
     history: Vector[GameSegment]      = Vector.empty,
+    showColor: Boolean                = true,
     log: Vector[String]               = Vector.empty) {  // Log of the cuurent game segment
 
 
@@ -2922,6 +2952,7 @@ object FireInTheLake {
 
     // Make sure that the game directory exists
     save_path.dirname.mkpath()
+    //  We don't write colored entries to log files
     log_path.writeFile(game.log.mkString("", lineSeparator, lineSeparator))
     game = game.copy(log = Vector.empty, history = game.history :+ segment)
     SavedGame.save(save_path, game)
@@ -3146,10 +3177,10 @@ object FireInTheLake {
     val winner = game.scores.head.faction
 
     log()
-    log(separator(char = '='))
+    log(separator(char = '='), Color.Info)
     log(header)
-    log(s"$winner wins!")
-    log(separator(char = '='))
+    log(s"$winner wins!", Color.Info)
+    log(separator(char = '='), Color.Info)
     log()
     log("Victory Margins")
     log(separator())
@@ -3167,17 +3198,17 @@ object FireInTheLake {
 
     def placeLeader(): Unit = {
       if (game.rvnLeaders.size == 1) {
-        log(s"\nPlace $coupCard in the RVN Leader Box")
+        log(s"\nPlace $coupCard in the RVN Leader Box", Color.Event)
         game = game.copy(rvnLeaders = newLeader::game.rvnLeaders, rvnLeaderFlipped = false)
       }
       else if (isFailedCoup) {
-        log(s"\nPlace $coupCard beneath the other cards in the RVN Leader Box")
+        log(s"\nPlace $coupCard beneath the other cards in the RVN Leader Box", Color.Event)
         // Place above RVN_Leader_DuongVanMinh which is printed on the map
         val newLeaders = game.rvnLeaders.init:::List(newLeader, game.rvnLeaders.last)
         game = game.copy(rvnLeaders = newLeaders, rvnLeaderFlipped = false)
       }
       else {
-        log(s"\nPlace $coupCard in the RVN Leader Box on top of the stack")
+        log(s"\nPlace $coupCard in the RVN Leader Box on top of the stack", Color.Event)
         game = game.copy(rvnLeaders = newLeader::game.rvnLeaders, rvnLeaderFlipped = false)
       }
     }
@@ -3195,7 +3226,7 @@ object FireInTheLake {
       //  We just drew a Coup! card immediately after a Coup round.
       //  We resolve the RVN Leader and any immediate effects from
       //  the Coup event,  but we do not conduct a Coup Round.
-      log("\nSkipping this Coup! round (two Coup! cards in a row)")
+      log("\nSkipping this Coup! round (two Coup! cards in a row)", Color.Event)
       log(separator())
 
       if (isFinalCoupRound) {
@@ -3313,7 +3344,7 @@ object FireInTheLake {
     else if (game.trail == TrailMin)
       log("The trail is already at the 1 box.")
     else if (momentumInPlay(Mo_Oriskany))
-      log(s"Degrading the Trail is prohibity by Momentum: $Mo_Oriskany")
+      log(s"Degrading the Trail is prohibity by Momentum: $Mo_Oriskany", Color.Event)
     else
       degradeTrail(1)
     pause()
@@ -3665,7 +3696,7 @@ object FireInTheLake {
       log(s"\nCommitment Phase")
       log(separator(char = '='))
       if (game.casualties.has(USTroops) && momentumInPlay(Mo_Medevac_Unshaded)) {
-        log(s"US Troops in the Casualties box move to available: [Momentum: $Mo_Medevac_Unshaded]")
+        log(s"US Troops in the Casualties box move to available: [Momentum: $Mo_Medevac_Unshaded]", Color.Event)
         moveCasualtiesToAvailable(game.casualties.only(USTroops))
       }
 
@@ -3777,7 +3808,7 @@ object FireInTheLake {
     else if (game.trail == TrailMax) {
       log("The Trail is in 4 box")
       if (momentumInPlay(Mo_Oriskany))
-        log(s"The trail cannot be degraded [Momentum: $Mo_Oriskany]")
+        log(s"The trail cannot be degraded [Momentum: $Mo_Oriskany]", Color.Event)
       else
         degradeTrail(1)
     }
@@ -3826,9 +3857,9 @@ object FireInTheLake {
       log("\nAdjust eligiblity")
       log(separator())
       if (eligible.nonEmpty)
-        log(s"Move the ${andList(eligible)} ${pluralize(eligible.size, "cylinder")} to the Eligible box")
+        log(s"Move the ${andList(eligible)} ${pluralize(eligible.size, "cylinder")} to the Eligible box", Color.GameMarker)
       if (ineligible.nonEmpty)
-        log(s"Move the ${andList(ineligible)} ${pluralize(ineligible.size, "cylinder")} to the Ineligible box")
+        log(s"Move the ${andList(ineligible)} ${pluralize(ineligible.size, "cylinder")} to the Ineligible box", Color.GameMarker)
     }
   }
 
@@ -4052,7 +4083,7 @@ object FireInTheLake {
       log(separator(char = '='))
       log(s"$faction elects to play their Pivotal Event")
       log(separator(char = '='))
-      log(s"Replace the current event card with ${eventDeck(faction.pivotCard)}")
+      log(s"Replace the current event card with ${eventDeck(faction.pivotCard)}", Color.Event)
 
       // Replace the current card with the faction's Pivotal event
       game = game.copy(currentCard = faction.pivotCard, pivotCardsAvailable = game.pivotCardsAvailable - faction)
@@ -4187,15 +4218,15 @@ object FireInTheLake {
 
       case ARVN if game.trackResources(ARVN) =>
         game = game.copy(arvnResources = (game.arvnResources + amount) min EdgeTrackMax)
-        log(s"Increase $ARVN resources by +$amount to ${game.arvnResources}")
+        log(s"Increase $ARVN resources by +$amount to ${game.arvnResources}", Color.GameMarker)
 
       case NVA  if game.isHuman(NVA) =>
         game = game.copy(nvaResources = (game.nvaResources + amount) min EdgeTrackMax)
-        log(s"Increase $NVA resources by +$amount to ${game.nvaResources}")
+        log(s"Increase $NVA resources by +$amount to ${game.nvaResources}", Color.GameMarker)
 
       case VC if game.isHuman(VC) =>
         game = game.copy(vcResources = (game.vcResources + amount) min EdgeTrackMax)
-        log(s"Increase $VC resources by +$amount to ${game.vcResources}")
+        log(s"Increase $VC resources by +$amount to ${game.vcResources}", Color.GameMarker)
 
       case _ =>
     }
@@ -4209,15 +4240,15 @@ object FireInTheLake {
 
       case ARVN if game.trackResources(ARVN) =>
         game = game.copy(arvnResources = (game.arvnResources - amount) max 0)
-        log(s"Decrease $ARVN resources by -$amount to ${game.arvnResources}")
+        log(s"Decrease $ARVN resources by -$amount to ${game.arvnResources}", Color.GameMarker)
 
       case NVA if game.isHuman(NVA) =>
         game = game.copy(nvaResources = (game.nvaResources - amount) max 0)
-        log(s"Decrease $NVA resources by -$amount to ${game.nvaResources}")
+        log(s"Decrease $NVA resources by -$amount to ${game.nvaResources}", Color.GameMarker)
 
       case VC if game.isHuman(VC) =>
         game = game.copy(vcResources = (game.vcResources - amount) max 0)
-        log(s"Decrease $VC resources by -$amount to ${game.vcResources}")
+        log(s"Decrease $VC resources by -$amount to ${game.vcResources}", Color.GameMarker)
 
       case _ =>
     }
@@ -4227,9 +4258,9 @@ object FireInTheLake {
     val newTrail = (game.trail + num) min TrailMax
     if (newTrail != game.trail) {
       game = game.copy(trail = newTrail)
-      log(s"Improve the trail by ${amountOf(num, "box", Some("boxes"))} to $newTrail")
+      log(s"Improve the trail by ${amountOf(num, "box", Some("boxes"))} to $newTrail", Color.GameMarker)
       if (momentumInPlay(Mo_ADSID) && game.isHuman(NVA)) {
-        log(s"Momentum $Mo_ADSID triggers")
+        log(s"Momentum $Mo_ADSID triggers", Color.Event)
         decreaseResources(NVA, 6)
       }
     }
@@ -4239,9 +4270,9 @@ object FireInTheLake {
     val newTrail = (game.trail - num) max TrailMin
     if (newTrail != game.trail) {
       game = game.copy(trail = newTrail)
-      log(s"Degrade the trail by ${amountOf(num, "box", Some("boxes"))} to $newTrail")
+      log(s"Degrade the trail by ${amountOf(num, "box", Some("boxes"))} to $newTrail", Color.GameMarker)
       if (momentumInPlay(Mo_ADSID) && game.isHuman(NVA)) {
-        log(s"Momentum $Mo_ADSID triggers")
+        log(s"Momentum $Mo_ADSID triggers", Color.GameMarker)
         decreaseResources(NVA, 6)
       }
     }
@@ -4253,9 +4284,9 @@ object FireInTheLake {
     assert(game.terrorMarkersAvailable >= num, s"addTerror($name): not enough available markers")
     game = game.updateSpace(sp.copy(terror = sp.terror + num))
     if (sp.isLoC)
-      log(s"Add ${amountOf(num, "sabotage marker")} to $name")
+      log(s"Add ${amountOf(num, "sabotage marker")} to $name", Color.MapMarker)
     else
-      log(s"Add ${amountOf(num, "terror marker")} to $name")
+      log(s"Add ${amountOf(num, "terror marker")} to $name", Color.MapMarker)
   }
 
   //  Remove terror/sabotage markers
@@ -4264,54 +4295,54 @@ object FireInTheLake {
     assert(sp.terror >= num, s"removeTerror($name): not enough markers in space")
     game = game.updateSpace(sp.copy(terror = sp.terror - num))
     if (sp.isLoC)
-      log(s"Remove ${amountOf(num, "sabotage marker")} from $name")
+      log(s"Remove ${amountOf(num, "sabotage marker")} from $name", Color.MapMarker)
       else
-        log(s"Remove ${amountOf(num, "terror marker")} from $name")
+        log(s"Remove ${amountOf(num, "terror marker")} from $name", Color.MapMarker)
   }
 
   def increasePatronage(amount: Int): Unit = if (amount > 0) {
     loggingPointsChanges {
       game = game.copy(patronage = (game.patronage + amount) min EdgeTrackMax)
-      log(s"Increase Patronage by +$amount to ${game.patronage}")
+      log(s"Increase Patronage by +$amount to ${game.patronage}", Color.GameMarker)
     }
   }
 
   def decreasePatronage(amount: Int): Unit = if (amount > 0) {
     loggingPointsChanges {
       game = game.copy(patronage = (game.patronage - amount) max 0)
-      log(s"Decrease Patronage by -$amount to ${game.patronage}")
+      log(s"Decrease Patronage by -$amount to ${game.patronage}", Color.GameMarker)
     }
   }
 
   def increaseUsAid(amount: Int): Unit = if (amount > 0) {
     game = game.copy(usAid = (game.usAid + amount) min EdgeTrackMax)
-    log(s"Increase US Aid by +$amount to ${game.usAid}")
+    log(s"Increase US Aid by +$amount to ${game.usAid}", Color.GameMarker)
   }
 
   def decreaseUsAid(amount: Int): Unit = if (amount > 0) {
     game = game.copy(usAid = (game.usAid - amount) max 0)
-    log(s"Decrease US Aid by -$amount to ${game.usAid}")
+    log(s"Decrease US Aid by -$amount to ${game.usAid}", Color.GameMarker)
   }
 
   def setEconValue(amount: Int): Unit = if (game.trackResources(ARVN)) {
     game = game.copy(econ = amount)
-    log(s"Set Econ marker to ${game.econ}")
+    log(s"Set Econ marker to ${game.econ}", Color.GameMarker)
   }
 
   def setUSPolicy(policy: String): Unit = if (game.isBot(US)) {
     game = game.copy(usPolicy = policy)
-    log(s"Set US Policy to ${game.usPolicy}")
+    log(s"Set US Policy to ${game.usPolicy}", Color.GameMarker)
   }
 
   // If VC is a Bot, the we store the agitate total in vcResources
   def setAgitateTotal(amount: Int): Unit = if (game.isBot(VC)) {
     game = game.copy(vcResources = amount)
-    log(s"Set Agitate Total (VC resources cylinder) to ${game.vcResources}")
+    log(s"Set Agitate Total (VC resources cylinder) to ${game.vcResources}", Color.GameMarker)
   }
 
   def initAgitateTotal(): Unit = {
     val agitateTotal = d3
-    log(s"\nRolling d3 to set the Agitate Total: $agitateTotal")
+    log(s"\nRolling d3 to set the Agitate Total: $agitateTotal", Color.GameMarker)
     log(separator())
     setAgitateTotal(agitateTotal)
     pause()
@@ -4320,13 +4351,13 @@ object FireInTheLake {
   // If VC is a Bot, the we store the agitate total in vcResources
   def increaseAgitateTotal(amount: Int): Unit = if (game.isBot(VC) && amount > 0) {
     game = game.copy(vcResources = (game.vcResources + amount) min EdgeTrackMax)
-    log(s"Increase Agitate Total by +$amount to ${game.vcResources}")
+    log(s"Increase Agitate Total by +$amount to ${game.vcResources}", Color.GameMarker)
   }
 
   // If VC is a Bot, the we store the agitate total in vcResources
   def decreaseAgitateTotal(amount: Int): Unit = if (game.isBot(VC) && amount > 0) {
     game = game.copy(vcResources = (game.vcResources - amount) max 0)
-    log(s"Decrease Agitate Total by -$amount to ${game.vcResources}")
+    log(s"Decrease Agitate Total by -$amount to ${game.vcResources}", Color.GameMarker)
   }
 
   def setSupport(name: String, newSupport: SupportType): Unit = {
@@ -4394,14 +4425,14 @@ object FireInTheLake {
   def playCapability(cap: Capability): Unit = {
     game = game.copy(capabilities = cap :: game.capabilities)
     addOngoingEvent(cap.name)
-    log(s"\nCapability: '$cap' is now in effect")
+    log(s"\nCapability: '$cap' is now in effect", Color.Event)
   }
 
   def removeCapabilityFromPlay(cap: Capability): Unit = {
     if (game.capabilities contains cap) {
       game = game.copy(capabilities = game.capabilities filterNot (_ == cap))
       removeOngoingEvent(cap.name)
-      log(s"\nRemove capability: '$cap' from play")
+      log(s"\nRemove capability: '$cap' from play", Color.Event)
     }
   }
 
@@ -4409,7 +4440,7 @@ object FireInTheLake {
     if (game.capabilities contains cap) {
       game = game.copy(capabilities = cap.flip :: (game.capabilities filterNot (_ == cap)))
       val desc = if (cap.shaded) "unshaded" else "shaded"
-      log(s"\nFlip capability: '$cap' to its $desc side")
+      log(s"\nFlip capability: '$cap' to its $desc side", Color.Event)
     }
   }
 
@@ -4419,13 +4450,13 @@ object FireInTheLake {
   def playMomentum(mo: String): Unit = {
     game = game.copy(momentum = mo :: game.momentum)
     addOngoingEvent(mo)
-    log(s"\nMomentum: '$mo' is now in play")
+    log(s"\nMomentum: '$mo' is now in play", Color.Event)
   }
 
   def removeMomentumFromPlay(mo: String): Unit = {
     game = game.copy(momentum = game.momentum filterNot (_ == mo))
     removeOngoingEvent(mo)
-    log(s"Remove Momentum: '$mo' from play")
+    log(s"Remove Momentum: '$mo' from play", Color.Event)
 
   }
 
@@ -4440,7 +4471,7 @@ object FireInTheLake {
       assert(pieces.totalBases + sp.pieces.totalBases <= 2, s"Cannot place more than 2 bases in $spaceName")
       game = game.updateSpace(sp.addPieces(pieces))
       for (desc <- pieces.descriptions)
-        log(s"Place $desc from AVAILABLE into $spaceName")
+        log(s"Place $desc from AVAILABLE into $spaceName", Color.MapPieces)
     }
   }
 
@@ -4455,7 +4486,7 @@ object FireInTheLake {
       assert(pieces.totalBases + sp.pieces.totalBases <= 2, s"Cannot place more than 2 bases in $spaceName")
       game = game.copy(outOfPlay = game.outOfPlay - pieces).updateSpace(sp.addPieces(pieces))
       for (desc <- pieces.descriptions)
-        log(s"Place $desc from OUT OF PLAY into $spaceName")
+        log(s"Place $desc from OUT OF PLAY into $spaceName", Color.MapPieces)
     }
   }
 
@@ -4471,7 +4502,7 @@ object FireInTheLake {
         log(separator())
       }
       for (desc <- pieces.descriptions)
-        log(s"Remove $desc from $spaceName to AVAILABLE")
+        log(s"Remove $desc from $spaceName to AVAILABLE", Color.MapPieces)
     }
   }
 
@@ -4488,7 +4519,7 @@ object FireInTheLake {
         log(separator())
       }
       for (desc <- pieces.descriptions)
-        log(s"Remove $desc from $spaceName to CASUALTIES")
+        log(s"Remove $desc from $spaceName to CASUALTIES", Color.MapPieces)
     }
   }
 
@@ -4506,7 +4537,7 @@ object FireInTheLake {
         log(separator())
       }
       for (desc <- pieces.descriptions)
-        log(s"Remove $desc from $spaceName to OUT OF PLAY")
+        log(s"Remove $desc from $spaceName to OUT OF PLAY", Color.MapPieces)
     }
   }
 
@@ -4522,7 +4553,7 @@ object FireInTheLake {
         log(separator())
       }
       for (desc <- pieces.descriptions)
-        log(s"Move $desc from AVAILABLE to CASUALTIES")
+        log(s"Move $desc from AVAILABLE to CASUALTIES", Color.MapPieces)
     }
   }
 
@@ -4538,7 +4569,7 @@ object FireInTheLake {
         log(separator())
       }
       for (desc <- pieces.descriptions)
-        log(s"Move $desc from AVAILABLE to OUT OF PLAY")
+        log(s"Move $desc from AVAILABLE to OUT OF PLAY", Color.MapPieces)
     }
   }
 
@@ -4553,7 +4584,7 @@ object FireInTheLake {
         log(separator())
       }
       for (desc <- pieces.descriptions)
-        log(s"Move $desc from CASUALTIES to AVAILABLE")
+        log(s"Move $desc from CASUALTIES to AVAILABLE", Color.MapPieces)
     }
   }
 
@@ -4570,7 +4601,7 @@ object FireInTheLake {
         log(separator())
       }
       for (desc <- pieces.descriptions)
-        log(s"Move $desc from CASUALTIES to $name")
+        log(s"Move $desc from CASUALTIES to $name", Color.MapPieces)
     }
   }
 
@@ -4585,7 +4616,7 @@ object FireInTheLake {
         log(separator())
       }
       for (desc <- pieces.descriptions)
-        log(s"Move $desc from CASUALTIES to OUT OF PLAY")
+        log(s"Move $desc from CASUALTIES to OUT OF PLAY", Color.MapPieces)
     }
   }
 
@@ -4598,7 +4629,7 @@ object FireInTheLake {
       game = game.copy(outOfPlay = game.outOfPlay - pieces.normalized).updateSpace(newSp)
 
       for (desc <- pieces.descriptions)
-        log(s"Move $desc from OUT OF PLAY to $name")
+        log(s"Move $desc from OUT OF PLAY to $name", Color.MapPieces)
     }
   }
 
@@ -4608,7 +4639,7 @@ object FireInTheLake {
       game = game.copy(outOfPlay = game.outOfPlay - pieces.normalized)
 
       for (desc <- pieces.descriptions)
-        log(s"Move $desc from OUT OF PLAY to AVAILABLE")
+        log(s"Move $desc from OUT OF PLAY to AVAILABLE", Color.MapPieces)
     }
   }
 
@@ -4654,7 +4685,7 @@ object FireInTheLake {
     game = game.updateSpace(updated)
 
     for (desc <- hidden.descriptions)
-      log(s"Flip $desc in $spaceName to ACTIVE")
+      log(s"Flip $desc in $spaceName to ACTIVE", Color.FlipPieces)
   }
 
   //  Hide guerrillas/rangers/irregulars in a space
@@ -4673,7 +4704,7 @@ object FireInTheLake {
     game = game.updateSpace(updated)
 
     for (desc <- visible.descriptions)
-      log(s"Flip $desc in $spaceName to UNDERGROUND")
+      log(s"Flip $desc in $spaceName to UNDERGROUND", Color.FlipPieces)
   }
 
 
@@ -4691,7 +4722,7 @@ object FireInTheLake {
       game = game.updateSpace(updatedSrc).updateSpace(updatedDst)
 
       for (desc <- pieces.descriptions)
-        log(s"Move $desc from $source to $dest")
+        log(s"Move $desc from $source to $dest", Color.MapPieces)
     }
   }
 
@@ -4710,7 +4741,7 @@ object FireInTheLake {
     val newPieces = sp.pieces - bases + tunnels
     game = game.updateSpace(sp.setPieces(newPieces))
     for (desc <- bases.descriptions)
-      log(s"Add a tunnel marker to ${desc} in $spaceName")
+      log(s"Add a tunnel marker to ${desc} in $spaceName", Color.MapMarker)
   }
 
   def removeTunnelMarker(spaceName: String, tunnels: Pieces): Unit = {
@@ -4727,7 +4758,7 @@ object FireInTheLake {
     val newPieces = sp.pieces - tunnels + bases
     game = game.updateSpace(sp.setPieces(newPieces))
     for (desc <- tunnels.descriptions)
-      log(s"Remove a tunnel marker from ${desc} in $spaceName")
+      log(s"Remove a tunnel marker from ${desc} in $spaceName", Color.MapMarker)
   }
 
   //  Used by both Human and Bot Patrol commands
@@ -4895,7 +4926,7 @@ object FireInTheLake {
           val sp = game.getSpace(name)
           val updated = sp.removePieces(pieces)
           game = game.updateSpace(updated)
-          log(s"Remove ${andList(pieces.descriptions)} from $name to AVAILABLE")
+          log(s"Remove ${andList(pieces.descriptions)} from $name to AVAILABLE", Color.MapPieces)
         }
       }
   }
@@ -5014,11 +5045,11 @@ object FireInTheLake {
     if (orig.support != updated.support) {
       val name = orig.name
       (orig.support, updated.support) match {
-          case (s, Neutral)                             => log(s"Remove $s marker from $name")
-          case (Neutral, s)                             => log(s"Place $s marker in $name")
-          case (old, s) if old < Neutral && s < Neutral => log(s"Flip $old marker in $name to $s")
-          case (old, s) if old > Neutral && s > Neutral => log(s"Flip $old marker in $name to $s")
-          case (old, s)                                 => log(s"Replace $old marker in $name with $s marker")
+          case (s, Neutral)                             => log(s"Remove $s marker from $name", Color.MapMarker)
+          case (Neutral, s)                             => log(s"Place $s marker in $name", Color.MapMarker)
+          case (old, s) if old < Neutral && s < Neutral => log(s"Flip $old marker in $name to $s", Color.MapMarker)
+          case (old, s) if old > Neutral && s > Neutral => log(s"Flip $old marker in $name to $s", Color.MapMarker)
+          case (old, s)                                 => log(s"Replace $old marker in $name with $s marker", Color.MapMarker)
       }
     }
   }
@@ -5032,7 +5063,7 @@ object FireInTheLake {
         log(separator())
         loggedHeader = true
       }
-      log(message)
+      log(message, Color.GameMarker)
     }
 
     if (origGame.usPoints != newGame.usPoints)
@@ -5094,9 +5125,9 @@ object FireInTheLake {
             log(separator())
             for ((name, origControl, newControl) <- changed) {
               (origControl, newControl) match {
-                case (Uncontrolled, _)  => log(s"Place ${newControl} marker in ${name}")
-                case (_, Uncontrolled)  => log(s"Remove ${origControl} marker from ${name}")
-                case _                  => log(s"Flip control marker in ${name} to ${newControl}")
+                case (Uncontrolled, _)  => log(s"Place ${newControl} marker in ${name}", Color.MapMarker)
+                case (_, Uncontrolled)  => log(s"Remove ${origControl} marker from ${name}", Color.MapMarker)
+                case _                  => log(s"Flip control marker in ${name} to ${newControl}", Color.MapMarker)
               }
             }
           }
@@ -5199,8 +5230,13 @@ object FireInTheLake {
   def pause(): Boolean = {
     if (loggingSuspended)
       false
-    else
-      readLine("\n>>>>> [ Press Enter to continue... ] <<<<<") == "skip"
+    else {
+      val (color, reset) = if (game.showColor)
+        (Console.GREEN, Console.RESET)
+      else
+        ("", "")
+      readLine(s"\n${color}>>>>> [ Press Enter to continue... ] <<<<<${reset}") == "skip"
+    }
   }
 
   def pauseIfBot(faction: Faction): Unit = if (game.isBot(faction)) pause()
@@ -5222,12 +5258,26 @@ object FireInTheLake {
     }
   }
 
+  def displayLine(text: String = "", color: Option[Color] = None): Unit = {
+    color match {
+      case Some(color) if game == null || game.showColor =>
+        println(s"${color.sequence}${text}${Console.RESET}")
+      case _ =>
+        println(text)
+    }
+  }
 
   // Print the line to the console and save it in the game's history.
-  def log(line: String = "", force: Boolean = false, echo: Boolean = true): Unit = if (!loggingSuspended || force) {
-    if (echo)
-      println(line)
-    game = game.copy(log = game.log :+ line)
+  def log(
+    line: String = "",
+    color: Option[Color] = None,
+    force: Boolean = false,
+    echo: Boolean = true): Unit = {
+      if (!loggingSuspended || force) {
+        if (echo)
+          displayLine(line, color)
+        game = game.copy(log = game.log :+ line)
+      }
   }
 
   def separator(length: Int = 52, char: Char = '-'): String = char.toString * length
@@ -6013,7 +6063,8 @@ object FireInTheLake {
     val options = (
       List("resources", "aid", "patronage", "econ", "trail", "uspolicy", "casualties",
       "on deck card", "out of play", "capabilities", "momentum", "rvnLeaders", "pivotal",
-      "eligibility", "trung deck", "bot log", "bot test", "trung log", "human win", "bot intents") ::: agitate
+      "eligibility", "trung deck", "bot log", "bot test", "trung log", "human win",
+      "color", "bot intents") ::: agitate
     ).sorted ::: SpaceNames
 
     val choice = askOneOf("[Adjust] (? for list): ", options, param, allowNone = true, allowAbort = false)
@@ -6037,6 +6088,7 @@ object FireInTheLake {
       case "bot test"     => adjustBotTest()
       case "trung deck"   => adjustTrungDeck()
       case "trung log"    => adjustLogTrung()
+      case "color"        => adjustShowColor()
       case "human win"    => adjustHumanWinInVictoryPhase()
       case "bot intents"  => adjustBotIntentDisplay()
       case name if game.spaces.exists(_.name == name) => adjustSpace(name)
@@ -6613,6 +6665,15 @@ object FireInTheLake {
     game = game.copy(logTrung = newValue)
     log(desc)
     saveGameState("Log Trung checks")
+  }
+
+  //  Whether or not to log dice rolls in Trung decisions
+  def adjustShowColor(): Unit = {
+    val newValue = !game.showColor
+    val desc = adjustmentDesc("Show colors", game.showColor, newValue)
+    game = game.copy(showColor = newValue)
+    log(desc)
+    saveGameState("Show Color")
   }
 
   def adjustHumanWinInVictoryPhase(): Unit = {

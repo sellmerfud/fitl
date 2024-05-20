@@ -71,7 +71,7 @@ object Card_052 extends EventCard(52, "RAND",
     val candidates = game.capabilities filter isCandidate(shaded = true)
 
     if (candidates.isEmpty)
-      log("There are no shaded US capabilities in play")
+      log("There are no shaded US capabilities in play", Color.Event)
     else {
       val cap = if (game.isHuman(faction))
         askSimpleMenu(candidates, "Choose shaded US capability to flip:").head
@@ -89,7 +89,7 @@ object Card_052 extends EventCard(52, "RAND",
     val candidates = game.capabilities filter isCandidate(shaded = false)
 
     if (candidates.isEmpty)
-      log("There are no unshaded US capabilities in play")
+      log("There are no unshaded US capabilities in play", Color.Event)
     else {
       val cap = if (game.isHuman(faction))
         askSimpleMenu(candidates, "Choose unshaded US capability to flip:").head

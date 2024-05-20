@@ -251,7 +251,8 @@ object SavedGame {
       "botTest"                -> gameState.botTest,
       "logTrung"               -> gameState.logTrung,
       "botIntents"             -> gameState.botIntents.toString,
-      "history"                -> (gameState.history map gameSegmentToMap)
+      "history"                -> (gameState.history map gameSegmentToMap),
+      "showColor"              -> gameState.showColor
     )
   }
     
@@ -292,7 +293,8 @@ object SavedGame {
       asBoolean(data.get("botTest") getOrElse false),
       asBoolean(data.get("logTrung") getOrElse true),
       BotIntents(asString(data.get("botIntents") getOrElse BotIntentsVerbose.toString)),
-      (asList(data("history")) map (s => gameSegmentFromMap(asMap(s)))).toVector
+      (asList(data("history")) map (s => gameSegmentFromMap(asMap(s)))).toVector,
+      asBoolean(data.get("showColor") getOrElse true)
     )
   }
 }

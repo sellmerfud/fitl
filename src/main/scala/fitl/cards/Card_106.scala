@@ -137,7 +137,7 @@ object Card_106 extends EventCard(106, "Binh Duong",
         else
           (isCoin(faction), botPiece(faction))
         
-        println()
+        log()
         if (towardSupport)
           increaseSupport(name, 1)
         else

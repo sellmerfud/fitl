@@ -128,6 +128,7 @@ object Card_068 extends EventCard(68, "Green Berets",
         else
           VC_Bot.pickSpaceTowardActiveOpposition(candidates).name
 
+        log()
         setSupport(name, ActiveOpposition)
       }
     }

@@ -65,7 +65,7 @@ object Card_003 extends EventCard(3, "Peace Talks",
   def executeUnshaded(faction: Faction): Unit = {
     decreaseResources(NVA, 9)
     if (game.pivotCardsAvailable(US)) {
-      log("\nPlace the \"Peace Talks\" marker on the Linebacker II pivotal event card")
+      log("\nPlace the \"Peace Talks\" marker on the Linebacker II pivotal event card", Color.Event)
       game = game.copy(peaceTalks = true)
     }
   }

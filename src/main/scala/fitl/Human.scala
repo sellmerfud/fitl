@@ -639,9 +639,9 @@ object Human {
     log(s"\nPacifying in $name")
     log(separator())
     if (momentumInPlay(Mo_BlowtorchKomer))
-      log(s"Each terror/shift cost only 1 resource [Momentum: $Mo_BlowtorchKomer]")
+      log(s"Each terror/shift cost only 1 resource [Momentum: $Mo_BlowtorchKomer]", Color.Event)
     if (maxSupport == PassiveSupport)
-      log(s"Cannot shift to Active Suport [$CORDS_Shaded]")
+      log(s"Cannot shift to Active Suport [$CORDS_Shaded]", Color.Event)
 
     if (maxPossible == 0) {
       println(s"\nIt is not possible to pacify in $name")
@@ -731,7 +731,7 @@ object Human {
                      (!sp.pieces.has(UndergroundGuerrillas) && sp.pieces.has(InsurgentNonTunnels)))
 
     if (isPossible && askYorN(s"Do you wish to use the Cobras capability in $name? (y/n) ")) {
-      log(s"\nUsing $Cobras_Unshaded")
+      log(s"\nUsing $Cobras_Unshaded", Color.Event)
       log(separator())
       val deadPiece = if (sp.pieces.has(NVATroops))
         Pieces(nvaTroops = 1)
@@ -758,7 +758,7 @@ object Human {
       if (candidates.nonEmpty && askYorN(s"\nDo you wish to perform a free assault in 1 transport destinaion via [$ArmoredCavalry_Unshaded]? (y/n) ")) {
           val name = askCandidate("Free Assault in which space: ", candidates)
 
-          log(s"\n$ArmoredCavalry_Unshaded triggers a free Assault")
+          log(s"\n$ArmoredCavalry_Unshaded triggers a free Assault", Color.Event)
           performAssault(ARVN, name, Params(free = true))
       }
     }
@@ -932,7 +932,7 @@ object Human {
           if (num == 0)
             log("No hits are inflicted")
           if (use_pt76_shaded)
-            log(s"NVA elects to use [$PT76_Shaded]")
+            log(s"NVA elects to use [$PT76_Shaded]", Color.Event)
           removePieces(name, deadPieces)
           removeToAvailable(name, Pieces(nvaTroops = attrition), Some("Attrition:"))
         }
@@ -964,7 +964,7 @@ object Human {
     }
 
     log()
-    log(s"Move the $faction cylinder to the ${actorBoxName(action)} box")
+    log(s"Move the $faction cylinder to the ${actorBoxName(action)} box", Color.GameMarker)
     game = game.copy(sequence = game.sequence.addActor(faction, action))
     
     action match {
@@ -1336,13 +1336,13 @@ object Human {
           log(s"\nUS Air Strikes The Trail")
           log(separator())
           if (capabilityInPlay(TopGun_Shaded))
-            log(s"Die roll ($TopGun_Shaded): $die [${if (success) "Success!" else "Failure"}]")
+            log(s"Die roll ($TopGun_Shaded): $die [${if (success) "Success!" else "Failure"}]", Color.Event)
 
           if (success) {
             degradeTrail(numBoxes)
 
             if (adsid) {
-              log(s"Momentum: $Mo_ADSID reduces NVA resources at trail change")
+              log(s"Momentum: $Mo_ADSID reduces NVA resources at trail change", Color.Event)
               decreaseResources(NVA, 6)
             }
 
@@ -1351,7 +1351,7 @@ object Human {
 
             if (capabilityInPlay(SA2s_Unshaded)) {
               val CanRemove = List(NVABase, NVATroops, NVAGuerrillas_U, NVAGuerrillas_A)
-              log(s"\n$SA2s_Unshaded triggers")
+              log(s"\n$SA2s_Unshaded triggers", Color.Event)
               val sa2Candidates = spaceNames(spaces(OutsideSouth) filter (_.pieces.has(CanRemove)))
               if (sa2Candidates.isEmpty)
                 log("There are no NVA outside the south that can be removed") // Very unlikely!
@@ -1453,12 +1453,12 @@ object Human {
         else if (numKills == 0)
           log(s"\n$name: No shift [No pieces removed]")
         else if (numKills > 1 && capabilityInPlay(ArcLight_Shaded) && sp.support > PassiveOpposition) {
-            log(s"\n$name: Shift 2 levels [$ArcLight_Shaded]")
+            log(s"\n$name: Shift 2 levels [$ArcLight_Shaded]", Color.Event)
             log(separator())
             decreaseSupport(name, 2)
         }
         else if (numKills == 1 && capabilityInPlay(LaserGuidedBombs_Unshaded))
-          log(s"\n$name: No shift [$LaserGuidedBombs_Unshaded]")
+          log(s"\n$name: No shift [$LaserGuidedBombs_Unshaded]", Color.Event)
         else {
           log(s"\n$name: Shift 1 level")
           log(separator())
@@ -1571,7 +1571,7 @@ object Human {
 
                 if (skipShift) {
                   heaven_unshaded_used = true
-                  log(s"No shift in support. Used [$MandateOfHeaven_Unshaded]")
+                  log(s"No shift in support. Used [$MandateOfHeaven_Unshaded], Color.Event")
                 }
                 else
                     decreaseSupport(name, 1)
@@ -1605,7 +1605,7 @@ object Human {
     
     //  Young turks always applies if in play
     if (young_turks) {
-      log(s"$RVN_Leader_YoungTurks leader effect triggers")
+      log(s"$RVN_Leader_YoungTurks leader effect triggers", Color.Event)
       increasePatronage(2)
     }
     
@@ -2014,7 +2014,7 @@ object Human {
     ).flatten
 
     for (note <- notes)
-      log(note)
+      log(note, Color.Event)
 
     // Set the ambushing flag.  The user will be prompted to ambush in the current
     // action: Attack, Patrol
@@ -2198,7 +2198,7 @@ object Human {
       println("\nNotes:")
       println(separator())
       for (note <- notes)
-        log(note)
+        log(note, Color.Event)
     }
 
     val choices: List[(Option[SpecialActivity], String)] =
@@ -2298,7 +2298,7 @@ object Human {
       println("Notes:")
       println(separator())
       for (note <- notes)
-        log(note)
+        log(note, Color.Event)
     }
 
     askMenu(choices, "\nChoose operation:").head match {
@@ -2326,7 +2326,7 @@ object Human {
       println("Notes:")
       println(separator())
       for (note <- notes)
-        log(note)
+        log(note, Color.Event)
     }
 
     askMenu(choices, "\nChoose operation:").head match {
@@ -2407,7 +2407,7 @@ object Human {
 
       askMenu(choices, s"\nTraining in $name:").head match {
         case "extra" =>
-          log(s"US places 1 ARVN Police with US Troops [$CombActionPlatoons_Unshaded]")
+          log(s"US places 1 ARVN Police with US Troops [$CombActionPlatoons_Unshaded]", Color.Event)
           ensurePieceTypeAvailable(ARVNPolice, 1)
           placePieces(name, Pieces().set(1, ARVNPolice))
 
@@ -2570,7 +2570,7 @@ object Human {
 
     if (duongVanMinh) {
       if (isRVNLeader(RVN_Leader_DuongVanMinh)) {
-        log(s"\nLeader: $RVN_Leader_DuongVanMinh effect triggers")
+        log(s"\nLeader: $RVN_Leader_DuongVanMinh effect triggers", Color.Event)
         log(separator())
         increaseUsAid(5)
       }
@@ -2752,14 +2752,14 @@ object Human {
     if (hasTheCash) {
       if (faction == ARVN && !params.free) {
         if (momentumInPlay(Mo_BodyCount))
-          log(s"ARVN Assault costs zero resources [Momentum: $Mo_BodyCount]")
+          log(s"ARVN Assault costs zero resources [Momentum: $Mo_BodyCount]", Color.Event)
         else
           decreaseResources(ARVN, 3)
       }
       if (notes.nonEmpty) {
         println(separator())
         for (note <- notes)
-          log(note)
+          log(note, Color.Event)
       }
 
       selectCubesToMove()
@@ -2993,13 +2993,13 @@ object Human {
 
       if (faction == ARVN && !params.free) {
         if (momentumInPlay(Mo_BodyCount))
-          log(s"ARVN Assault costs zero resources [Momentum: $Mo_BodyCount]")
+          log(s"ARVN Assault costs zero resources [Momentum: $Mo_BodyCount]", Color.Event)
         else
           decreaseResources(ARVN, 3)
       }
       
       if (addPatton) {
-        log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]")
+        log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]", Color.Event)
         m48PattonSpaces = name :: m48PattonSpaces        
       }
 
@@ -3009,7 +3009,7 @@ object Human {
       // Abrams unshaded
       if (remaining > 0 && baseFirst && !abramsUnshadedUsed &&
           askYorN(s"Do you wish to use the unshaded Abrams capability to remove an insurgent base first? (y/n) ")) {
-        log(s"\nRemove a base first [$Abrams_Unshaded]")
+        log(s"\nRemove a base first [$Abrams_Unshaded]", Color.Event)
         val removed = askPieces(pieces, 1, baseTargets.to(Seq))
         removeToAvailable(name, removed)
         abramsUnshadedUsed = true
@@ -3021,7 +3021,7 @@ object Human {
       // guerilla.  But if there are hits remainin, the it counts toward
       // those hits.
       val killedUnderground = if (underground) {
-        log(s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]")
+        log(s"\nRemove an underground guerrilla [$SearchAndDestroy_Unshaded]", Color.Event)
         val removed = askPieces(pieces, 1, validEnemy(UndergroundGuerrillas).to(Seq))
         removeToAvailable(name, removed)
         if (remaining > 0) {
@@ -3044,7 +3044,7 @@ object Human {
 
       // Body Count momentum
       if (momentumInPlay(Mo_BodyCount) && killedPieces.totalOf(Guerrillas) > 0) {
-        log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]")
+        log(s"\nEach guerrilla removed adds +3 Aid [Momentum: $Mo_BodyCount]", Color.Event)
         increaseUsAid(3 * killedPieces.totalOf(Guerrillas))
       }
 
@@ -3063,7 +3063,7 @@ object Human {
       if (asUS && pieces.has(USTroops) && capabilityInPlay(Cobras_Shaded)) {
         val die = d6
         val success = die < 4
-        log(s"\nCheck for loss of US Troop [$Cobras_Shaded]")
+        log(s"\nCheck for loss of US Troop [$Cobras_Shaded]", Color.Event)
         log(s"Die roll is: ${die} [${if (success) "Troop eliminated" else "No effect"}]")
         if (success) {
           removeToCasualties(name, Pieces(usTroops = 1))
@@ -3073,7 +3073,7 @@ object Human {
       // SearchAndDestroy_Shaded
       //    Each US and ARVN assault Province shifts support one level toward Active Opposition
       if (searchDestroy && sp.isProvince && sp.canHaveSupport && sp.support != ActiveOpposition) {
-        log(s"\nEach assault shifts support toward Active Opposition [$SearchAndDestroy_Shaded]")
+        log(s"\nEach assault shifts support toward Active Opposition [$SearchAndDestroy_Shaded]", Color.Event)
         decreaseSupport(name, 1)
       }
     }

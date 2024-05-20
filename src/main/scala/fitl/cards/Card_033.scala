@@ -71,7 +71,7 @@ object Card_033 extends EventCard(33, "MiGs",
   def shadedEffective(faction: Faction): Boolean = !capabilityInPlay(TopGun_Unshaded)
   def executeShaded(faction: Faction): Unit = {
     if (capabilityInPlay(TopGun_Unshaded))
-      log(s"\nThe shaded MiGS capability has been blocked [$TopGun_Unshaded]")
+      log(s"\nThe shaded MiGS capability has been blocked [$TopGun_Unshaded]", Color.Event)
     else
       playCapability(MiGs_Shaded)
   }

@@ -2126,6 +2126,8 @@ object FireInTheLake {
     val Info: Option[Color] = Some(Yellow)
   }
 
+  case class LogEntry(text: String, color: Option[Color])
+
   // A game segment containing a file name for the segment,
   // a short description and the log messages that were generated
   // during the game segment.
@@ -2171,7 +2173,7 @@ object FireInTheLake {
     botIntents: BotIntents            = BotIntentsVerbose,
     history: Vector[GameSegment]      = Vector.empty,
     showColor: Boolean                = true,
-    log: Vector[String]               = Vector.empty) {  // Log of the cuurent game segment
+    log: Vector[LogEntry]               = Vector.empty) {  // Log of the cuurent game segment
 
 
     lazy val botFactions = Faction.ALL -- humanFactions
@@ -2952,8 +2954,7 @@ object FireInTheLake {
 
     // Make sure that the game directory exists
     save_path.dirname.mkpath()
-    //  We don't write colored entries to log files
-    log_path.writeFile(game.log.mkString("", lineSeparator, lineSeparator))
+    SavedGame.saveLog(log_path, game.log)    
     game = game.copy(log = Vector.empty, history = game.history :+ segment)
     SavedGame.save(save_path, game)
     saveGameDescription()
@@ -4342,7 +4343,7 @@ object FireInTheLake {
 
   def initAgitateTotal(): Unit = {
     val agitateTotal = d3
-    log(s"\nRolling d3 to set the Agitate Total: $agitateTotal", Color.GameMarker)
+    log(s"\nRolling d3 to set the Agitate Total: $agitateTotal")
     log(separator())
     setAgitateTotal(agitateTotal)
     pause()
@@ -5276,7 +5277,7 @@ object FireInTheLake {
       if (!loggingSuspended || force) {
         if (echo)
           displayLine(line, color)
-        game = game.copy(log = game.log :+ line)
+        game = game.copy(log = game.log :+ LogEntry(line, color))
       }
   }
 
@@ -5916,24 +5917,24 @@ object FireInTheLake {
           val header   = s"\n>>> History of save point $save_number <<<"
           val log_path = gamesDir/gameName.get/getLogName(save_number)
 
-          val msgs = if (log_path.exists)
-            log_path.readLines.toVector
+          val entries = if (log_path.exists)
+            SavedGame.loadLog(log_path)
           else
             Vector.empty
 
           path match {
             case None =>
-              println(header)
-              println(separator(char = '='))
-              for (msg <- msgs)
-                println(msg)
+              displayLine(header, Some(Color.Green))
+              displayLine(separator(char = '='), Some(Color.Green))
+              for (LogEntry(line, color) <- entries)
+                displayLine(line, color)
 
             case Some(path) =>
               path.appender { stream =>
                 stream.write(header + lineSeparator)
                 stream.write(separator() + lineSeparator)
-                for (msg <- msgs)
-                  stream.write(msg + lineSeparator)
+                for (LogEntry(line, _) <- entries)
+                  stream.write(line + lineSeparator)
               }
           }
           printSegment(save_number + 1, last_save_number, path)

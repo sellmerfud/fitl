@@ -37,11 +37,12 @@ import java.io.IOException
 import FUtil.Pathname
 import FireInTheLake.{ GameState, SequenceOfPlay, Space, Pieces, Faction, Action, SpaceType,
                        Actor, Capability, GameSegment, PieceType, SupportType, SOFTWARE_VERSION,
-                       BotIntents, BotIntentsVerbose }
+                       BotIntents, BotIntentsVerbose, LogEntry, Color }
 import Bot.{ TrungCard, trungFromId }
 
 object SavedGame {
   val CurrentFileVersion = 1
+  val CurrentLogVersion  = 1
 
   def save(filepath: Pathname, gameState: GameState): Unit = {
     try {
@@ -297,5 +298,86 @@ object SavedGame {
       asBoolean(data.get("showColor") getOrElse true)
     )
   }
-}
 
+
+  // Methods to save and load the log files
+  private def logEntryToMap(entry: LogEntry): Map[String, Any] = 
+    Map(
+      "text" -> entry.text,
+      "color" -> entry.color.map(_.name).getOrElse(null)
+    )
+  
+  private def logEntryFromMap(data: Map[String, Any]): LogEntry = {
+    val color = if (data("color") == null)
+      None
+    else
+      Some(Color.fromName(asString(data("color"))));
+  
+    LogEntry(asString(data("text")), color)
+  }
+
+  private def logToJson(entries: Vector[LogEntry]): String = {
+    val top = Map(
+      "file-version"     -> CurrentLogVersion,
+      "software-version" -> SOFTWARE_VERSION,
+      "log"              -> (entries map logEntryToMap)
+    )
+    Json.build(top)
+  }
+
+  private def logFromVersion1(entries: List[Any]): Vector[LogEntry] = {
+    entries.map(e => logEntryFromMap(asMap(e))).toVector
+  }
+
+  def saveLog(filepath: Pathname, entries: Vector[LogEntry]): Unit = {
+    try {
+      filepath.writeFile(logToJson(entries))
+    }
+    catch {
+      case e: IOException =>
+        val suffix = if (e.getMessage == null) "" else s": ${e.getMessage}"
+        println(s"IO Error writing log file ($filepath)$suffix")
+      case e: Throwable =>
+        val suffix = if (e.getMessage == null) "" else s": ${e.getMessage}"
+        println(s"Error writing log file ($filepath)$suffix")
+    }
+  }
+
+  private def logFromJson(jsonValue: String): Vector[LogEntry] = {
+      val top = asMap(Json.parse(jsonValue))
+      if (!top.contains("file-version"))
+        throw new IllegalArgumentException(s"Invalid save file - missing file version number")
+      
+      if (!top.contains("log"))
+        throw new IllegalArgumentException(s"Invalid save file - missing log entries")
+  
+      asInt(top("file-version")) match {
+        case 1 => logFromVersion1(asList(top("log")))
+        case v => throw new IllegalArgumentException(s"Invalid log file version: $v")
+      }
+  }
+  
+
+   // The path should be the full path to the file to load.
+  // Will set the game global variable
+  def loadLog(filepath: Pathname): Vector[LogEntry] = {
+    try logFromJson(filepath.readFile())
+    catch {
+      case e: JsonException =>
+          // Older versions did not store the log as json
+        // If we cannot parse the file then treat it as a regular
+        // text file.
+        filepath.readLines.toVector map { line =>
+          LogEntry(line, None)
+        }
+      case e: IOException =>
+        val suffix = if (e.getMessage == null) "" else s": ${e.getMessage}"
+        println(s"IO Error reading log file ($filepath)$suffix")
+        sys.exit(1)
+      case e: Throwable =>
+        val suffix = if (e.getMessage == null) "" else s": ${e.getMessage}"
+        println(s"Error reading log file ($filepath)$suffix")
+        sys.exit(1)
+    }
+  }
+}

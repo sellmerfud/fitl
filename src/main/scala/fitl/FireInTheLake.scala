@@ -6181,13 +6181,13 @@ object FireInTheLake {
   }
 
   def adjustPatronage(): Unit = {
-    val origGame = game
     adjustInt("Patronage", game.patronage, 0 to EdgeTrackMax) foreach { value =>
       val desc = adjustmentDesc("Patronage", game.patronage, value)
-      game = game.copy(patronage = value)
-      log(desc)
-      saveGameState(desc)
-      logPointsChanges(origGame, game)
+      loggingPointsChanges {
+        game = game.copy(patronage = value)
+        log(desc)
+        saveGameState(desc)
+      }
     }
   }
 
@@ -6266,12 +6266,11 @@ object FireInTheLake {
     if (game.casualties.total + game.availablePieces.only(USPieces).total == 0)
       println("\nThere are no US forces in either the available or casualties box.")
     else {
-      val savedGame = game
-      nextAdjustment()
-      if (savedGame.casualties != game.casualties) {
-        // Number of available US pieces affects US score
-        logPointsChanges(savedGame, game)
-        saveGameState("Adjusted Casualties")
+      loggingPointsChanges {
+        val savedGame = game
+        nextAdjustment()
+        if (savedGame.casualties != game.casualties)
+          saveGameState("Adjusted Casualties")
       }
     }
   }
@@ -6319,11 +6318,10 @@ object FireInTheLake {
       println("\nThere are no US or ARVN forces in either the available or out of play box.")
     else {
       val savedGame = game
-      nextAdjustment()
-      if (savedGame.outOfPlay != game.outOfPlay) {
-        // Number of available US pieces affects US score
-        logPointsChanges(savedGame, game)
-        saveGameState("Adjusted Out of Play pieces")
+      loggingPointsChanges {
+        nextAdjustment()
+        if (savedGame.outOfPlay != game.outOfPlay)
+          saveGameState("Adjusted Out of Play pieces")
       }
     }
   }
@@ -6743,15 +6741,16 @@ object FireInTheLake {
     val options = List(ActiveSupport, PassiveSupport, Neutral, PassiveOpposition, ActiveOpposition)
     val choices = options map (opt => opt -> opt.name)
 
-    println()
-    println(s"Choose support level for ${name}:")
-    val newSupport = askMenu(choices, allowAbort = false).head
-    if (newSupport != origSupport) {
-      game = game.updateSpace(sp.copy(support = newSupport))
-      val desc = spaceAdjustmentDesc(name, "support", sp.support, newSupport)
-      log(desc)
-      saveGameState(desc)
-      logPointsChanges(origGame, game)
+    loggingPointsChanges  {
+      println()
+      println(s"Choose support level for ${name}:")
+      val newSupport = askMenu(choices, allowAbort = false).head
+      if (newSupport != origSupport) {
+        game = game.updateSpace(sp.copy(support = newSupport))
+        val desc = spaceAdjustmentDesc(name, "support", sp.support, newSupport)
+        log(desc)
+        saveGameState(desc)
+      }
     }
   }
 

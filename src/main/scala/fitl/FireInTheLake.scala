@@ -3097,6 +3097,7 @@ object FireInTheLake {
                   |  adjust trung log       - Toggle display of Trung conditions
                   |  adjust bot debug       - Toggle debug output of bot logic
                   |  adjust bot intents     - Set display of Bot event intentions
+                  |  adjust color           - Toggle use of color
                   |  adjust <space>         - Space specific settings""".stripMargin
 
   }

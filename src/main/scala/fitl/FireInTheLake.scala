@@ -2172,8 +2172,9 @@ object FireInTheLake {
     logTrung: Boolean                 = true, // Log Trung decisions
     botIntents: BotIntents            = BotIntentsVerbose,
     history: Vector[GameSegment]      = Vector.empty,
-    showColor: Boolean                = true,
+    showColor: Boolean                = !scala.util.Properties.isWin, // Default true except on Windows
     log: Vector[LogEntry]               = Vector.empty) {  // Log of the cuurent game segment
+
 
 
     lazy val botFactions = Faction.ALL -- humanFactions

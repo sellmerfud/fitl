@@ -7402,7 +7402,7 @@ object Bot {
       }
       else {
         val operation = if (US_Bot.allLocRoutesCanTho_HueBlockedAndNoShadedM48)
-          US_Bot.patrolOp(params) orElse US_Bot.sweepOp(params)
+          US_Bot.patrolOp(params)
         else
           US_Bot.sweepOp(params)
 
@@ -7808,7 +7808,7 @@ object Bot {
       }
       else {
         val operation = if (allLocRoutesCanTho_HueBlocked)
-          ARVN_Bot.patrolOp(params) orElse ARVN_Bot.sweepOp(params, actNum)
+          ARVN_Bot.patrolOp(params)
         else
           ARVN_Bot.sweepOp(params, actNum)
 
@@ -8009,7 +8009,7 @@ object Bot {
       }
       else {
         val operation = if (allLocRoutesCanTho_HueBlocked)
-          ARVN_Bot.patrolOp(params) orElse ARVN_Bot.sweepOp(params, actNum)
+          ARVN_Bot.patrolOp(params)
         else
           ARVN_Bot.sweepOp(params, actNum)
 

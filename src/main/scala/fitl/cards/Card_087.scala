@@ -151,7 +151,7 @@ object Card_087 extends EventCard(87, "Nguyen Chanh Thi",
     }
   }
 
-  val shadedSpaces = spaces(spacesWithin(2, Hue))
+  def shadedSpaces = spaces(spacesWithin(2, Hue))
   val shadedCandidate = (sp: Space) => sp.pieces.has(ARVNPieces)
 
   def shadedEffective(faction: Faction): Boolean = faction match {

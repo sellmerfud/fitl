@@ -2202,10 +2202,10 @@ object FireInTheLake {
       if (gameOver) {
         val winner = scores.head.faction
         val player = if (game.isBot(winner)) "Bot" else "Player"
-        s"The game has ended with a $winner $player victory"
+        b += s"The game has ended with a $winner $player victory"
       }
       else if (isCoupRound) {
-        s"${ordinal(coupCardsPlayed + 1)} Coup! round"
+        b += s"${ordinal(coupCardsPlayed + 1)} Coup! round"
       }
       else {
         actingFaction foreach { faction =>
@@ -2922,7 +2922,7 @@ object FireInTheLake {
   }
 
 
-    // Save a brief description of the game.
+  // Save a brief description of the game.
   // The descriptions are used by the askWhichGame() function.
   def saveGameDescription(): Unit = {
     assert(gameName.nonEmpty, "saveGameDescription(): called with gameName not set!")
@@ -5984,8 +5984,6 @@ object FireInTheLake {
       case e: IOException => println(s"IOException: ${e.getMessage}")
       case Error(msg) => println(msg)
     }
-
-
   }
 
   // Allows the user to roll back to the beginning of any turn.
@@ -6003,11 +6001,11 @@ object FireInTheLake {
         val saveChoices: List[(Int, (String, Seq[String]))] = pages(pageNum).toList map {
           case GameSegment(save_number, card, summary) => save_number -> (s"Save point ${save_number} [$card]", summary)
         }
-          val otherChoices: List[(Int, (String, Seq[String]))] = List(
-            choice(pageNum > firstPage, PAGE_UP,   "Page up, show newer save points ", Seq.empty),
-            choice(pageNum < lastPage,  PAGE_DOWN, "Page down, show older save points ", Seq.empty),
-            choice(true,                CANCEL,    "Cancel, do not roll back ", Seq.empty)
-          ).flatten
+        val otherChoices: List[(Int, (String, Seq[String]))] = List(
+          choice(pageNum > firstPage, PAGE_UP,   "Page up, show newer save points ", Seq.empty),
+          choice(pageNum < lastPage,  PAGE_DOWN, "Page down, show older save points ", Seq.empty),
+          choice(true,                CANCEL,    "Cancel, do not roll back ", Seq.empty)
+        ).flatten
 
         val current = game.history.last
         println()

@@ -58,7 +58,7 @@ import fitl.Human
 
 object Card_005 extends EventCard(5, "Wild Weasels",
   DualEvent,
-  List(US, ARVN, NVA, VC),
+  List(US, NVA, ARVN, VC),
   ListMap(US   -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           ARVN -> (Performed   -> Unshaded),

@@ -4,7 +4,7 @@ import java.nio.file.attribute.PosixFilePermissions
 
 lazy val commonSettings = Seq(
   organization := "org.sellmerfud",
-  version      := "1.19",
+  version      := "1.20",
   scalaVersion := "2.13.14"
 )
 

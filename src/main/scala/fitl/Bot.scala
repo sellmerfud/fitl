@@ -4554,6 +4554,7 @@ object Bot {
 
     def any2PopSpaceWithSupportAndMoreArvnCubesThanUsCubes: Boolean = {
       val result = game.nonLocSpaces exists { sp =>
+        sp.support > Neutral &&  
         sp.population == 2 &&
         sp.pieces.totalOf(ARVNCubes) > sp.pieces.totalOf(USTroops)
       }

@@ -5,7 +5,9 @@ import java.nio.file.attribute.PosixFilePermissions
 lazy val commonSettings = Seq(
   organization := "org.sellmerfud",
   version      := "1.20",
-  scalaVersion := "2.13.14"
+  scalaVersion := "2.13.14",
+  javacOptions  ++= Seq("-source", "8", "-target",  "8"),
+  scalacOptions ++= Seq( "-deprecation", "-unchecked", "-feature" ),
 )
 
 lazy val stage        = taskKey[Unit]("Create distribution zip file")
@@ -17,7 +19,6 @@ lazy val fitl = (project in file("."))
     commonSettings,
     name        := "Fire-in-the-Lake",
     description := "A scala implementation of the solo Tru'ng Bots for Fire in the Lake",
-    scalacOptions       ++= Seq( "-deprecation", "-unchecked", "-feature" ),
     libraryDependencies ++= Seq(
       "org.scala-lang.modules" %% "scala-parser-combinators" % "2.1.1"
     ),

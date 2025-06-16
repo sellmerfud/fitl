@@ -54,7 +54,7 @@ import fitl.Human
 
 object Card_003 extends EventCard(3, "Peace Talks",
   DualEvent,
-  List(US, ARVN, NVA, VC),
+  List(US, NVA, ARVN, VC),
   ListMap(US   -> (Critical    -> Unshaded),
           ARVN -> (Ignored -> Unshaded),
           NVA  -> (Performed   -> Shaded),

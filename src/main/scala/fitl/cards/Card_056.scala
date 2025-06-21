@@ -119,17 +119,6 @@ object Card_056 extends EventCard(56, "Vo Nguyen Giap",
         selected
     }
 
-    val opChoices = List(
-      Rally      -> "Rally Operation",
-      March      -> "March Operation",
-      Attack     -> "Attack Operation",
-      Terror     -> "Terror Operation",
-      Infiltrate -> "Infiltrate Activity",
-      Bombard    -> "Bombard Activity",
-      Ambush     -> "Ambush Activity",
-      "cancel"   -> "None"
-    )
-
     def doAction(name: String): Unit = {
       val params = Params(
         event     = true,
@@ -140,10 +129,43 @@ object Card_056 extends EventCard(56, "Vo Nguyen Giap",
       val bombardParams = Params(
         event     = true,
         free      = true,
-        onlyIn    = Some(getAdjacent(name) + name),
+        onlyIn    = Some(Set(name)),
         maxSpaces = Some(1)
       )
+      val sp = game.getSpace(name)
+      val canRally =
+        !sp.isLoC &&
+        (sp.population == 0 || sp.support <= Neutral)
+      val canAttack =
+        (sp.pieces.has(NVAGuerrillas) || sp.pieces.has(NVATroops)) &&
+        sp.pieces.has(CoinPieces)
+      val canTerror =
+        (sp.pieces.has(NVAGuerrillas_U) || sp.pieces.has(NVATroops))
+      val canInfiltrate =
+        sp.pieces.has(NVABases) ||
+        (sp.pieces.totalOf(NVAPieces) > sp.pieces.totalOf(VCPieces))
+      val canBombard = {
+        val haveBombers = (name :: getAdjacent(name).toList)
+          .map(game.getSpace)
+          .exists(_.pieces.totalOf(NVATroops) >= 3)
+        haveBombers &&
+        (sp.pieces.has(CoinBases) || sp.pieces.totalOf(CoinTroops) >= 3)
+      }
+      val canAmbush = sp.pieces.has(NVAGuerrillas_U)
+
+
+
       Human.initTurnVariables(false)
+      val opChoices = List(
+        choice(canRally, Rally, "Rally Operation"),
+        choice(true, March, "March Operation"),
+        choice(canAttack, Attack, "Attack Operation"),
+        choice(canTerror, Terror, "Terror Operation"),
+        choice(canInfiltrate, Infiltrate, "Infiltrate Activity"),
+        choice(canBombard, Bombard, "Bombard Activity"),
+        choice(canAmbush, Ambush, "Ambush Activity"),
+        choice(true, "cancel", "None"),
+      ).flatten
       askMenu(opChoices, s"\nChoose Operation/Activity to perform in $name").head match {
         case Rally      => Human.executeRally(NVA, params)
         case March      => Human.executeMarch(NVA, params)
@@ -167,17 +189,13 @@ object Card_056 extends EventCard(56, "Vo Nguyen Giap",
       }
     }
 
-    val destinations = selectDestinations(1, Set.empty)
-    if (destinations.nonEmpty) {
       val marchParams = Params(
         event     = true,
         free      = true,
-        onlyIn    = Some(destinations),
-        maxSpaces = Some(1)
+        maxSpaces = Some(3)
       )
 
-      Human.executeMarch(NVA, marchParams)
+      val destinations = Human.executeMarch(NVA, marchParams)
       nextAction(destinations.toList.sorted(SpaceNameOrdering))
-    }
   }
 }

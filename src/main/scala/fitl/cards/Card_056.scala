@@ -98,27 +98,6 @@ object Card_056 extends EventCard(56, "Vo Nguyen Giap",
 
   def executeShaded(faction: Faction): Unit = {
 
-    def selectDestinations(count: Int, selected: Set[String]): Set[String] = {
-      if (count <= 3) {
-        val choices = List(
-          "select"   -> s"Select ${ordinal(count)} march destination",
-          "finished" -> "Finished selecting march destinations"
-        )
-        println("\nSpaces selected")
-        println(separator())
-        wrap("", selected.toList) foreach println
-        askMenu(choices, "\nChoose one:").head match {
-          case "select" =>
-            val candidates = spaceNames(game.spaces) filterNot selected.contains
-            val name = askCandidate("Enter march destination: ", candidates)
-            selectDestinations(count + 1, selected + name)
-          case _ => selected
-        }
-      }
-      else
-        selected
-    }
-
     def doAction(name: String): Unit = {
       val params = Params(
         event     = true,

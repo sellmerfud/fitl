@@ -3703,14 +3703,18 @@ object Bot {
         sp.support > Neutral &&
         sp.sweepActivations(ARVN, params.cubeTreatment) > 0
 
+      val canArvnAssault = (sp: Space) =>
+        !prohibited(sp) &&
+        assaultEffective(ARVN, params.cubeTreatment, false, params.vulnerableTunnels)(sp)
+
       val canRemoveEnemies = (sp: Space) =>
         !prohibited(sp) &&
         hasUndergroundForces(sp) &&
         sp.pieces.has(InsurgentForces:::InsurgentNonTunnels)
 
       def removeBases(): Unit =  {
-        val arvnCandidates = game.nonLocSpaces filter canRemoveBaseWithARVN
-        val sfCandidates   = game.nonLocSpaces filter canRemoveBaseWithSpecialForces
+        val arvnCandidates = game.nonLocSpaces.filter(canRemoveBaseWithARVN)
+        val sfCandidates   = game.nonLocSpaces.filter(canRemoveBaseWithSpecialForces)
         if (canAdvise && (arvnCandidates.nonEmpty || sfCandidates.nonEmpty)) {
           // Favor ARVN over Special Forces to get the +6 Aid
           val candidates = if (arvnCandidates.nonEmpty) arvnCandidates else sfCandidates
@@ -3728,7 +3732,7 @@ object Bot {
       }
 
       def doArvnSweeps(): Unit = if (params.event || !game.inMonsoon) {
-        val candidates = game.nonLocSpaces filter canArvnSweep
+        val candidates = game.nonLocSpaces.filter(canArvnSweep)
         if (canAdvise && candidates.nonEmpty) {
           val sp = pickSpaceWithMostSweepActivations(ARVN, params.cubeTreatment)(candidates)
 
@@ -3744,7 +3748,7 @@ object Bot {
       }
 
       def removeEnemies(): Unit = {
-        val candidates = game.spaces filter canRemoveEnemies
+        val candidates = game.spaces.filter(canRemoveEnemies)
         if (canAdvise && candidates.nonEmpty) {
           val sp = pickSpaceRemoveReplace(candidates)
 
@@ -3758,7 +3762,7 @@ object Bot {
       }
 
       def doArvnAssaults(): Unit = {
-        val candidates = game.spaces filter assaultEffective(ARVN, params.cubeTreatment, false, params.vulnerableTunnels)
+        val candidates = game.spaces.filter(canArvnAssault)
         if (canAdvise && candidates.nonEmpty) {
           val sp = pickSpaceRemoveReplace(candidates)
 

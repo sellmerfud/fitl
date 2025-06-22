@@ -6226,11 +6226,12 @@ object Bot {
                                 game.availablePieces.has(NVATroops)   &&
                                 troopCandidates.nonEmpty
           if (canPlace) {
-            val sp        = pickSpacePlaceTroops(troopCandidates)
-            val numGs     = (sp.pieces.totalOf(NVAGuerrillas) - 2) max 0
-            val numTroops = (game.trail + sp.pieces.totalOf(NVABases) + numGs) min game.availablePieces.totalOf(NVATroops)
-            val toRemove  = selectFriendlyRemoval(sp.pieces.only(NVAGuerrillas), numGs)
-            val toPlace   = Pieces(nvaTroops = numTroops)
+            val sp          = pickSpacePlaceTroops(troopCandidates)
+            val numGs       = (sp.pieces.totalOf(NVAGuerrillas) - 2) max 0
+            val numTroops   = (game.trail + sp.pieces.totalOf(NVABases) + numGs) min game.availablePieces.totalOf(NVATroops)
+            val numActualGs = (numTroops - game.trail - sp.pieces.totalOf(NVABases)) max 0
+            val toRemove    = selectFriendlyRemoval(sp.pieces.only(NVAGuerrillas), numActualGs)
+            val toPlace     = Pieces(nvaTroops = numTroops)
             if (!params.event && infiltrateSpaces.isEmpty)
               logSAChoice(NVA, Infiltrate, notes)
 

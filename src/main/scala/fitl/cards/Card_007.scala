@@ -74,7 +74,6 @@ object Card_007 extends EventCard(7, "ADSID",
       val num = if (game.trail < 2) 2 - game.trail else 1
       improveTrail(num)
     }
-    if (game.trackResources(ARVN))
-      decreaseResources(ARVN, 9)
+    decreaseResources(ARVN, 9)
   }
 }

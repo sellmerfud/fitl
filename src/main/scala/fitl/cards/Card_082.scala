@@ -60,16 +60,20 @@ object Card_082 extends EventCard(82, "Domino Theory",
           VC   -> (Performed   -> Shaded))) {
 
 
+  def canChangeResOrAid =
+    game.trackResources(ARVN) &&
+    (game.arvnResources < EdgeTrackMax || game.usAid < EdgeTrackMax)
+
+  // Bot will only play if there are Oop pieces to move to available  
   def unshadedEffective(faction: Faction): Boolean = game.outOfPlay.has(USPieces)
 
   def executeUnshaded(faction: Faction): Unit = {
     val oop = game.outOfPlay
-    val canRes = game.trackResources(ARVN) && (game.arvnResources < EdgeTrackMax || game.usAid < EdgeTrackMax)
     if (game.isHuman(faction)) {
       val choices = List(
         choice(oop.has(USPieces),   "us-pieces",   "Move up to 3 Out Of Play US Pieces to Available"),
         choice(oop.has(ARVNPieces), "arvn-pieces", "Move up to 6 Out Of Play ARVN Pieces to Available"),
-        choice(canRes,              "arvn-res",    "Add +9 ARVN resources and +9 US Aid")
+        choice(canChangeResOrAid,   "arvn-res",    "Add +9 ARVN resources and +9 US Aid")
       ).flatten
       val piecesPrompt = "\nMoving Out of Play pieces to Available"
       if (choices.isEmpty)
@@ -103,21 +107,14 @@ object Card_082 extends EventCard(82, "Domino Theory",
   }
 
   def shadedEffective(faction: Faction): Boolean =
-    game.outOfPlay.has(USTroops) ||
+    game.availablePieces.has(USTroops) ||
     (game.trackResources(ARVN) && game.usAid > 0)
 
   def executeShaded(faction: Faction): Unit = {
-    val oopTroops = game.outOfPlay.only(USTroops)
-    val pieces = if (oopTroops.isEmpty)
-      Pieces()
-    else if (game.isHuman(faction))
-      askPieces(oopTroops, 3)
-    else
-      Bot.selectEnemyRemoveReplaceActivate(oopTroops, 3)
-
+    val toOutOfPlay = Pieces(usTroops = game.availablePieces.totalOf(USTroops) min 3)
     println()
     loggingPointsChanges {
-      moveAvailableToOutOfPlay(pieces)
+      moveAvailableToOutOfPlay(toOutOfPlay)
       decreaseUsAid(9)      
     }
   }

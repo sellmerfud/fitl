@@ -62,7 +62,7 @@ object Card_094 extends EventCard(94, "Tunnel Rats",
 
   val provinceWithNVANonTunnel = (sp: Space) =>
     sp.isProvince &&
-    sp.pieces.has(NVABases)
+    sp.pieces.has(NVABase)
 
   val provinceWithNonTunnel = (sp: Space) =>
     sp.isProvince &&

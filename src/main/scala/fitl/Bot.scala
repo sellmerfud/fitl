@@ -3400,7 +3400,7 @@ object Bot {
         // Select a LoC Patrol destination candidate
         // ARVN Patrol never needs an activation roll
         val saigonCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
-          if (!game.getSpace(Saigon).coinControlled) Some(Saigon) else None
+          if (!game.getSpace(Saigon).coinControlled && !prohibited.contains(Saigon)) Some(Saigon) else None
         }
 
         val locPatrolCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {

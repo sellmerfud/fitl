@@ -120,9 +120,16 @@ object Human {
   
   // Used by events that allow a faction to choose a special activity.
   def chooseSpecialActivity(faction: Faction, only: Set[SpecialActivity] = AllSpecials): SpecialActivity = {
-    val available = FactionSpecials(faction) filter only
+    val (allowedActivities, notes) = allowedSpecialActivities(FactionSpecials(faction).filter(only))
 
-    askSimpleMenu(available, "\nChoose a Special Activity:").head
+    if (notes.nonEmpty) {
+      println("\nNotes:")
+      println(separator())
+      for (note <- notes)
+        log(note, Color.Event)
+    }
+
+    askSimpleMenu(allowedActivities, "\nChoose a Special Activity:").head
   }
 
   // Called by events to execute a Special Activity
@@ -136,10 +143,69 @@ object Human {
       case Raid       => doRaid(params)
       case Infiltrate => doInfiltrate(params)
       case Bombard    => doBombard(params)
-      case Ambush     => doAmbush(faction, params)
+      case Ambush     => doEventAmbush(faction, params)
       case Tax        => doTax(params)
       case Subvert    => doSubvert(params)
     }
+  }
+
+  // This is used when an ambush must be performed by an event
+  // and there is no associated attack.
+  def doEventAmbush(faction: Faction, params: Params): Unit = {
+    val maxAmbush = params.ambush.maxAmbush
+      .getOrElse {
+        if (momentumInPlay(Mo_TyphoonKate)) {
+          displayLine("\nAmbush may only affect 1 space [Momentum: $Mo_TyphoonKate]", Color.Event)
+          1 
+        }
+        else
+          2
+      }
+
+    val GTypes = ambushGuerrillaTypes(faction, params.ambush.needUnderground)
+    def ambushCandidates = if (Special.selectedSpaces.size < maxAmbush) {
+      game.spaces
+        .filter { sp =>
+          !Special.selectedSpaces.contains(sp.name) &&   // Can't ambush same space twice
+          sp.pieces.has(GTypes) &&                       // Must have proper faction guerrilla to ambush
+          ambushTargets(sp.name).nonEmpty                // Must have a COIN target to kill
+        }
+        .map(_.name)
+        .sorted(SpaceNameOrdering)
+    }
+    else
+      Nil
+
+
+    def nextAmbush(): Unit = {
+      val candidates = ambushCandidates
+      val ambushed = Special.selectedSpaces.size
+      val canSelect  = ambushed < maxAmbush && candidates.nonEmpty
+      val choices    = List(
+        choice(canSelect, "select",   "Select a space to Ambush"),
+        choice(true,      "finished", "Finished with Ambush special activity")
+      ).flatten
+
+      println(s"\n${amountOf(ambushed, "space")} of $maxAmbush selected for Ambush")
+      println(separator())
+      wrap("", Special.selectedSpaces.toList, showNone = false) foreach println
+
+      askMenu(choices, "\nAmbush:").head match {
+        case "select" =>
+          askCandidateOrBlank("\nAmbush in which space: ", candidates)
+            .foreach { name =>
+              performAmbush(name, faction, Some(March), free = true, needUnderground = params.ambush.needUnderground)
+            }
+        nextAmbush()
+
+        case _ =>
+      }
+    }  
+    
+    if (ambushCandidates.isEmpty)
+      displayLine(s"\nThere are no spaces where $faction can successfully ambush", Color.Event)
+    else
+      nextAmbush()
   }
 
   // This function is called by events that require the
@@ -789,7 +855,7 @@ object Human {
   // Carry out an ambush in the given space
   // MainForceBns_Shaded   - 1 VC Ambush space may remove 2 enemy pieces
   // PT76_Unshaded - Each NVA attack space, first remove 1 NVA troop cube (also ambush)
-  def performAmbush(name: String, faction: Faction, op: Operation, free: Boolean, needUnderground: Boolean = true): Boolean = {
+  def performAmbush(name: String, faction: Faction, op: Option[Operation], free: Boolean, needUnderground: Boolean = true): Boolean = {
     val sp = game.getSpace(name)
     val ambushTypes = ambushGuerrillaTypes(faction, needUnderground)
     val candidates = ambushTargets(name)
@@ -823,7 +889,7 @@ object Human {
           if (!free)
             decreaseResources(faction, 1)
           loggingControlChanges {
-            if (faction == NVA && op == Attack && capabilityInPlay(PT76_Unshaded) && sp.pieces.has(NVATroops))
+            if (faction == NVA && op == Some(Attack) && capabilityInPlay(PT76_Unshaded) && sp.pieces.has(NVATroops))
               removeToAvailable(name, Pieces(nvaTroops = 1), Some(s"$PT76_Unshaded triggers:"))
 
             // Some events allow ambush without requiring an underground guerrilla
@@ -2188,11 +2254,7 @@ object Human {
   // val Mo_DaNang            = "#22 Da Nang"                  // Shaded (prohibits air strike)
   // val Mo_McNamaraLine      = "#38 McNamara Line"            // Single event (prohibits infiltrate, prohibits trail improvement by rally)  val Mo_BombingPause      = "#41 Bombing Pause"            // Single event (prohibits air strike)
   def executeSpecialActivity(faction: Faction, params: Params, activities: List[SpecialActivity]): Unit = {
-    val momentumRestrictions = prohibitedSpecialActivities(activities)
-    val prohibited           = momentumRestrictions.map(_._2).foldLeft(Set.empty[SpecialActivity]) { (set, list) => set ++ list }
-
-    val notes = for ((mo, a) <- momentumRestrictions)
-      yield s"Momentum: $mo prohibits ${andList(a)}"
+    val (allowedActivities, notes) = allowedSpecialActivities(activities)
 
     if (notes.nonEmpty) {
       println("\nNotes:")
@@ -2202,7 +2264,7 @@ object Human {
     }
 
     val choices: List[(Option[SpecialActivity], String)] =
-      (activities filterNot prohibited.apply map (a => Some(a) -> a.toString)) :+
+      (allowedActivities.map(a => Some(a) -> a.toString)) :+
       (None -> "Do not perform a Special Activity now")
 
     if (choices.size == 1) {
@@ -3532,7 +3594,7 @@ object Human {
 
 
         case AmbushOpt(name) =>
-          if (performAmbush(name, faction, March, free = true, params.ambush.needUnderground)) {
+          if (performAmbush(name, faction, Some(March), free = true, params.ambush.needUnderground)) {
             // An uderground member of the the movedInto group was just flipped
             // to active.  We must update the movedInto group to reflect that.
             val (underground, active) = if (faction == NVA)
@@ -3631,7 +3693,7 @@ object Human {
 
         case "ambush" =>
           askCandidateOrBlank("\nAmbush which space: ", ambushCandidates) foreach { name =>
-            performAmbush(name, faction, Attack, free = params.free, params.ambush.needUnderground)
+            performAmbush(name, faction, Some(Attack), free = params.free, params.ambush.needUnderground)
             attackSpaces = attackSpaces + name
           }
           nextAttackAction()

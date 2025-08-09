@@ -152,7 +152,7 @@ object Card_056 extends EventCard(56, "Vo Nguyen Giap",
         case Terror     => Human.executeTerror(NVA, params)
         case Infiltrate => Human.doInfiltrate(params)
         case Bombard    => Human.doBombard(bombardParams)
-        case Ambush     => Human.performAmbush(name, NVA, March, free = true)
+        case Ambush     => Human.performAmbush(name, NVA, Some(March), free = true)
         case _          => // cancel
       }
     }

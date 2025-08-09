@@ -1917,7 +1917,7 @@ object FireInTheLake {
   // Mo_DaNang          - prohibits air strike
   // Mo_BombingPause    - prohibits air strike
 
-  def prohibitedSpecialActivities(activities: List[SpecialActivity]): List[(String, List[SpecialActivity])] = {
+  def allowedSpecialActivities(activities: List[SpecialActivity]): (List[SpecialActivity], Seq[String]) = {
     val events: List[(String, Set[SpecialActivity])] = List(
       Mo_TyphoonKate     -> Set(AirLift, Transport, Bombard),
       Mo_Claymores       -> Set(Ambush),
@@ -1932,7 +1932,16 @@ object FireInTheLake {
     for (a <- activities; (mo, prohibits) <- events if momentumInPlay(mo) && prohibits(a))
       result += mo -> (a::result(mo))
 
-    result.toList
+    val restrictions = result.toList
+    val prohibited   = restrictions
+      .map(_._2)
+      .foldLeft(Set.empty[SpecialActivity]) { (set, list) => set ++ list }
+
+
+    val notes = for ((mo, a) <- restrictions)
+      yield s"Momentum: $mo prohibits ${andList(a)}"
+
+    (activities.diff(prohibited.toList), notes)
   }
 
     case class SequenceOfPlay(

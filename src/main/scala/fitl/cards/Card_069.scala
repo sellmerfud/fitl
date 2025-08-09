@@ -77,6 +77,8 @@ object Card_069 extends EventCard(69, "MACV",
 
     val params = Params(event = true, free = true)
     for (actor <- actors) {
+      log(s"\n$actor performs a speical activity")
+      log(separator())
       if (game.isHuman(actor)) {
         val activity = Human.chooseSpecialActivity(actor)
         Human.initTurnVariables(false)

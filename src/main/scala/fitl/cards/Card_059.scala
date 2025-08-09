@@ -119,17 +119,6 @@ object Card_059 extends EventCard(59, "Plei Mei",
     }
   }
 
-  private def doAmbush(): Unit = {
-    val candidates = spaceNames(game.spaces filter isAmbushSpace)
-    if (candidates.isEmpty)
-      log("\nThere are no spaces where NVA can successfully ambush")
-    else {
-      val name = askCandidate("\nAmbush using which space: ", candidates)
-      Human.performAmbush(name, NVA, March, free = true)
-    }
-  }
-
-
   def executeShaded(faction: Faction): Unit = {
     val params = Params(
       event = true,
@@ -144,8 +133,13 @@ object Card_059 extends EventCard(59, "Plei Mei",
     log("NVA free marches from outside South Vietnam")
     Human.executeMarch(NVA, params)
     askMenu(choices, "\nChoose one:").head match {
-      case "attack" => doAttack()
-      case _        => doAmbush()
+      case "attack" =>
+        doAttack()
+      case _ =>
+        val params = Params(
+          ambush = AmbushParams(maxAmbush = Some(1))
+        )
+        Human.doEventAmbush(NVA, params)
     }
   }
 }

@@ -136,7 +136,7 @@ object Card_099 extends EventCard(99, "Masher/White Wing",
       Human.initTurnVariables(specialActivity = false)
       val dests = Human.executeMarch(actor, params)
       for (name <- dests; if canAmbush(name))
-        Human.performAmbush(name, actor, March, free = true, needUnderground = false)
+        Human.performAmbush(name, actor, Some(March), free = true, needUnderground = false)
     }
     else {
       Bot.initTurnVariables()

@@ -3475,7 +3475,7 @@ object Human {
     def moveToDestination(destName: String): Unit = {
       val srcCandidates = getMarchSources(destName)
       if (srcCandidates.isEmpty)
-        println(s"\nThere are no pieces that can reach $destName")
+        println(s"\nThere are more no pieces that can reach $destName")
       else {
         val choices = (srcCandidates map (name => name -> name)) :+ ("none" -> s"Finished moving pieces to $destName")
 
@@ -3486,7 +3486,7 @@ object Human {
           val canContinue = !params.limOpOnly && faction == NVA && game.trail > TrailMin && isInLaosCambodia(destName)
           val trailMove   = faction == NVA && game.trail == TrailMax && (isInLaosCambodia(srcName) || isInLaosCambodia(destName))
           val free        = params.free || dest.isLoC || trailMove || movedInto(destName).nonEmpty
-          val moveable    = src.pieces.only(moveableTypes)
+          val moveable    = moveablePieces(srcName).only(moveableTypes)
           val notYetMoved = moveable - movedInto(srcName)
           val numCoin     = dest.pieces.totalOf(CoinForces)
 
@@ -3512,7 +3512,10 @@ object Human {
             movePieces(movers, srcName, destName)
 
             val tolearance = if (mainForceBns) 1 else 3
-            val activate   = (dest.isLoC || dest.support > Neutral) && (numCoin + movers.total) > tolearance
+            val activate =
+              (dest.isLoC || dest.support > Neutral) &&
+              (numCoin + movers.total) > tolearance &&
+              movers.has(UndergroundGuerrillas)
             if (activate) {
               val activeType = if (faction == NVA) NVAGuerrillas_A else VCGuerrillas_A
               val hidden     = movers.only(UndergroundGuerrillas)

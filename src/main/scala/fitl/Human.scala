@@ -3475,7 +3475,7 @@ object Human {
     def moveToDestination(destName: String): Unit = {
       val srcCandidates = getMarchSources(destName)
       if (srcCandidates.isEmpty)
-        println(s"\nThere are more no pieces that can reach $destName")
+        println(s"\nThere are no more pieces that can reach $destName")
       else {
         val choices = (srcCandidates map (name => name -> name)) :+ ("none" -> s"Finished moving pieces to $destName")
 

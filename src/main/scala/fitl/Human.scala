@@ -894,7 +894,7 @@ object Human {
 
             // Some events allow ambush without requiring an underground guerrilla
             val underground = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
-            if (target.pieces.has(underground))
+            if (sp.pieces.has(underground))
               revealPieces(name, Pieces().set(1, underground))
             removePieces(targetName, deadPieces)
           }

@@ -640,7 +640,7 @@ object Bot {
           val underground = if (faction == NVA) NVAGuerrillas_U else VCGuerrillas_U
           // Some events do not require an underground guerrilla
           if (sp.pieces.has(underground))
-          revealPieces(sp.name, Pieces().set(1, underground))
+            revealPieces(sp.name, Pieces().set(1, underground))
           removePieces(target.name, deadPieces)
           pause()
           ambushSpaces = ambushSpaces + sp.name

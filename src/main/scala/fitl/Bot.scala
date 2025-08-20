@@ -315,7 +315,10 @@ object Bot {
   )
 
         // All routes from Can Tho to Hue blocked
-  def allLocRoutesCanTho_HueBlocked: Boolean = !getPatrolDestinations(CanTho).contains(Hue)
+  def allLocRoutesCanTho_HueBlocked: Boolean = {
+    val result = !getPatrolDestinations(CanTho).contains(Hue)
+    logCheck(result, "All routes from Can Tho to Hue blocked?")
+  }
 
 
   def sweepEffective(name: String, faction: Faction, cubeTreatment: CubeTreatment): Boolean = {

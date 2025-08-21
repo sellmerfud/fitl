@@ -7979,7 +7979,7 @@ object Bot {
         ARVN_Bot.transportActivity(params) ||
         ARVN_Bot.governActivity(params)
 
-      if (game.nvaPoints < 14)
+      if (!logCheck(game.nvaPoints >= 14, "NVA Control + NVA Bases >= 14?"))
         TrungDraw
       else if (!ARVN_Bot.threeD6_LE_AvailARVN)
         flipCard(params)
@@ -8423,7 +8423,7 @@ object Bot {
           TrungNoOp
       }
       else {
-        if (undergroundIn2PlusSpacesWithSupport) {
+        if (logCheck(undergroundIn2PlusSpacesWithSupport, "Underground NVA Guerrillas in 2 or more spaces with Support?")) {
           NVA_Bot.terrorOp(params, actNum) match {
             case Some(_) =>
               val didSpecial = params.addSpecialActivity && doSpecialActivity(false)

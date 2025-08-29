@@ -3990,10 +3990,6 @@ object FireInTheLake {
   //  it will not play its pivotal event if the current
   //  event is critical for that Bot.
   def getPivotalFaction: Option[Faction] = {
-    def currentEventIsCritical(faction: Faction) =
-      game.isActingFaction(faction) &&
-      getCurrentCard.isCritical(faction)
-
     def askHumanPivot(eligible: List[Faction], pivotBot: Option[Faction]): Option[Faction] = {
       
       // Find all eligible human factions
@@ -4069,7 +4065,7 @@ object FireInTheLake {
     // Find the first Bot that will play their card.
     val pivotBot = eligible find { faction =>
       game.isBot(faction)              &&
-      !currentEventIsCritical(faction) &&
+      !getCurrentCard.isCritical(faction) &&
       botPivotalRoll(faction)
     }
 

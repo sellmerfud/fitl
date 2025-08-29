@@ -368,7 +368,7 @@ object FireInTheLake {
     // Provinces
     CentralLaos                 -> Set(NorthVietnam, QuangTri_ThuaThien, QuangNam, SouthernLaos,
                                        LOC_Hue_KheSanh),
-    SouthernLaos                -> Set(CentralLaos, QuangNam, QuangTin_QuangNgai, BinhDinh, Pleiku_Darlac,
+    SouthernLaos                -> Set(CentralLaos, QuangNam, QuangTin_QuangNgai, BinhDinh, Pleiku_Darlac, NortheastCambodia,
                                        LOC_DaNang_DakTo, LOC_Kontum_DakTo),
     NortheastCambodia           -> Set(SouthernLaos, TheFishhook, Pleiku_Darlac),
     TheFishhook                 -> Set(NortheastCambodia, TheParrotsBeak, AnLoc, Pleiku_Darlac,

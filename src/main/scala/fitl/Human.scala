@@ -3567,9 +3567,10 @@ object Human {
         params.spaceAllowed(sp.name) && !destinations.contains(sp.name)
       })
       val canSelect  = candidates.nonEmpty && destinations.size < maxDestinations
-      val moveCandidates = destinations.toList.sorted(SpaceNameOrdering) filter { destName =>
-        (getAdjacent(destName) exists (moveablePieces(_).total > 0))
-      }
+      val moveCandidates = destinations
+        .toList
+        .sorted(SpaceNameOrdering)
+        .filter { destName => getMarchSources(destName).nonEmpty }
       val topChoices = List(
         choice(canSelect,  "select",  s"Add a march destination space"),
         choice(canSpecial, "special",  "Perform a Special Activity")
@@ -3584,7 +3585,7 @@ object Human {
 
       askMenu(topChoices:::ambushChoices:::moveChoices:::lastChoice, s"\n$faction March:").head match {
         case "select" =>
-          askCandidateOrBlank("\nAdd which space as a march destination: ", candidates) foreach { name =>
+          askCandidateOrBlank("\nAdd which space as a March destination: ", candidates) foreach { name =>
             destinations = destinations + name
             log(s"\n$faction selects $name as a March destination")
           }

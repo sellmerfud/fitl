@@ -5,7 +5,7 @@ The Tru'ng Bots were designed by Bruce Mansfield.
 
 ## Downloading the executable package
 
-You can use this link to download the latest release: [Version 1.28][1]
+You can use this link to download the latest release: [Version 1.29][1]
 
 This will download a zip file called `fitl-x.x.zip` (where *x.x* is the version number).
 Extracting the zip file will create a folder called `fitl-x.x`.
@@ -14,7 +14,7 @@ If you are upgrading to a newer version you can continue any games that you star
 the previous version.  To do so, simply copy the *games* folder below the older *fitl-x.x* directory to the 
 new *fitl-x.x* directory.
 
-[1]: https://github.com/sellmerfud/fitl/releases/download/v1.28/fitl-1.28.zip
+[1]: https://github.com/sellmerfud/fitl/releases/download/v1.29/fitl-1.29.zip
 
 ## Running the program
 

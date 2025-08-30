@@ -1278,7 +1278,7 @@ object Bot {
 
     // Calculate the max number of the factions pieces we could remove
     // without changing control
-  def maxRemovalWithoutChangingControl(sp: Space, faction: Faction): Int = {
+  def maxRemovalWithoutChangingControl(sp: Space, faction: Faction, totalMovers: Int): Int = {
     import math.abs
     val totalCoin      = sp.pieces.totalOf(CoinPieces)
     val totalUS        = sp.pieces.totalOf(USPieces)
@@ -1291,18 +1291,18 @@ object Bot {
     // Calculate the max number of the factions pieces we could remove
     // without changing control
     (faction, sp.control) match {
-      case (US,   CoinControl)  => (totalCoin - totalInsurgent - 1) min totalUS
-      case (US,   NvaControl)   => totalUS
-      case (US,   Uncontrolled) => (totalCoin - ((totalNVA - totalVC) max 0)) min totalUS
-      case (ARVN, CoinControl)  => (totalCoin - totalInsurgent - 1) min totalARVN
-      case (ARVN, NvaControl)   => totalARVN
-      case (ARVN, Uncontrolled) => (totalCoin - ((totalNVA - totalVC) max 0)) min totalARVN
-      case (NVA,  CoinControl)  => totalNVA
-      case (NVA,  NvaControl)   => (totalNVA - totalNonNVA - 1) max 0
+      case (US,   CoinControl)  => (totalCoin - totalInsurgent - 1) min totalMovers
+      case (US,   NvaControl)   => totalMovers
+      case (US,   Uncontrolled) => (totalCoin - ((totalNVA - totalVC) max 0)) min totalMovers
+      case (ARVN, CoinControl)  => (totalCoin - totalInsurgent - 1) min totalMovers
+      case (ARVN, NvaControl)   => totalMovers
+      case (ARVN, Uncontrolled) => (totalCoin - ((totalNVA - totalVC) max 0)) min totalMovers
+      case (NVA,  CoinControl)  => totalMovers
+      case (NVA,  NvaControl)   => ((totalNVA - totalNonNVA - 1) max 0) min totalMovers
       case (NVA,  Uncontrolled) => totalNVA - ((totalCoin - totalVC) max 0)
-      case (VC,   CoinControl)  => totalVC
-      case (VC,   NvaControl)   => totalVC
-      case (VC,   Uncontrolled) => (totalVC - abs(totalCoin - totalNVA)) max 0
+      case (VC,   CoinControl)  => totalMovers
+      case (VC,   NvaControl)   => totalMovers
+      case (VC,   Uncontrolled) => ((totalVC - abs(totalCoin - totalNVA)) max 0) min totalMovers
     }
   }
 
@@ -1423,6 +1423,7 @@ object Bot {
     moveTypes: Set[PieceType],
     maxPieces: Int, // Transport limits to 6 pieces per destination
     origCandidates: Pieces,  // The original set of pieces that may be kept/moved
+    cubeTreatment: CubeTreatment,
     selected: Pieces = Pieces()) {  // Kept pieces or moving pieces
 
     val candidates = origCandidates - selected
@@ -1446,7 +1447,7 @@ object Bot {
   def logMoved(params: MoveParams, heading: String, result: String): Unit = if (game.botDebug) {
     import params._
 
-    val nowAtDest = dest.pieces.only(factionPieces(faction)) + selected
+    val nowAtDest = dest.pieces + selected
     log()
     log(heading)
     log(separator())
@@ -1476,7 +1477,7 @@ object Bot {
     else {
       val numFaction = origin.pieces.only(factionPieces(faction)).total
       val numOthers  = origin.pieces.only(factionPieces(faction)).except(moveTypes).total
-      val maxMovers  = candidates.total min maxRemovalWithoutChangingControl(origin, faction)
+      val maxMovers  = maxRemovalWithoutChangingControl(origin, faction, candidates.total)
       val maxKeep    = numFaction - maxMovers
       val numKeep    = (maxKeep - numOthers) max 0
       val toKeep     = selectFriendlyToKeepInPlace(candidates, numKeep)
@@ -1552,31 +1553,26 @@ object Bot {
     import params._
     val desc = "Keep 3 COIN cubes in space with a COIN base"
     if (origin.pieces.has(CoinBases)) {
-      val (factionCubes, otherCubes) = if (faction == US)
-        (List(USTroops), ARVNCubes)
-      else
-        (ARVNCubes, List(USTroops))
-      val numOtherCoin = origin.pieces.totalOf(otherCubes)
-      val numNonMovers = (origin.pieces - candidates).totalOf(factionCubes)
+      val moveableCubeTypes = sweepCubeTypes(US, SweepMove, cubeTreatment)
+      val otherCubeTypes = Set[PieceType](USTroops, ARVNTroops, ARVNPolice) diff moveableCubeTypes
+      val moveableCandidates = candidates.only(moveableCubeTypes)
+      val numCandidates = moveableCandidates.total
+      val numOtherCoin = origin.pieces.totalOf(otherCubeTypes)
+      val numNonMovers = (origin.pieces.totalOf(moveableCubeTypes) - numCandidates) max 0
       val numCubesNow  = numOtherCoin + numNonMovers
-      val totalCubes   = numCubesNow + candidates.totalOf(factionCubes)
+      val totalCubes   = numCubesNow + numCandidates
 
-      // If the condition cannot be met then it is ignored
-      if (totalCubes < 3) {
-        logKept(params, desc, "ignore [Not enough COIN cubes to satisfy the instruction]")
-        params
-      }
-      else if (numCubesNow >= 3) {
-        logKept(params, desc, "ignore [Already at least 3 COIN cubes in the space]")
-        params
-      }
-      else {
-        val numKeep   = 3 - numCubesNow
-        val toKeep    = selectFriendlyToKeepInPlace(candidates.only(factionCubes), numKeep)
+      if (numCubesNow < 3) {
+        val numKeep   = (3 - numCubesNow) min numCandidates
+        val toKeep    = selectFriendlyToKeepInPlace(moveableCandidates, numKeep)
         val newParams = params.addPieces(toKeep)
 
         logKept(newParams, desc, s"keep [${andList(toKeep.descriptions)}]")
         newParams
+      }
+      else {
+        logKept(params, desc, "ignore [Already at least 3 COIN cubes in the space]")
+        params
       }
     }
     else {
@@ -1967,11 +1963,16 @@ object Bot {
   // Used by US, ARVN, VC in (City/Province)
   val MP_Get1PieceToDestination = (params: MoveParams) => {
     import params._
+
     val desc = "Get 1 acting faction piece to destination"
     val nowAtDest = dest.pieces + selected
 
     if (nowAtDest.has(factionPieces(faction))) {
       logMoved(params, desc, s"ignore [Already a $faction piece in destination]")
+      params
+    }
+    else if (!candidates.has(factionPieces(faction))) {
+      logMoved(params, desc, s"ignore [No $faction pieces in source space]")
       params
     }
     else {
@@ -2020,7 +2021,6 @@ object Bot {
       val toMove = selectFriendlyToPlaceOrMove(candidates, num)
       // If our firepower is sufficent then we are done
       val nowAtDest    = dest.pieces + selected + toMove
-
       if (coinFirepower(NormalTroops)(dest.setPieces(nowAtDest)) >= numVulnerable || num == maxCanMove)
         toMove
       else  // Try again moving one more
@@ -2253,7 +2253,7 @@ object Bot {
     val origin     = game.getSpace(originName)
     val dest       = game.getSpace(destName)
     val candidates = origin.pieces.only(moveTypes)
-    val params     = MoveParams(origin, dest, faction, action, moveTypes, NO_LIMIT, candidates)
+    val params     = MoveParams(origin, dest, faction, action, moveTypes, NO_LIMIT, candidates, opParams.cubeTreatment)
 
     logKept(params, s"$faction is selecting pieces to keep in $originName", "")
     nextKeepPriority(keepPriorities, params)
@@ -2318,7 +2318,7 @@ object Bot {
     if (moveablePieces.isEmpty)
       moveablePieces  // No pieces were found that can move
     else {
-      val params = MoveParams(origin, dest, faction, action, moveTypes, maxPieces, moveablePieces)
+      val params = MoveParams(origin, dest, faction, action, moveTypes, maxPieces, moveablePieces, opParams.cubeTreatment)
 
       logMoved(params, s"$faction is selecting pieces to move from $originName to $destName", "")
       nextMovePriority(movePriorities, params)
@@ -3469,7 +3469,6 @@ object Bot {
     //  Sweep not allowed in Monsoon.
     def sweepOp(params: Params): Option[CoinOp] = {
       val moveTypes = sweepCubeTypes(US, SweepMove, params.cubeTreatment)
-
       if (!params.event && game.inMonsoon)
         None
       else {

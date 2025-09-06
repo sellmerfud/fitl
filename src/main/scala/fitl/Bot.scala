@@ -2402,6 +2402,9 @@ object Bot {
     params: Params,
     previousOrigins: Set[String]): Option[String] = {
     
+    if (action == Transport && isRVNLeader(RVN_Leader_NguyenKhanh))
+      botDebug(s"Transport uses max 1 LOC space [Leader $RVN_Leader_NguyenKhanh]")
+
     val candidateNames: Set[String] = action match {
       case EventMove(Some(origins)) => origins - destName
       case EventMove(None)          => spaceNames(game.spaces filterNot (_.name == destName)).toSet // Any space

@@ -1692,7 +1692,7 @@ object Human {
     val srcCandidates    = spaceNames(game.spaces filter (_.pieces.has(pieceTypes)))
 
     val notes = List(
-      noteIf(nguyen_khanh,     s"Transport used max 1 LOC space [Leader $RVN_Leader_NguyenKhanh]"),
+      noteIf(nguyen_khanh,     s"Transport uses max 1 LOC space [Leader $RVN_Leader_NguyenKhanh]"),
       noteIf(armored_unshaded, s"In one Transport destination may Free Assault (after Ops) [$ArmoredCavalry_Unshaded]"),
       noteIf(armored_shaded,   s"Transport Rangers only (NO Troops) [$ArmoredCavalry_Shaded]")
     ).flatten

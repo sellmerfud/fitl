@@ -1227,6 +1227,7 @@ object Bot {
   //   Effectivlely skipping that priority filter.
   def narrowCandidates[T](candidates: List[T], priorities: List[PriorityFilter[T]]): List[T] = {
     @tailrec def nextPriority(candidates: List[T], priorities: List[PriorityFilter[T]]): List[T] = {
+      botDebug(s"Candidates: [${andList(candidates)}]")
       (candidates, priorities) match {
         case (Nil, _) => Nil  // Only happens if the initial list of canidates was empty.
         case (sp :: Nil, _) =>
@@ -2426,6 +2427,7 @@ object Bot {
     )
 
     botDebug(s"\nSelect origin space with moveable: [${andList(moveTypes.toList)}]")
+    botDebug(s"Candidates: [${andList(candidates)}]")
     botDebug(separator(char = '#'))
     if (candidates.nonEmpty) {
       Some(bestCandidate(candidates, priorities).name)

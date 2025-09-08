@@ -97,22 +97,23 @@ object Card_044 extends EventCard(44, "la Drang",
     }
     else {  // Bot
       val sp = US_Bot.pickSpaceRemoveReplace(candidates)
+      val name = sp.name
       val params = Params(event = true, free = true, airlift = AirLiftParams(onlyTo = Set(name)))
 
       loggingControlChanges {
-        log(s"US performs free Air Lift into ${sp.name}")
+        log(s"US performs free Air Lift into $name")
         log(separator(char = '='))
         US_Bot.airLiftActivity(params)
-        log(s"\nUS performs free Sweep into ${sp.name}")
+        log(s"\nUS performs free Sweep into $name")
         log(separator(char = '='))
         US_Bot.sweepOp(params.copy(onlyIn = Some(Set(name))))
-        log(s"\nUS performs free Assault in ${sp.name}")
+        log(s"\nUS performs free Assault in $name")
         log(separator(char = '='))
-        Bot.performAssault(faction, sp.name, params)
+        Bot.performAssault(faction, name, params)
 
-        if (assaultEffective(ARVN, NormalTroops, baseFirstOK = false, vulnerableTunnels = false)(game.getSpace(sp.name))) {
+        if (assaultEffective(ARVN, NormalTroops, baseFirstOK = false, vulnerableTunnels = false)(game.getSpace(name))) {
           log(s"\nUS adds a free follow up ARVN assault in $name")
-          Bot.performAssault(ARVN, sp.name, params)
+          Bot.performAssault(ARVN, name, params)
         }
       }
     }

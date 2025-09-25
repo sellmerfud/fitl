@@ -71,7 +71,8 @@ object Card_055 extends EventCard(55, "Trucks",
 
   def executeUnshaded(faction: Faction): Unit = {
     degradeTrail(2)
-    removePiecesFromMap(NVA, 4, NVAPieces, friendly = true, validSpaces = LaosCambodia)
+    removePiecesFromMap(NVA, 4, NVAPieces, friendly = true, validSpaces = Laos)
+    removePiecesFromMap(NVA, 4, NVAPieces, friendly = true, validSpaces = Cambodia)
   }
 
   def shadedEffective(faction: Faction): Boolean = false // Not executed by Bots

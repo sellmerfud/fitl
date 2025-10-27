@@ -84,7 +84,7 @@ object Card_043 extends EventCard(43, "Economic Aid",
       }
       else faction match {
         case US => if (numUS   > 0) USBase else ARVNBase
-        case _  => if (numARVN > 0) USBase else ARVNBase
+        case _  => if (numARVN > 0) ARVNBase else USBase
       }
       
       val bases = baseType match {

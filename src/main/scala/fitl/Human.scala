@@ -578,7 +578,11 @@ object Human {
       val candidates  = sortedBaseNames filter { name => (getPieces(name) - movedPieces(name)).has(USBase) }
       val choices     = if (game.availablePieces.has(USBase)) AVAILABLE +: candidates else candidates
       val origin      = askSimpleMenu(choices, "\nMove Base from which space:", allowAbort = false).head
-      val destChoices = (AVAILABLE::sortedBaseNames) filterNot (_ == origin)
+      val destChoices = (AVAILABLE::sortedBaseNames)
+        .filter { name =>
+          name != origin &&
+          (name == AVAILABLE || game.getSpace(name).totalBases < 2)
+        }
       val dest        = askSimpleMenu(destChoices, "\nMove the Base to which space:", allowAbort = false).head
       moveEm(Pieces(usBases = 1), origin, dest)
     }
@@ -606,7 +610,11 @@ object Human {
                            map    { case (name, _) => name})
       val choices     = avail.toList ::: candidates
       val origin      = askSimpleMenu(choices, "\nMove Base from which space:", allowAbort = false).head
-      val destChoices = (AVAILABLE::sortedNames) filterNot (_ == origin)
+      val destChoices = (AVAILABLE::sortedBaseNames)
+        .filter { name =>
+          name != origin &&
+          (name == AVAILABLE || game.getSpace(name).totalBases < 2)
+        }
       val dest        = askSimpleMenu(destChoices, "\nMove the Base to which space:", allowAbort = false).head
       val pieces      = Pieces(usBases = 1)
       movedPieces.remove(origin, pieces)

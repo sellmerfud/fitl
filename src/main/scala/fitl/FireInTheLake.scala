@@ -4723,6 +4723,7 @@ object FireInTheLake {
     val srcSpace = game.getSpace(source)
     val dstSpace = game.getSpace(dest)
     assert(srcSpace.pieces contains pieces, s"movePieces() $source does not contain all requested pieces: $pieces")
+    assert(pieces.totalBases + dstSpace.pieces.totalBases <= 2, s"Cannot have more than 2 bases in $dest")
 
     val updatedSrc = srcSpace.removePieces(pieces)
     val updatedDst = dstSpace.addPieces(pieces)

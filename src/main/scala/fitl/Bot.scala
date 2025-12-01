@@ -7274,7 +7274,10 @@ object Bot {
         case  TrungComplete(true)  => ER_OpPlusSpecial
         case  TrungComplete(false) => ER_OpOnly
 
-        case  TrungDraw | TrungNoOp =>
+        case  result @ (TrungDraw | TrungNoOp) =>
+          if (result == TrungNoOp)
+            log(s"\nThe operation for $trungCard would be ineffective.", Some(Color.Red))
+
           val nextCard = drawTrungCard(faction)
           if (nextCard == firstCard)
             ER_NoOp

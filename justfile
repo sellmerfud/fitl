@@ -9,7 +9,7 @@ default:
 
 # Package and release a new version
 @release *ARGS:
-  scripts/release.sh {{ARGS}}
+  python3 scripts/release.py {{ARGS}}
 
 
 

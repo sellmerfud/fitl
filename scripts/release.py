@@ -9,6 +9,7 @@
 
 import sys, subprocess, re, os
 import argparse
+from textwrap import dedent
 
 class AbortException(Exception):
   def __init__(self, msg):
@@ -53,9 +54,9 @@ def working_directory_dirty():
 def getYorN(prompt):
   while True:
     response = input(f"\n{prompt} (y/n) ").lower().strip()
-    if re.search(r'^y.*', response):
+    if response.startswith('y'):
        return True
-    elif re.search(r'^n.*', response):
+    elif response.startswith('n'):
        return False
     else:
        print("Invalid response")
@@ -99,7 +100,7 @@ def commit_release(version):
     ['git', 'tag', f'-mRelease {version_label}', version_label],
     ['git', 'push', '--tags', 'origin', 'master'],
     # Create the release and upload the zip file to the release assests
-    ['gh', 'release', 'create', '--generate-notes', '--title', f'Version {version}', version_label, local_zip_file_path]
+    ['gh', 'release', 'create', '--generate-notes', '--verify-tag', '--title', f'Version {version}', version_label, local_zip_file_path]
   ]
   system_commands(cmds, echo = True)
 
@@ -124,12 +125,12 @@ def update_readme(version):
 #                 next_major: Bump the major version number and set minor to zero
 #                 <major>.<minor>: where: major and minor are integers
 
-version_help =\
-'''next_minor      - Bump the minor version number
-next_major      - Bump the major version number and set minor to zero
-<major>.<minor> - where major and minor are integers
-If omitted it defaults to next_minor
-'''
+version_help = dedent=('''
+  next_minor      - Bump the minor version number
+  next_major      - Bump the major version number and set minor to zero
+  <major>.<minor> - where major and minor are integers
+  If omitted it defaults to next_minor
+''')
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('--commit', action=argparse.BooleanOptionalAction, default=True, help='Commit changes and push them to Github (Default=true)')
 parser.add_argument('version', metavar='VERSION', type=str,  nargs='?', default='next_minor', help=version_help)
@@ -137,8 +138,8 @@ parser.add_argument('version', metavar='VERSION', type=str,  nargs='?', default=
 # Main entry point of script
 # Program name and dropbox folder are used to
 # upload the zip file to dropbox
-repo_name='fitl'
-program_name='fitl'
+program_name = 'fitl'
+repo_name    = 'fitl'
 
 try:
   args = parser.parse_args()

@@ -168,35 +168,63 @@ object Card_087 extends EventCard(87, "Nguyen Chanh Thi",
         val maxReplace = game.piecesToPlace.totalOf(VCPieces) min 2
 
         def nextReplacement(count: Int): Unit = if (count <= maxReplace) {
-          def haveReplacement: Boolean = game.availablePieces.has(VCPieces) || {
-            println(s"\nReplacing ${ordinal(count)} ARVN piece:")
-            askYorN("\nThere are no VC pieces in the Available box, do you wish to continue? (y/n) ")
-          }
           val candidates = spaceNames(shadedSpaces filter shadedCandidate)
-          if (candidates.nonEmpty && haveReplacement) {
+          if (candidates.nonEmpty) {
+            println(s"\nReplacing ${ordinal(count)} ARVN piece:")
             val name        = askSimpleMenu(candidates, "\nReplace ARVN piece in which space:").head
             val sp          = game.getSpace(name)
             val arvnPiece   = askPieces(sp.pieces.only(ARVNPieces), 1)
             val desc        = arvnPiece.getTypes.head.singular
             val ignoreBases = sp.totalBases == 2 && !arvnPiece.has(ARVNBase)
-            val vcType     = if (ignoreBases)
-              VCGuerrillas_U
-            else
-              askPieceType(s"\nReplace $desc with what:", List(VCGuerrillas_U, VCBase))
-            if (!game.availablePieces.has(vcType))
-              voluntaryRemoval(1, vcType)
+            val vcGAvail    = game.availablePieces.has(VCGuerrillas_U)
+            val vcBAvail    = game.availablePieces.has(VCBase)
+            // If it is the VC then the player can voluntarily remove pieces from
+            // elsewhere on the map if none are available.
+            val vcType = (faction, ignoreBases) match {
+              case (VC, true) =>
+                if (!game.availablePieces.has(VCGuerrillas_U))
+                  voluntaryRemoval(1, VCGuerrillas_U)
+                Some(VCGuerrillas_U)
+
+              case (VC, false) =>
+                val pieceType = askPieceType(s"\nReplace $desc with what:", List(VCGuerrillas_U, VCBase))
+                if (!game.availablePieces.has(pieceType))
+                  voluntaryRemoval(1, pieceType)
+                Some(pieceType)
+              // Non-VC faction acting
+              case (_, true) =>
+                if (vcGAvail)
+                  Some(VCGuerrillas_U)
+                else
+                  None
+              case (_, false) =>
+                if (vcGAvail && vcBAvail)
+                  Some(askPieceType(s"\nReplace $desc with what:", List(VCGuerrillas_U, VCBase)))
+                else if (vcGAvail)
+                  Some(VCGuerrillas_U)
+                else if (vcBAvail)
+                  Some(VCBase)
+                else
+                  None
+            }
 
             log()
             removePieces(name, arvnPiece)
-            placePieces(name, Pieces().set(1, vcType))
+            vcType.foreach { pieceType =>
+              placePieces(name, Pieces().set(1, pieceType))
+            }
             nextReplacement(count + 1)
+          }
+          else {
+            log("\nThere are no more ARVN pieces that can be removed.", Color.Event)
+            pause()
           }
         }
 
         nextReplacement(1)
       }
       else {
-        def nextReplacement(numRemaining: Int, availVC: Pieces): Unit = if (numRemaining > 0  && availVC.nonEmpty) {
+        def nextReplacement(numRemaining: Int): Unit = if (numRemaining > 0) {
           val candidates = shadedSpaces filter shadedCandidate
           if (candidates.nonEmpty) {
             val sp = if (faction == ARVN)
@@ -209,24 +237,38 @@ object Card_087 extends EventCard(87, "Nguyen Chanh Thi",
             else
               Bot.selectEnemyRemoveReplaceActivate(arvnPieces, 1)
 
-            val vcPieces = if (sp.totalBases == 2 && !arvnPiece.has(ARVNBase))
-              availVC.except(VCBase)
+            val vcBaseAllowed = sp.totalBases < 2 || arvnPiece.has(ARVNBase) 
+            val vcPieces = if (vcBaseAllowed)
+              game.availablePieces.only(VCPieces)
             else
-              availVC
-
-            val vcPiece = if (faction == ARVN)
-              Bot.selectEnemyPlacement(availVC, 1)
-            else
-              Bot.selectFriendlyToPlaceOrMove(availVC, 1)
+              game.availablePieces.only(VCPieces).except(VCBase)
 
             log()
             removePieces(sp.name, arvnPiece)
-            placePieces(sp.name, vcPiece)
-            nextReplacement(numRemaining - 1, availVC - vcPiece)
+            if (vcPieces.nonEmpty) {
+              val vcPiece = if (faction == ARVN)
+                Bot.selectEnemyPlacement(vcPieces, 1)
+              else
+                Bot.selectFriendlyToPlaceOrMove(vcPieces, 1)
+  
+              placePieces(sp.name, vcPiece)
+            }
+            else {
+              val desc = if (vcBaseAllowed)
+                s"${VCGuerrillas_U.genericPlural} or ${VCBase.genericPlural}"
+              else
+                VCGuerrillas_U.genericPlural
+              
+              log(s"There are no $desc available to be placed.", Color.Event)
+            }
+
+            nextReplacement(numRemaining - 1)
           }
+          else
+            log("\nThere are no more ARVN pieces that can be removed.", Color.Event)
         }
 
-        nextReplacement(2, game.availablePieces.only(VCPieces))
+        nextReplacement(2)
       }
     }
 

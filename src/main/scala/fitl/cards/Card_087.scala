@@ -182,16 +182,40 @@ object Card_087 extends EventCard(87, "Nguyen Chanh Thi",
             // elsewhere on the map if none are available.
             val vcType = (faction, ignoreBases) match {
               case (VC, true) =>
-                if (!game.availablePieces.has(VCGuerrillas_U))
-                  voluntaryRemoval(1, VCGuerrillas_U)
-                Some(VCGuerrillas_U)
+                if (vcGAvail)
+                  Some(VCGuerrillas_U)
+                else {
+                  displayLine(s"\nThere are no available ${VCGuerrillas_U.genericPlural}.", Color.Event)
+                  if (askYorN("Do you wish to voluntarily remove one from the map? (y/n) ")) {
+                    voluntaryRemoval(1, VCGuerrillas_U)
+                    Some(VCGuerrillas_U)
+                  }
+                  else
+                    None
+                }
 
               case (VC, false) =>
-                val pieceType = askPieceType(s"\nReplace $desc with what:", List(VCGuerrillas_U, VCBase))
-                if (!game.availablePieces.has(pieceType))
-                  voluntaryRemoval(1, pieceType)
-                Some(pieceType)
-              // Non-VC faction acting
+                val availVCTypes = game.availablePieces.only(VCPieces).explode()
+                // If there are not available VC pieces then the player may opt to simply
+                // remove the ARVN piece
+                if (availVCTypes.isEmpty) {
+                  val choices = List(
+                    Some(VCGuerrillas_U) -> "Replace ARVN piece with VC Guerrilla voluntarily removed from the map.",
+                    Some(VCBase)         -> "Replace ARVN piece with VC Base voluntarily removed from the map.",
+                    None                 -> "Remove the ARVN piece without placing a VC piece."
+                  )
+                  val optPieceType = askMenu(choices, "\nThere are no available VC pieces:").head
+                  optPieceType.foreach { pieceType =>
+                      voluntaryRemoval(1, pieceType)
+                  }
+                  optPieceType
+                }
+                else if (availVCTypes.size == 1)
+                  Some(availVCTypes.head)
+                else
+                  Some(askPieceType(s"\nReplace $desc with what:", availVCTypes))
+
+              // Non-VC faction acting (voluntary removal not possible)
               case (_, true) =>
                 if (vcGAvail)
                   Some(VCGuerrillas_U)
@@ -210,8 +234,11 @@ object Card_087 extends EventCard(87, "Nguyen Chanh Thi",
 
             log()
             removePieces(name, arvnPiece)
-            vcType.foreach { pieceType =>
-              placePieces(name, Pieces().set(1, pieceType))
+            vcType match {
+              case Some(pieceType) =>
+                placePieces(name, Pieces().set(1, pieceType))
+              case None =>
+                log("No VC piece placed as a replacement.", Color.Event)
             }
             nextReplacement(count + 1)
           }

@@ -61,6 +61,9 @@ object Card_043 extends EventCard(43, "Economic Aid",
           VC   -> (Ignored -> Shaded))) {
 
 
+  def bumpAid() = increaseUsAid(12)
+  def bumpARVNRes() = increaseResources(ARVN, 6)
+
   def unshadedEffective(faction: Faction): Boolean =
     game.outOfPlay.has(CoinBases) ||
     game.usAid < EdgeTrackMax     ||
@@ -101,16 +104,26 @@ object Card_043 extends EventCard(43, "Economic Aid",
       askMenu(choices, "\nChoose one:").head match {
         case "arvn" =>
           log()
-          increaseResources(ARVN, 6)
+          bumpARVNRes()
         case _      =>
           log()
-          increaseUsAid(12)
+          bumpAid()
       }
     }
-    else if (faction == ARVN && game.trackResources(ARVN) && game.arvnResources < EdgeTrackMax)
-      increaseResources(ARVN, 6)
-    else
-      increaseUsAid(12)
+    else if (faction == ARVN) {
+      // ARVN priorities US Aid
+      if (game.usAid < EdgeTrackMax)
+        bumpAid()
+      else if (game.trackResources(ARVN) && game.arvnResources < EdgeTrackMax)
+        bumpARVNRes()
+    }
+    else {
+      // US priorities ARVN resources
+      if (game.trackResources(ARVN) && game.arvnResources < EdgeTrackMax)
+        bumpARVNRes()
+      else
+        bumpAid()
+    }
   }
 
   def shadedEffective(faction: Faction): Boolean = false  // Not executed by Bots

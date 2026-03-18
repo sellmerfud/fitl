@@ -1207,7 +1207,11 @@ object FireInTheLake {
     val enemy           = enemyPieces(sp)
     val killUnderground = asUSAssault && capabilityInPlay(SearchAndDestroy_Unshaded) && enemy.has(UndergroundGuerrillas)
     val numUnderground  = if (killUnderground) 1 else 0
-    val vulnerable      = vulnerableInsurgents(enemy, baseFirstOK, vulnerableTunnels).total + numUnderground
+    // An assault can be effective if the space contains a tunneled base a no other insurgent pieces
+    val vulnerable = if (enemy.has(InsurgentTunnels) && enemy.except(InsurgentTunnels).isEmpty)
+      enemy.only(InsurgentTunnels).total
+    else
+      vulnerableInsurgents(enemy, baseFirstOK, vulnerableTunnels).total + numUnderground
 
     (firepower min vulnerable) > 0
   }

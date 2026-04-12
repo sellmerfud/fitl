@@ -4790,7 +4790,11 @@ object Bot {
       }
 
       def placeARVNBase(): Boolean = {
-        val baseCandidates = game.nonLocSpaces filter { sp =>
+        val toConsider = if (trainingSpaces.size == maxTrain)
+          spaces(trainingSpaces)
+        else
+          game.nonLocSpaces
+        val baseCandidates = toConsider filter { sp =>
           !sp.nvaControlled                &&
           sp.isProvince                    &&
           sp.population == 2               &&

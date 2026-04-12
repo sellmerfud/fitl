@@ -3199,7 +3199,7 @@ object Human {
       val canFollowup = faction == US &&
                         params.cubeTreatment == NormalTroops &&  // Only if ARVN cubes didn't already participate
                         addedARVNAssault == false &&             // Only one follow up per turn
-                        assaultEffective(ARVN, NormalTroops, false, false)(game.getSpace(name))
+                        assaultEffective(ARVN, NormalTroops, false, false)(game.getSpace(name)) &&
                         (bodyCount || (game.arvnResources - 3) >= game.econ)
 
       if (canFollowup && askYorN(s"Follow up with ARVN assault in $name? (y/n) ")) {

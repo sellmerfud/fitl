@@ -3221,7 +3221,7 @@ object FireInTheLake {
         log(s"\nPlace $coupCard beneath the other cards in the RVN Leader Box", Color.Event)
         // Place above RVN_Leader_DuongVanMinh which is printed on the map
         val newLeaders = game.rvnLeaders.init:::List(newLeader, game.rvnLeaders.last)
-        game = game.copy(rvnLeaders = newLeaders, rvnLeaderFlipped = false)
+        game = game.copy(rvnLeaders = newLeaders)
       }
       else {
         log(s"\nPlace $coupCard in the RVN Leader Box on top of the stack", Color.Event)

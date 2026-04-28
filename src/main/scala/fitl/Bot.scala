@@ -3427,11 +3427,11 @@ object Bot {
           logOpChoice(US, Patrol)
         movePiecesToDestinations(US, Patrol, Set(USTroops), false, params, maxDests = Some(1))(saigonCandidate)
         if (moveDestinations.size < maxPatrol)
-          movePiecesToDestinations(US, Patrol, Set(USTroops), false, params)(locPatrolCandidate)
+          movePiecesToDestinations(US, Patrol, Set(USTroops), false, params, maxDests = params.maxSpaces)(locPatrolCandidate)
         val activatedSomething = activateGuerrillasOnLOCs(US)
 
         // Add an assault on one LoC.  If this was a LimOp then the LoC must
-        // be the selected destination.  If none was selected then we can pick any one.
+        // be the selected destination.
         val assaultLoC = if (params.limOpOnly) {
           moveDestinations.headOption filter { name =>
             val sp = game.getSpace(name)

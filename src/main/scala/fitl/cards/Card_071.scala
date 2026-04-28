@@ -38,7 +38,7 @@ import scala.collection.immutable.ListMap
 import fitl.FireInTheLake._
 import fitl.EventHelpers._
 import fitl.Bot
-import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
+import fitl.Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot, MoveDestGetter }
 import fitl.Human
 
 // Unshaded Text
@@ -110,14 +110,21 @@ object Card_071 extends EventCard(71, "An Loc",
   def nvaMarchToCity(name: String): Unit = {
     val params = Params(event = true, free = true)
     var marched = false
-    Bot.movePiecesToDestinations(NVA, March, Set(NVATroops), false, params) {
-      (_, _, _) => if (marched)
+    val nextMarchCandidate: MoveDestGetter = (_, _, _) =>
+      if (marched)
         None
       else {
         marched = true
         Some(name)
       }
-    }
+
+    Bot.movePiecesToDestinations(
+      NVA,
+      March,
+      Set(NVATroops),
+      false,
+      params,
+      nextMarchCandidate)
   }
 
 

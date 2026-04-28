@@ -2473,23 +2473,31 @@ object Bot {
     num: Int,
     mandatory: Boolean,
     moveTypes: Set[PieceType],
-    onlyFrom: Option[Set[String]] = None): Pieces = {
+    onlyFrom: Option[Set[String]] = None
+  ): Pieces = {
     val params = Params()
-    initTurnVariables()
     var destProduced = false
     
-    movePiecesToDestinations(faction, EventMove(onlyFrom), moveTypes, false, params, maxPieces = num, maxDests = Some(1)) {
-      
-      (_, _, prohibited) => {
-        if (destProduced || prohibited(destName))
-          None
-        else {
-          destProduced = true
-          Some(destName)
-        }
+    val selectDestination: MoveDestGetter = (_, _, prohibited) => {
+      if (destProduced || prohibited(destName))
+      None
+      else {
+        destProduced = true
+        Some(destName)
       }
     }
-
+    
+    initTurnVariables() // Start with fresh turn state
+    movePiecesToDestinations(
+      faction,
+      EventMove(onlyFrom),
+      moveTypes,
+      false,
+      params,
+      selectDestination,
+      maxPieces = num,
+      maxDests = Some(1))
+      
     if (mandatory && movedPieces.allPieces.total < num) {
       def nextMandatoryMove(numRemaning: Int): Unit = if (numRemaning > 0) {
         val priorities = List(new HighestScore[Space]("Most moveable pieces", _.pieces.totalOf(moveTypes)))
@@ -2611,17 +2619,15 @@ object Bot {
 
   // Type of function supplied to the movePiecesToDestinations() function that
   // is called when a new destination space is needed.
-  //  (needActivation: Boolean, prohibited: Set[String]) => Option[String]
-  // - The first parameter is true of the last candidate tried was successfully
-  //   selected as a destination
-  // - The second parameter is true if an activation roll is required
-  // - The third paramter is the set of space names that cannot be used
-  //   (because they have already been selected or were considered but
-  //   not pieces were able to move there)
-  type MoveDestGetter = (Boolean, Boolean, Set[String]) => Option[String]
+  type MoveDestGetter = (
+    Boolean,    // lastWasSuccess - true of the last candidate tried was successfully selected as a destination
+    Boolean,    // needActivation - true if an activation roll is required
+    Set[String] // prohibited     - prohibited spaces (already tried)
+  ) => Option[String]
 
 
-  //  This function implements a move operation for the given faction.
+  //  This function is used when a Bot faction needs to move pieces on the map for
+  //  operations and special activites.
   //  This list of destCandidates should be sorted such the the higher priority
   //  spaces come first.
   //  Note:  During Air Lift we must use the maxDests to also limit origin spaces
@@ -2633,10 +2639,11 @@ object Bot {
     moveTypes: Set[PieceType],
     checkFirst: Boolean,   // True if we need to check activate before the first dest
     params: Params,
+    getNextDestination: MoveDestGetter,
     maxPieces: Int = NO_LIMIT,  // Transport limits the number of pieces to 6 per destination
-    maxDests: Option[Int] = None)(getNextDestination: MoveDestGetter): Boolean = {
+    maxDests: Option[Int] = None): Boolean = {
 
-    val maxDest = maxDests getOrElse NO_LIMIT
+    val maxDest = maxDests.getOrElse(NO_LIMIT)
     var allOrigins = Set.empty[String] // For air lift we must limit origins+destinations
     var totalMoved = 0
     // ----------------------------------------
@@ -3407,11 +3414,11 @@ object Bot {
       if (!capabilityInPlay(M48Patton_Shaded)) {
         // Select a LoC Patrol destination candidate
         // ARVN Patrol never needs an activation roll
-        val saigonCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
+        val saigonCandidate: MoveDestGetter = (_, _, prohibited) => {
           if (!game.getSpace(Saigon).coinControlled && !prohibited.contains(Saigon)) Some(Saigon) else None
         }
 
-        val locPatrolCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
+        val locPatrolCandidate: MoveDestGetter = (_, _, prohibited) => {
           val candidates = game.locSpaces filter { sp =>
             !prohibited(sp.name) &&
             sp.pieces.has(InsurgentForces)
@@ -3425,9 +3432,23 @@ object Bot {
 
         if (!params.event)
           logOpChoice(US, Patrol)
-        movePiecesToDestinations(US, Patrol, Set(USTroops), false, params, maxDests = Some(1))(saigonCandidate)
+        movePiecesToDestinations(
+          US,
+          Patrol,
+          Set(USTroops),
+          false,
+          params,
+          saigonCandidate,
+          maxDests = Some(1))
         if (moveDestinations.size < maxPatrol)
-          movePiecesToDestinations(US, Patrol, Set(USTroops), false, params, maxDests = params.maxSpaces)(locPatrolCandidate)
+          movePiecesToDestinations(
+            US,
+            Patrol,
+            Set(USTroops),
+            false,
+            params,
+            locPatrolCandidate,
+            maxDests = params.maxSpaces)
         val activatedSomething = activateGuerrillasOnLOCs(US)
 
         // Add an assault on one LoC.  If this was a LimOp then the LoC must
@@ -3481,7 +3502,7 @@ object Bot {
         val maxTraps: Option[Int]  = if (capabilityInPlay(BoobyTraps_Shaded)) Some(2) else None
         val maxSweep = (maxTraps.toList ::: params.maxSpaces.toList).sorted.headOption
 
-        val nextSweepCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
+        val nextSweepCandidate: MoveDestGetter = (_, _, prohibited) => {
           val candidates = game.nonLocSpaces filter { sp =>
             params.spaceAllowed(sp.name) &&
             !sp.isNorthVietnam &&
@@ -3497,7 +3518,14 @@ object Bot {
         if (!params.event)
           logOpChoice(US, Sweep)
 
-        movePiecesToDestinations(US, Sweep, moveTypes , false, params, maxDests = maxSweep)(nextSweepCandidate)
+        movePiecesToDestinations(
+          US,
+          Sweep,
+          moveTypes,
+          false,
+          params,
+          nextSweepCandidate,
+          maxDests = maxSweep)
         val maxCobras = 2  // Unshaded cobras can be used in up to 2 spaces
         var numCobras = 0
         if (moveDestinations.nonEmpty) {
@@ -3814,7 +3842,7 @@ object Bot {
           else if (game.inMonsoon) 2 else 4
         )
 
-        val nextAirLiftCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
+        val nextAirLiftCandidate: MoveDestGetter = (_, _, prohibited) => {
           val candidates = game.spaces filter { sp =>
             params.spaceAllowed(sp.name) &&
             params.airlift.canLiftTo(sp.name) &&
@@ -3837,7 +3865,14 @@ object Bot {
 
         moveDestinations = Vector.empty
         movedPieces.reset()
-        movePiecesToDestinations(US, AirLift, moveTypes, false, params, maxDests = maxSpaces)(nextAirLiftCandidate)
+        movePiecesToDestinations(
+          US,
+          AirLift,
+          moveTypes,
+          false,
+          params,
+          nextAirLiftCandidate,
+          maxDests = maxSpaces)
         val effective = moveDestinations.nonEmpty
         moveDestinations = savedMovedDestinations
         movedPieces      = savedMovedPieces
@@ -4884,7 +4919,7 @@ object Bot {
       if (momentumInPlay(Mo_BodyCount) || !game.trackResources(ARVN) || game.arvnResources >= 3 ) {
         // Select a LoC Patrol destination candidate
         // ARVN Patrol never needs an activation roll
-        val nextPatrolCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
+        val nextPatrolCandidate: MoveDestGetter = (lastWasSuccess, needActivation, prohibited) => {
           val candidates = game.patrolSpaces filter (sp => !prohibited(sp.name))
 
           // No need to check activation since we are only trying LoCs
@@ -4893,11 +4928,21 @@ object Bot {
           else
             None
         }
+
         if (!params.event)
           logOpChoice(ARVN, Patrol)
+
         if (!momentumInPlay(Mo_BodyCount) && game.trackResources(ARVN))
           decreaseResources(ARVN, 3)
-        movePiecesToDestinations(ARVN, Patrol, ARVNCubes.toSet, false, params, maxDests = params.maxSpaces)(nextPatrolCandidate)
+        movePiecesToDestinations(
+          ARVN,
+          Patrol,
+          ARVNCubes.toSet,
+          false,
+          params,
+          nextPatrolCandidate,
+          maxDests = params.maxSpaces)
+          
         val activatedSomething = activateGuerrillasOnLOCs(ARVN)
         // Add an assault on one LoC.  If this was a LimOp then the LoC must
         // be the selected destination.  If none was selected then we can pick any one.
@@ -4957,7 +5002,7 @@ object Bot {
         if (maxSweep.nonEmpty && maxSweep.get == 0)
           None  // Cannot afford to do any sweeping!
         else {
-          val nextSweepCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
+          val nextSweepCandidate: MoveDestGetter = (lastWasSuccess, needActivation, prohibited) => {
             val candidates = game.nonLocSpaces filter { sp =>
               params.spaceAllowed(sp.name) && !sp.isNorthVietnam && !prohibited(sp.name)
             }
@@ -4977,7 +5022,14 @@ object Bot {
           if (!params.event)
             logOpChoice(ARVN, Sweep)
 
-          movePiecesToDestinations(ARVN, Sweep, moveTypes, false, params, maxDests = maxSweep)(nextSweepCandidate)
+          movePiecesToDestinations(
+            ARVN,
+            Sweep,
+            moveTypes,
+            false,
+            params,
+            nextSweepCandidate,
+            maxDests = maxSweep)
           val maxCobras = 2  // Unshaded cobras can be used in up to 2 spaces
           var numCobras = 0
           if (moveDestinations.nonEmpty) {
@@ -5264,7 +5316,7 @@ object Bot {
         val moveTypes: Set[PieceType] =
           if (capabilityInPlay(ArmoredCavalry_Shaded)) Rangers.toSet else (ARVNTroops::Rangers).toSet
 
-        val nextTransportCandidate = (_: Boolean, _: Boolean, prohibited: Set[String]) => {
+        val nextTransportCandidate: MoveDestGetter = (_, _, prohibited) => {
           val candidates = game.spaces filter { sp =>
             params.spaceAllowed(sp.name) &&
             !sp.isNorthVietnam &&
@@ -5282,7 +5334,15 @@ object Bot {
         movedPieces.reset()
         if (!params.event)
           logSAChoice(ARVN, Transport)
-        movePiecesToDestinations(ARVN, Transport, moveTypes, false, params, maxPieces = 6)(nextTransportCandidate)
+
+        movePiecesToDestinations(
+          ARVN,
+          Transport,
+          moveTypes,
+          false,
+          params,
+          nextTransportCandidate,
+          maxPieces = 6)
 
         transportDestinations = moveDestinations
         moveDestinations      = savedMovedDestinations
@@ -5854,7 +5914,7 @@ object Bot {
         None
       else {
         // This is only used for easterOffensive
-        val nextLocAdjacentToSaigonCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
+        val nextLocAdjacentToSaigonCandidate: MoveDestGetter = (lastWasSuccess, needActivation, prohibited) => {
           val qualifies = (sp: Space) =>
             params.spaceAllowed(sp.name)  &&
             !prohibited(sp.name)          &&
@@ -5871,7 +5931,7 @@ object Bot {
 
         // Select a LoC march destination candidate
         // Once we have marched to one LoC successfully we are done.
-        val nextLoCCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
+        val nextLoCCandidate: MoveDestGetter = (lastWasSuccess, needActivation, prohibited) => {
           val qualifies = (sp: Space) =>
             params.spaceAllowed(sp.name)  &&
             !prohibited(sp.name)          &&
@@ -5888,7 +5948,7 @@ object Bot {
 
         // Select a Laos/Cambodia march destination candidate
         // Once we have marched to one Laos/Cambodia space successfully we are done.
-        val nextLaosCambodiaCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
+        val nextLaosCambodiaCandidate: MoveDestGetter = (lastWasSuccess, needActivation, prohibited) => {
           val LaosCambodiaPriorities = List(
             new HighestScore[Space](
               "Most Adjacent NVA Guerrillas",
@@ -5911,7 +5971,7 @@ object Bot {
             None
         }
 
-        val nextGenericCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
+        val nextGenericCandidate: MoveDestGetter = (lastWasSuccess, needActivation, prohibited) => {
           val candidates = game.spaces filter { sp =>
             params.spaceAllowed(sp.name)  &&
             !prohibited.contains(sp.name)
@@ -5935,21 +5995,48 @@ object Bot {
         // If Easter Offensive pivotal event then we start by marching max troops to
         // LoCs adjacent to Saigon.
         if (easterOffensive)
-          movePiecesToDestinations(NVA, EasterTroops, Set(NVATroops), false, params)(nextLocAdjacentToSaigonCandidate)
+          movePiecesToDestinations(
+            NVA,
+            EasterTroops,
+            Set(NVATroops),
+            false,
+            params,
+            nextLocAdjacentToSaigonCandidate)
 
         // Never first need activation for LoCs
         if (withLoC)
-          movePiecesToDestinations(NVA, March, marchers, false, params, maxDests = params.maxSpaces)(nextLoCCandidate)
+          movePiecesToDestinations(
+            NVA,
+            March,
+            marchers,
+            false,
+            params,
+            nextLoCCandidate,
+            maxDests = params.maxSpaces)
 
         // No need for first activation after LoCs
         // If we march to Laos/Cambodia then we will need first activate check
         // for the generic destinations
         val needActivate = if (withLaosCambodia)
-          movePiecesToDestinations(NVA, March, marchers, false, params, maxDests = params.maxSpaces)(nextLaosCambodiaCandidate)
+          movePiecesToDestinations(
+            NVA,
+            March,
+            marchers,
+            false,
+            params,
+            nextLaosCambodiaCandidate,
+            maxDests = params.maxSpaces)
         else
           false
 
-        movePiecesToDestinations(NVA, March, marchers, needActivate, params, maxDests = params.maxSpaces)(nextGenericCandidate)
+        movePiecesToDestinations(
+          NVA,
+          March,
+          marchers,
+          needActivate,
+          params,
+          nextGenericCandidate,
+          maxDests = params.maxSpaces)
 
         if (moveDestinations.nonEmpty)
           Some(March)
@@ -6787,7 +6874,7 @@ object Bot {
       if (!params.event && game.inMonsoon)
         None
       else {
-        val nextLoCCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
+        val nextLoCCandidate: MoveDestGetter = (lastWasSuccess, needActivation, prohibited) => {
           val LocPriorities = List(
             new HighestScore[Space](
               "Most Adjacent Underground VC Guerrillas",
@@ -6812,7 +6899,7 @@ object Bot {
         // Select the next march candidate
         // prohibited contains all previous march destinations plus failed
         // destinations.
-        val nextGenericCandidate = (lastWasSuccess: Boolean, needActivation: Boolean, prohibited: Set[String]) => {
+        val nextGenericCandidate: MoveDestGetter = (lastWasSuccess, needActivation, prohibited) => {
           lazy val candidates = game.spaces filter {sp =>
             params.spaceAllowed(sp.name) &&
             !prohibited.contains(sp.name)
@@ -6827,9 +6914,23 @@ object Bot {
         if (!params.event)
           logOpChoice(VC, March)
 
-        movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, params, maxDests = params.maxSpaces)(nextLoCCandidate)
+        movePiecesToDestinations(
+          VC,
+          March,
+          VCGuerrillas.toSet,
+          false,
+          params,
+          nextLoCCandidate,
+          maxDests = params.maxSpaces)
         // First activation check is always false since previos 0-2 spaces were LoCs
-        movePiecesToDestinations(VC, March, VCGuerrillas.toSet, false, params, maxDests = params.maxSpaces)(nextGenericCandidate)
+        movePiecesToDestinations(
+          VC,
+          March,
+          VCGuerrillas.toSet,
+          false,
+          params,
+          nextGenericCandidate,
+          maxDests = params.maxSpaces)
 
         if (moveDestinations.nonEmpty)
           Some(March)

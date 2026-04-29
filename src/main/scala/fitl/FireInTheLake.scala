@@ -3048,6 +3048,11 @@ object FireInTheLake {
     val desc = "Take an action on the current card"
   }
 
+  object PerformCmd extends Command {
+    val name = "perform"
+    val desc = "Take an action on the current card (alias for act)"
+  }
+
   object BotCmd extends Command {
     val name = "bot"
     val desc = s"The Bot acts on the current card"
@@ -3948,14 +3953,19 @@ object FireInTheLake {
       promptLines.mkString("\n", "\n", "")
     }
 
-    val (cmd, param) = askCommand(prompt, actorCmds ::: CommonCmds)
+    val aliasActorCmds = if (mainCmd == ActCmd)
+      actorCmds ::: List(PerformCmd)
+    else
+      actorCmds
+
+    val (cmd, param) = askCommand(prompt, aliasActorCmds ::: CommonCmds)
 
     cmd match {
       case DiscardCmd =>
         val card = getCurrentCard.fullString
         log(s"\n ${card} discarded with no effect.  There are no eligible factions.")
 
-      case ActCmd  =>
+      case ActCmd | PerformCmd =>
         val faction = game.actingFaction.get
         logSummary(sequenceSummary, echo = false)
         Human.act()

@@ -1025,21 +1025,31 @@ object Human {
     }
   }
 
+
+  private def actionMenuItems: List[(Action, String)] = {
+
+    val actions: List[Action] = game.sequence.actors match {
+      case Nil        => List(Event, OpPlusSpecial, Pass)
+      case first::Nil => first.action match {
+        case OpOnly        => List(LimitedOp, Pass)
+        case OpPlusSpecial => List(Event, LimitedOp, Pass)
+        case Event         => List(OpPlusSpecial, Pass)
+        case _ => throw new IllegalStateException("availableActions illegal first action detected")
+      }
+      case _ => throw new IllegalStateException("availableActions called after two actions taken")
+    }
+
+    actions
+      .map(action => action -> action.menuText)
+  }
+
   // A human player has opted to take an action on the current card.
   def act(): Unit = {
     val faction = game.actingFaction.get
     val action = if (game.executingPivotalEvent)
       Event
-    else {
-      val choices: List[(Action, String)] =
-        game.sequence.availableActions map (a => a -> a.toString)
-
-      askMenu(choices, "\nChoose one:").head
-    }
-
-    log()
-    log(s"Move the $faction cylinder to the ${actorBoxName(action)} box", Color.GameMarker)
-    game = game.copy(sequence = game.sequence.addActor(faction, action))
+    else
+      askMenu(actionMenuItems, "\nChoose one:").head
     
     action match {
       case Event         => executeEvent(faction)
@@ -1048,6 +1058,17 @@ object Human {
       case LimitedOp     => executeOp(faction, Params(maxSpaces = Some(1)))
       case Pass          => factionPasses(faction)
     }
+
+    // If the first available faction chose Op plus Special but did not
+    // perform a special activity, then change their action to OpOnly
+    val actualAction = (game.sequence.numActors, action) match {
+      case (0, OpPlusSpecial) if !Special.taken => OpOnly
+      case _ => action
+    }
+
+    log(s"\nMove the $faction cylinder to the ${actorBoxName(actualAction)} box", Color.GameMarker)
+    game = game.copy(sequence = game.sequence.addActor(faction, actualAction))
+
   }
 
 

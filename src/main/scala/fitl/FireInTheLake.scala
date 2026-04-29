@@ -1753,9 +1753,12 @@ object FireInTheLake {
 
   sealed abstract class Action(val name: String) {
     override def toString() = name
+    def menuText: String = name
   }
   case object  Event         extends Action("Event")
-  case object  OpPlusSpecial extends Action("Op/Special Activity")
+  case object  OpPlusSpecial extends Action("Op/Special Activity") {
+    override def menuText = "Op (May add a Special Activity)"
+  }
   case object  OpOnly        extends Action("Op Only")
   case object  LimitedOp     extends Action("Limited Op")
   case object  Pass          extends Action("Pass")

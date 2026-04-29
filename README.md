@@ -67,11 +67,9 @@ will show the log for the most recent save point.
 
 The `rollback` command will let you restart the game from the beginning of any turn.
 
-When it is a Bot faction's turn to play you will use the `bot` command.  The results of the Bot turn
-are displayed so that you can follow along and update your physical game board.
-
-When it is a human faction's turn to play you will use the `act` command to take your turn.  The program
-will then ask you how you wish to proceed.
+The `perform` command is used to carry out the action on the current card for the next eligible faction.  
+During a human faction's turn the program will prompt you for how to proceed and will log the results of your action.  
+During a Bot faction's turn the results of the Bot action are displayed so that you can follow along and update your physical game board.
 
 During your turn you can enter `abort` at most prompts if you wish to cancel what you have done
 and start your turn over. This will take you back to the start of your turn.  And any changes 

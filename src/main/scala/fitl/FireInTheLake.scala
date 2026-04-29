@@ -3046,14 +3046,9 @@ object FireInTheLake {
     val desc: String
   }
 
-  object ActCmd extends Command {
-    val name = "act"
-    val desc = "Take an action on the current card"
-  }
-
-  object BotCmd extends Command {
-    val name = "bot"
-    val desc = s"The Bot acts on the current card"
+  object PerformCmd extends Command {
+    val name = "perform"
+    val desc = "Perform an action on the current card"
   }
 
   object DiscardCmd extends Command {
@@ -3936,7 +3931,11 @@ object FireInTheLake {
         (DiscardCmd, s">>> No eligible factions$extra <<<")
 
       case Some(faction) =>
-        (if (game.isBot(faction)) BotCmd else ActCmd, s">>> $faction turn$extra <<<")
+        val entity = if (game.isHuman(faction))
+          "Human"
+        else
+          "Bot"
+        (PerformCmd, s">>> $faction turn ($entity)$extra <<<")
     }
 
     val actorCmds = List(mainCmd)
@@ -3951,6 +3950,7 @@ object FireInTheLake {
       promptLines.mkString("\n", "\n", "")
     }
 
+    val faction = game.actingFaction.get
     val (cmd, param) = askCommand(prompt, actorCmds ::: CommonCmds)
 
     cmd match {
@@ -3958,16 +3958,12 @@ object FireInTheLake {
         val card = getCurrentCard.fullString
         log(s"\n ${card} discarded with no effect.  There are no eligible factions.")
 
-      case ActCmd  =>
-        val faction = game.actingFaction.get
+      case PerformCmd =>
         logSummary(sequenceSummary, echo = false)
-        Human.act()
-        log(s"\nFinished with $faction turn")
-
-      case BotCmd  =>
-        val faction = game.actingFaction.get
-        logSummary(sequenceSummary, echo = false)
-        Bot.act()
+        if (game.isHuman(faction))
+          Human.act()
+        else
+          Bot.act()
         log(s"\nFinished with $faction turn")
 
       case _ =>

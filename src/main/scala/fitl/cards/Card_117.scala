@@ -59,17 +59,22 @@ object Card_117 extends EventCard(117, "Corps Commanders",
           ARVN -> (Performed   -> Unshaded),
           NVA  -> (Performed   -> Shaded),
           VC   -> (Ignored -> Shaded))) {
+  
+  val isUnshadedCandidate = (sp: Space) => !sp.isNorthVietnam && !sp.isLoC
 
   def humanUnshaded(): Unit = {
-    val candidates = spaceNames(game.spaces filterNot (_.isNorthVietnam))
+    val candidates = spaceNames(game.spaces.filter(isUnshadedCandidate))
     val name1    = askCandidate("\nSelect a space to place ARVN Troops: ", candidates)
-    val adj      = getAdjacent(name1).toList.sorted(SpaceNameOrdering)
+    val adj      = getAdjacent(name1)
+      .filter(name => isUnshadedCandidate(game.getSpace(name)))
+      .toList
+      .sorted(SpaceNameOrdering)
     val choices  = (adj map (n => n -> n)) :+ ("none" -> "Do not select an adjacent space")
     val selected = askMenu(choices, s"\nSelect a space adjacent to $name1:").head match {
       case "none" => Set(name1)
       case name2  => Set(name1, name2)
     }
-
+    val selectedSpaces = selected.map(game.getSpace)
     val maxOop   = game.outOfPlay.totalOf(ARVNTroops) min 3
     val numOop   = if (maxOop > 0) askInt("Place how many Troops from OUT OF PLAY", 0, maxOop) else 0
     val maxAvail = game.piecesToPlace.totalOf(ARVNTroops) -
@@ -88,8 +93,16 @@ object Card_117 extends EventCard(117, "Corps Commanders",
     else
       placePiecesOnMap(ARVN, numAvail, Set(ARVNTroops), selected)
     println()
-    val params = Params(event = true, free = true, sweep = SweepParams(explicitSpaces = selected))
-    Human.executeSweep(ARVN, params)
+
+    // If no pieces are placed into a selected space then we do not allow
+    // the followup sweep into that space.
+    val sweepSpaces = selectedSpaces
+      .filter(sp => game.getSpace(sp.name).pieces != sp.pieces)
+      .map(_.name)
+    if (sweepSpaces.nonEmpty) {
+      val params = Params(event = true, free = true, sweep = SweepParams(explicitSpaces = sweepSpaces))
+      Human.executeSweep(ARVN, params)
+    }
   }
 
   def botUnshaded(): Unit = {
@@ -98,10 +111,13 @@ object Card_117 extends EventCard(117, "Corps Commanders",
     def nextPlacement(numRemaining: Int): Unit = if (numRemaining > 0) {
       val candidates = if (selected.size == 2)
         spaces(selected)
-      else if (selected.size == 1)
-        spaces(getAdjacent(selected.head) + selected.head)
+      else if (selected.size == 1) {
+        val adjacent = getAdjacent(selected.head)
+          .filter(name => isUnshadedCandidate(game.getSpace(name)))
+        spaces(adjacent + selected.head)
+      }
       else
-        game.spaces filterNot (_.isNorthVietnam)
+        game.spaces.filter(isUnshadedCandidate)
 
       val sp = ARVN_Bot.pickSpacePlaceCubesRangers(candidates)
       if (game.outOfPlay.has(ARVNTroops))

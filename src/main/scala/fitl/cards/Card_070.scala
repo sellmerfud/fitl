@@ -92,9 +92,10 @@ object Card_070 extends EventCard(70, "ROKs",
       val baseFirstOK = Human.canUseAbramsUnshaded(actor)
       Human.resetM48PattonSpaces()
       println()
-      Human.executeSweep(actor, params)
 
       loggingControlChanges {
+        if (sweepDestinations.nonEmpty)
+          Human.executeSweep(actor, params)
         for {
           name <- unshadedNames
           sp   =  game.getSpace(name)
@@ -108,9 +109,11 @@ object Card_070 extends EventCard(70, "ROKs",
     else {
       val baseFirstOK = Bot.canUseAbramsUnshaded(actor)
       Bot.resetM48PattonSpaces()
-      US_Bot.sweepOp(params)
-      pause()
       loggingControlChanges {
+        if (sweepDestinations.nonEmpty) {
+          US_Bot.sweepOp(params)
+          pause()
+        }
         for {
           name <- unshadedNames
           sp   =  game.getSpace(name)

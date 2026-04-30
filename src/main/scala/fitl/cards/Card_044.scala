@@ -81,9 +81,13 @@ object Card_044 extends EventCard(44, "la Drang",
         log(s"\nUS performs free Air Lift into $name")
         log(separator(char = '='))
         Human.doAirLift(params)
-        log(s"\nUS performs free Sweep into $name")
-        log(separator(char = '='))
-        Human.executeSweep(US, params.copy(sweep = SweepParams(explicitSpaces = Set(name))))
+        if (!game.getSpace(name).isLoC) {
+          log(s"\nUS performs free Sweep into $name")
+          log(separator(char = '='))
+          Human.executeSweep(US, params.copy(sweep = SweepParams(explicitSpaces = Set(name))))
+        }
+        else
+          log(s"\nSweep skipped. Cannot peform Sweep in LOC.", Color.Event)
         log(s"\nUS performs free Assault in $name")
         log(separator(char = '='))
         Human.performAssault(US, name, params)
@@ -104,9 +108,13 @@ object Card_044 extends EventCard(44, "la Drang",
         log(s"US performs free Air Lift into $name")
         log(separator(char = '='))
         US_Bot.airLiftActivity(params)
-        log(s"\nUS performs free Sweep into $name")
-        log(separator(char = '='))
-        US_Bot.sweepOp(params.copy(onlyIn = Some(Set(name))))
+        if (!game.getSpace(name).isLoC) {
+          log(s"\nUS performs free Sweep into $name")
+          log(separator(char = '='))
+          US_Bot.sweepOp(params.copy(onlyIn = Some(Set(name))))
+        }
+        else
+          log(s"\nSweep skipped. Cannot peform Sweep in LOC.", Color.Event)
         log(s"\nUS performs free Assault in $name")
         log(separator(char = '='))
         Bot.performAssault(faction, name, params)

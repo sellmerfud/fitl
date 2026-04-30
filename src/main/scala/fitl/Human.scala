@@ -2878,13 +2878,13 @@ object Human {
   //  CombActionPlatoons_Shaded - US may select max 2 spaces per sweep
   //  BoobyTraps_Shaded         = Each sweep space, VC afterward removes 1 sweeping troop on
   //                              a roll 1-3 (US to casualties)
-  // Returns the set of spaces were sweep occurred.
+  // Returns the set of spaces where sweep occurred.
   def executeSweep(faction: Faction, params: Params): Set[String] = {
     val specialActivities = if (faction == US)
       AirLift::AirStrike::Nil
     else
       Transport::Raid::Nil
-    var sweepSpaces     = params.sweep.explicitSpaces
+    var sweepSpaces     = Set.empty[String]
     var resolvedSpaces   = Set.empty[String]
     var cobrasSpaces    = Set.empty[String]
     val alreadyMoved    = new MovingGroups()
@@ -2923,18 +2923,24 @@ object Human {
     // Per the rules, cubes are moved into sweep spaces "simultaneously"
     // so we do not allow a "special activity" to be selected while cubes
     // are being moved.
-    def moveTroops(): Unit = {
-      val destCandidates = sweepSpaces.toList.sorted filter { name =>
-        sweepSources(name, faction, alreadyMoved).nonEmpty
-      }
+    def moveTroops(nonLocSpaces: List[String], firstTime: Boolean = true): Unit = {
+      val destCandidates = nonLocSpaces
+        .sorted
+        .filter { name => sweepSources(name, faction, alreadyMoved).nonEmpty }
 
-      val choices = (destCandidates map (name => name -> name)) :+ ("finished" -> "Finished moving troops")
-      askMenu(choices, s"\n$faction Sweep Troops into:").head match {
-        case "finished" =>
-        case name =>
-          moveTroopsTo(name, 1)
-          moveTroops()
+      if (destCandidates.nonEmpty) {
+        val choices = (destCandidates map (name => name -> name)) :+ ("finished" -> "Finished moving troops")
+        askMenu(choices, s"\n$faction Sweep Troops into:").head match {
+          case "finished" =>
+          case name =>
+            moveTroopsTo(name, 1)
+            moveTroops(nonLocSpaces, false)
+        }
       }
+      else if (firstTime)
+        displayLine(s"\nNo troops can reach any of the sweep destinations.", Color.Event)
+      else
+        displayLine(s"\nNo more troops can reach any of the sweep destinations.", Color.Event)
     }
 
     def isSweepCandidate = (sp: Space) =>
@@ -2943,7 +2949,7 @@ object Human {
       !sweepSpaces(sp.name)
 
     // Select provinces/cities (not N. Vietnam)
-    def selectSweepSpace(): Unit = {
+    def selectSweepSpaces(): Unit = {
       // Note: we allow selecting spaces without cubes or adjacent cubes because
       // the user may air lift cube in...
       val candidates = if (sweepSpaces.size < maxSpaces)
@@ -2969,17 +2975,17 @@ object Human {
             if (faction == ARVN && !params.free)
               decreaseResources(ARVN, 3)
           }
-          selectSweepSpace()
+          selectSweepSpaces()
 
         case "special" =>
           executeSpecialActivity(faction, params, specialActivities)
-          selectSweepSpace()
+          selectSweepSpaces()
 
         case _ => // finished
       }
     }
 
-    def resolveSweepSpaces(): Unit = {
+    def resolveSweepSpaces(sweepCandidates: List[String]): Unit = {
       
       def resolveSweep(name: String): Unit = {
         if (!activateGuerrillasForSweep(name, faction, params.cubeTreatment))
@@ -2987,36 +2993,33 @@ object Human {
         if (cobrasUnshaded && cobrasSpaces.size < 2 && checkCobrasUnshaded(name))
           cobrasSpaces = cobrasSpaces + name
         checkShadedBoobyTraps(name, faction)
-        resolvedSpaces = resolvedSpaces + name
       }
       
-      val candidates = (sweepSpaces -- resolvedSpaces).toList.sorted
-      if (candidates.nonEmpty) {
+      if (sweepCandidates.nonEmpty) {
         if (canSpecial) {
           val topChoices = List(
-            choice(resolvedSpaces.isEmpty,  "all",      "Resolve all Sweep spaces"),
-            choice(resolvedSpaces.nonEmpty, "rest",     "Resolve all remaining Sweep spaces"),
-            choice(canSpecial,              "special",  "Perform a Special Activity")
+            choice(true,        "all",     "Resolve all remaining Sweep spaces"),
+            choice(canSpecial,  "special", "Perform a Special Activity")
           ).flatten
-          val spaceChoices = candidates map (n => n -> s"Resolve Sweep in $n")
+          val spaceChoices = sweepCandidates.sorted.map(n => n -> s"Resolve Sweep in $n")
           val choices = topChoices ::: spaceChoices
   
           askMenu(choices, "\nSweep activation:").head match {
-            case "all" | "rest" =>
-              for (name <- candidates)
+            case "all" =>
+              for (name <- sweepCandidates)
                 resolveSweep(name)
   
             case "special" =>
               executeSpecialActivity(faction, params, specialActivities)
-              resolveSweepSpaces()
+              resolveSweepSpaces(sweepCandidates)
   
             case name =>
               resolveSweep(name)
-              resolveSweepSpaces()
+              resolveSweepSpaces(sweepCandidates.filterNot(_ == name))
           }
         }
         else {
-          for (name <- candidates)
+          for (name <- sweepCandidates)
             resolveSweep(name)
         }
       }
@@ -3034,17 +3037,32 @@ object Human {
 
     // If sweepSpaces is not empty then we are executing an Event that specified the
     // explicit spaces, otherwise prompt the user for the spaces.
-    if (sweepSpaces.isEmpty)
-      selectSweepSpace()
-    moveTroops()
-    if (sweepSpaces.nonEmpty)
-      resolveSweepSpaces()
+    if (params.sweep.explicitSpaces.nonEmpty)
+      sweepSpaces = params.sweep.explicitSpaces
+    else
+      selectSweepSpaces()
+
+    // Events may call this function with LoC spaces specified in
+    // params.sweep.explicitSpaces.  This happens when the event allows sweep
+    // along with another action (usually assault)
+    val (locSpaces, nonLocSpaces) = sweepSpaces
+      .toList
+      .partition(game.getSpace(_).isLoC)
+
+    if (nonLocSpaces.nonEmpty) {
+      moveTroops(nonLocSpaces)
+      resolveSweepSpaces(nonLocSpaces.toList)
+    }
+
+    if (locSpaces.nonEmpty)
+      for (name <- locSpaces)
+        log(s"\nCannot peform Sweep in $name.", Color.Event)
 
     //  Last chance to perform special activity
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
       executeSpecialActivity(faction, params, specialActivities)
 
-    sweepSpaces
+    nonLocSpaces.toSet
   }
 
 

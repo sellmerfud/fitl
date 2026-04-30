@@ -5756,6 +5756,8 @@ object FireInTheLake {
       println(s"$prompt ${candidates.head}")
       candidates.head
     }
+    else if (candidates.size < 8)
+      askSimpleMenu(candidates.toList, prompt, allowAbort = allowAbort).head
     else
       askOneOf(prompt, candidates, allowAbort = allowAbort).get
   }
@@ -5767,6 +5769,10 @@ object FireInTheLake {
     if (candidates.size == 1) {
       println(s"$prompt ${candidates.head}")
       candidates.headOption
+    }
+    else if (candidates.size < 8) {
+      val choices = candidates.toList.map(c => Some(c) -> c) :+ (None -> "None of the above")
+      askMenu(choices, prompt, allowAbort = allowAbort).head
     }
     else
       askOneOf(prompt, candidates, allowAbort = allowAbort, allowNone = true)

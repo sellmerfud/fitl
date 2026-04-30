@@ -88,6 +88,7 @@ object Card_044 extends EventCard(44, "la Drang",
         }
         else
           log(s"\nSweep skipped. Cannot peform Sweep in LOC.", Color.Event)
+          
         log(s"\nUS performs free Assault in $name")
         log(separator(char = '='))
         Human.performAssault(US, name, params)

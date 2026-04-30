@@ -68,10 +68,10 @@ object Card_070 extends EventCard(70, "ROKs",
           VC   -> (Critical    -> Shaded))) {
 
   val unshadedNames = getAdjacent(PhuBon_PhuYen) + PhuBon_PhuYen
-
+  
   def unshadedEffective(faction: Faction): Boolean = true
   def executeUnshaded(faction: Faction): Unit = {
-    val sweepDestinations = spaceNames(spaces(unshadedNames) filter (!_.isLoC)).toSet
+    val sweepDestinations = spaceNames(spaces(unshadedNames).filter(!_.isLoC)).toSet
     val params = Params(
       event        = true,
       free         = true,
@@ -96,6 +96,7 @@ object Card_070 extends EventCard(70, "ROKs",
       loggingControlChanges {
         if (sweepDestinations.nonEmpty)
           Human.executeSweep(actor, params)
+          
         for {
           name <- unshadedNames
           sp   =  game.getSpace(name)

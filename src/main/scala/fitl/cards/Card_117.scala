@@ -60,7 +60,7 @@ object Card_117 extends EventCard(117, "Corps Commanders",
           NVA  -> (Performed   -> Shaded),
           VC   -> (Ignored -> Shaded))) {
   
-  val isUnshadedCandidate = (sp: Space) => !sp.isNorthVietnam && !sp.isLoC
+  val isUnshadedCandidate = (sp: Space) => !sp.isNorthVietnam
 
   def humanUnshaded(): Unit = {
     val candidates = spaceNames(game.spaces.filter(isUnshadedCandidate))
@@ -95,8 +95,9 @@ object Card_117 extends EventCard(117, "Corps Commanders",
     println()
 
     // If no pieces are placed into a selected space then we do not allow
-    // the followup sweep into that space.
+    // the followup sweep into that space.  Also, no sweep allowed in Loc spaces.
     val sweepSpaces = selectedSpaces
+      .filter(!_.isLoC)
       .filter(sp => game.getSpace(sp.name).pieces != sp.pieces)
       .map(_.name)
     if (sweepSpaces.nonEmpty) {
@@ -131,8 +132,15 @@ object Card_117 extends EventCard(117, "Corps Commanders",
     val numTroops = (game.outOfPlay.totalOf(ARVNTroops) + game.availablePieces.totalOf(ARVNTroops)) min 3
     nextPlacement(numTroops)
 
-    val params = Params(event = true, free = true, onlyIn = Some(selected))
-    ARVN_Bot.sweepOp(params, 6)
+    // No Sweep in LoC spaces
+    val sweepSpaces = spaces(selected)
+      .filter(!_.isLoC)
+      .map(_.name)
+      .toSet
+    if (sweepSpaces.nonEmpty) {
+      val params = Params(event = true, free = true, onlyIn = Some(sweepSpaces))
+      ARVN_Bot.sweepOp(params, 6)
+    }
   }
 
   def unshadedEffective(faction: Faction): Boolean =

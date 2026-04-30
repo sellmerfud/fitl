@@ -39,11 +39,6 @@ import FireInTheLake._
 import Bot.{ US_Bot, ARVN_Bot, NVA_Bot, VC_Bot }
 
 object EventHelpers {
-  // Temporary Functions  
-  def pivotalNotYet(faction: Faction): Unit = {
-    log(s"\n${eventDeck(game.currentCard)}: $faction pivotal event not yet implemented")
-  }
-
     // Returns true if an air strike would be effective in the space.
   val canAirStrike = (sp: Space) =>
       sp.pieces.has(CoinPieces) &&

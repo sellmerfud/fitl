@@ -2884,8 +2884,8 @@ object Human {
       AirLift::AirStrike::Nil
     else
       Transport::Raid::Nil
-    var sweepSpaces     = params.sweep.explicitSpaces
-    var resolvedSpaces   = Set.empty[String]
+    var sweepSpaces     = params.sweep.explicitSpaces.filterNot(game.getSpace(_).isLoC)
+    var resolvedSpaces  = Set.empty[String]
     var cobrasSpaces    = Set.empty[String]
     val alreadyMoved    = new MovingGroups()
     val platoonsShaded  = faction == US && !params.limOpOnly && capabilityInPlay(CombActionPlatoons_Shaded)

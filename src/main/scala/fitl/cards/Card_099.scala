@@ -105,10 +105,12 @@ object Card_099 extends EventCard(99, "Masher/White Wing",
     }
   }
 
+  // Only valid for NVA, VC Bot never performs this event
   def shadedEffective(faction: Faction): Boolean = {
     val params = Params(event = true, free = true, maxSpaces = Some(3))
     // Effective if the NVA Bot can sucessfully march
-    suspendLogging {
+    Bot.testOutcome {
+      // Return true if at least one march space is selected
       NVA_Bot.marchOp(params,  6, true, true).nonEmpty
     }
   }
@@ -124,7 +126,7 @@ object Card_099 extends EventCard(99, "Masher/White Wing",
     val actor = if (game.isHuman(faction))
       askFaction("\nChoose faction to execute the event:", Set(NVA, VC))
     else
-      faction  // NVA
+      faction  // NVA only, VC Bot does not perform this event.
 
     if (game.isHuman(actor)) {
       def canAmbush(name: String): Boolean = {
@@ -140,11 +142,9 @@ object Card_099 extends EventCard(99, "Masher/White Wing",
     }
     else {
       Bot.initTurnVariables()
-      if (actor == NVA)
-        NVA_Bot.marchOp(params,  6, true, true).nonEmpty
-        else
-        VC_Bot.marchOp(params,  6).nonEmpty
-      Bot.ambushActivity(actor, Bot.getMoveDestinations.toList, March, 6, params, false)
+      // VC Bot does not perform this event
+      NVA_Bot.marchOp(params,  6, true, true)
+      Bot.ambushActivity(NVA, Bot.getMoveDestinations.toList, March, 6, params, false)
     }
   }
 }

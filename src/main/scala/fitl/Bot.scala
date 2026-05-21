@@ -2580,18 +2580,17 @@ object Bot {
   // We return the name of the space along with the number
   // of insurgents that would be eliminated in the space.
   def bestSweepAssaultTarget(faction: Faction, cubeTreatment: CubeTreatment, candidates: List[String]): Option[(String, Int)] = {
+    val origGameState = game
     var targets = Vector.empty[(String, Int)]
 
-    suspendLogging {
-      for (destName <- candidates) {
-        val saved = game
+    for (destName <- candidates) {
+      testOutcome {
         initTurnVariables() // Always start with fresh turn state
         sweepAndAssaultSpace(destName, faction, cubeTreatment)
-        val before = saved.getSpace(destName).pieces.totalOf(InsurgentPieces)
+        val before = origGameState.getSpace(destName).pieces.totalOf(InsurgentPieces)
         val after  = game.getSpace(destName).pieces.totalOf(InsurgentPieces)
         if (before > after)
           targets = targets :+ (destName -> (before - after))
-        game = saved
       }
     }
 
@@ -7270,6 +7269,40 @@ object Bot {
     movedPieces.reset()
   }
 
+  def preserveTurnVariables[T](code: => T): T = {
+    val saved_moveDestinations      = moveDestinations
+    val saved_transportDestinations = transportDestinations
+    val saved_transportOrigin       = transportOrigin
+    val saved_trainingSpaces        = trainingSpaces
+    val saved_adviseSpaces          = adviseSpaces
+    val saved_m48PattonSpaces       = m48PattonSpaces
+    val saved_abramsUnshadedUsed    = abramsUnshadedUsed
+    val saved_movedPieces           = movedPieces
+
+    val result = code
+
+    moveDestinations      = saved_moveDestinations
+    transportDestinations = saved_transportDestinations
+    transportOrigin       = saved_transportOrigin
+    trainingSpaces        = saved_trainingSpaces
+    adviseSpaces          = saved_adviseSpaces
+    m48PattonSpaces       = saved_m48PattonSpaces
+    abramsUnshadedUsed    = saved_abramsUnshadedUsed
+    movedPieces           = saved_movedPieces
+
+    result
+  }
+
+  // Run some code that changes game state to test some outcome
+  // without actually changes the game state or displaying
+  // any log messages.
+  def testOutcome[T](code: => T): T = {
+    val savedGame = game    
+    val result = suspendLogging(preserveTurnVariables(code))
+    game = savedGame
+    result
+  }
+  
   def executeEvent(faction: Faction, card: EventCard): Unit = {
     card.eventType match {
       case DualEvent =>

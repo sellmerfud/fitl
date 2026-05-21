@@ -149,16 +149,16 @@ object Bot {
     def display(ident: String) = s"Trung: $faction - $ident"
     override def toString() = display(id)
 
-    def flipCard(params: Params): TrungResult = {
+    def flipCard(params: Params, specialDone: Boolean = false): TrungResult = {
       if (game.logTrung || game.botDebug) {
         log("\nTrung card flipped to its back side", Color.Event)
         log(separator())
         log(display(id * 2))        
       }
-      executeBack(params)
+      executeBack(params, specialDone)
     }
     def executeFront(params: Params): TrungResult
-    def executeBack(params: Params): TrungResult
+    def executeBack(params: Params, specialDone: Boolean): TrungResult
   }
 
   // Add a march actiation number function to all NVA Trung cards
@@ -3572,128 +3572,118 @@ object Bot {
     //  SearchAndDestroy_Shaded   - Each US and ARVN assault Province shifts support one level toward Active Opposition
     //  Mo_BodyCount              - Cost=0 AND +3 Aid per guerrilla removed
     def assaultOp(params: Params)(doSpecialActivity: () => Boolean): Option[(CoinOp, Boolean)] = {
-      def doAssaultOperation(): Option[(CoinOp, Boolean)] = {
-        val NVATargets = Set(NVATroops, NVABase)
-        if (generalLandsdale(US))
-          None
-        else {
-          var assaultSpaces = Set.empty[String]
-          val paramsMax     = params.maxSpaces getOrElse NO_LIMIT
-          val capMax        = if (capabilityInPlay(Abrams_Shaded)) 2
-                        else if (capabilityInPlay(Cobras_Shaded)) 2
-                        else NO_LIMIT
-          val maxAssault    = paramsMax min capMax
+      val NVATargets = Set(NVATroops, NVABase)
+      if (generalLandsdale(US))
+        None
+      else {
+        var assaultSpaces = Set.empty[String]
+        val paramsMax     = params.maxSpaces getOrElse NO_LIMIT
+        val capMax        = if (capabilityInPlay(Abrams_Shaded)) 2
+                       else if (capabilityInPlay(Cobras_Shaded)) 2
+                       else NO_LIMIT
+        val maxAssault    = paramsMax min capMax
 
-          val wouldKillNVATroopsOrBase = (sp: Space) => {
-            !assaultSpaces(sp.name)  && {
-              val result = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
-              sp.pieces.totalOf(NVATargets) > result.pieces.totalOf(NVATargets)
-            }
+        val wouldKillNVATroopsOrBase = (sp: Space) => {
+          !assaultSpaces(sp.name)  && {
+            val result = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
+            sp.pieces.totalOf(NVATargets) > result.pieces.totalOf(NVATargets)
           }
+        }
 
 
-          val assaultRemovesAllVulnerable = (sp: Space) =>
-            !assaultSpaces(sp.name)  &&
-            assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels, m48PattonCount)(sp) &&
-            noVulnerableInsurgents(assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)) &&
-            (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
+        val assaultRemovesAllVulnerable = (sp: Space) =>
+          !assaultSpaces(sp.name)  &&
+          assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels, m48PattonCount)(sp) &&
+          noVulnerableInsurgents(assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)) &&
+          (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
 
 
-          val assaultWithArvn = (sp: Space) => {
-            if (!assaultSpaces(sp.name) && assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels, m48PattonCount)(sp)) {
-              val afterUS = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
-              if (assaultEffective(ARVN, params.cubeTreatment, false, params.vulnerableTunnels)(afterUS)) {
-                val afterARVN = assaultResult(ARVN, params.cubeTreatment, params.vulnerableTunnels)(afterUS)
-                val deadNVA   = sp.pieces.totalOf(NVATargets) > afterARVN.pieces.totalOf(NVATargets)
-                capabilityInPlay(SearchAndDestroy_Shaded) == false || deadNVA
-              }
-              else
-                false
+        val assaultWithArvn = (sp: Space) => {
+          if (!assaultSpaces(sp.name) && assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels, m48PattonCount)(sp)) {
+            val afterUS = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
+            if (assaultEffective(ARVN, params.cubeTreatment, false, params.vulnerableTunnels)(afterUS)) {
+              val afterARVN = assaultResult(ARVN, params.cubeTreatment, params.vulnerableTunnels)(afterUS)
+              val deadNVA   = sp.pieces.totalOf(NVATargets) > afterARVN.pieces.totalOf(NVATargets)
+              capabilityInPlay(SearchAndDestroy_Shaded) == false || deadNVA
             }
             else
               false
           }
+          else
+            false
+        }
 
-          val arvnAssaultPriorities = List(
-            new HighestScore[Space](
-              "ARVN Assault removes most enemy",
-              (sp: Space) => {
-                val afterUS   = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
-                val afterARVN = assaultResult(ARVN, params.cubeTreatment, params.vulnerableTunnels)(afterUS)
-                // Return number of pieces removed by ARVN assault
-                afterUS.pieces.totalOf(InsurgentPieces) - afterARVN.pieces.totalOf(InsurgentPieces)
-            })
-          )
+        val arvnAssaultPriorities = List(
+          new HighestScore[Space](
+            "ARVN Assault removes most enemy",
+            (sp: Space) => {
+              val afterUS   = assaultResult(US, params.cubeTreatment, params.vulnerableTunnels)(sp)
+              val afterARVN = assaultResult(ARVN, params.cubeTreatment, params.vulnerableTunnels)(afterUS)
+              // Return number of pieces removed by ARVN assault
+              afterUS.pieces.totalOf(InsurgentPieces) - afterARVN.pieces.totalOf(InsurgentPieces)
+          })
+        )
 
-          val assaultWithTroops = (sp: Space) =>
-            !assaultSpaces(sp.name)  &&
-            assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels, m48PattonCount)(sp) &&
-            (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
+        val assaultWithTroops = (sp: Space) =>
+          !assaultSpaces(sp.name)  &&
+          assaultEffective(US, params.cubeTreatment, canUseAbramsUnshaded(US), params.vulnerableTunnels, m48PattonCount)(sp) &&
+          (!capabilityInPlay(SearchAndDestroy_Shaded) || wouldKillNVATroopsOrBase(sp))
 
 
-          def nextAssault(selector: (Space) => Boolean, addARVN: Boolean): Unit = {
-            //  We must reassess candidates each time because the m48PattonCount can change
-            val candidates = game.spaces filter selector
+        def nextAssault(selector: (Space) => Boolean, addARVN: Boolean): Unit = {
+          //  We must reassess candidates each time because the m48PattonCount can change
+          val candidates = game.spaces filter selector
+          
+          if (assaultSpaces.size < maxAssault && candidates.nonEmpty) {
+            // Different priorities when adding an ARVN assault
+            val sp = if (addARVN)
+              bestCandidate(candidates, arvnAssaultPriorities)
+            else
+              pickSpaceRemoveReplace(candidates)
+
+            if (!params.event && assaultSpaces.isEmpty)
+              logOpChoice(US, Assault)
             
-            if (assaultSpaces.size < maxAssault && candidates.nonEmpty) {
-              // Different priorities when adding an ARVN assault
-              val sp = if (addARVN)
-                bestCandidate(candidates, arvnAssaultPriorities)
-              else
-                pickSpaceRemoveReplace(candidates)
-
-              if (!params.event && assaultSpaces.isEmpty)
-                logOpChoice(US, Assault)
-              
-              performAssault(US, sp.name, params)
+            performAssault(US, sp.name, params)
+            pause()
+            
+            // performAssault will reduce the ARVN resources to pay for the Assault
+            if (addARVN) {
+              log(s"\nUS adds a follow up ARVN assault in ${sp.name}")
+              performAssault(ARVN, sp.name, params)
               pause()
-              
-              // performAssault will reduce the ARVN resources to pay for the Assault
-              if (addARVN) {
-                log(s"\nUS adds a follow up ARVN assault in ${sp.name}")
-                performAssault(ARVN, sp.name, params)
-                pause()
-              }
-              assaultSpaces += sp.name
-              
-              //  The Bot will only assault one space with an added ARVN assault
-              if (!addARVN)
-                nextAssault(selector, false)
             }
-          }
-
-          //  First candidates where all vulnerable enemies would be removed
-          nextAssault(assaultRemovesAllVulnerable, false)
-
-          val didSpecial = params.addSpecialActivity && doSpecialActivity()
-
-          // Add an attack with add ARVN assault
-          val canAffordARVN = momentumInPlay(Mo_BodyCount) ||  // Make ARVN Assault free
-                              params.free                  ||
-                              !game.trackResources(ARVN)   ||
-                              (game.arvnResources - 3) >= game.econ
-          if (params.cubeTreatment == NormalTroops && canAffordARVN)
-            nextAssault(assaultWithArvn, true)
-
-          // Assault in all remaining spaces with US Troops where effective
-          nextAssault(assaultWithTroops, false)
-
-          if (assaultSpaces.nonEmpty)
-            Some(Assault -> didSpecial)
-          else {
-            logNoOp(US, Assault)
-            None
+            assaultSpaces += sp.name
+            
+            //  The Bot will only assault one space with an added ARVN assault
+            if (!addARVN)
+              nextAssault(selector, false)
           }
         }
-      }
 
-      // We must first check if the Op is possible with logging turned off
-      // so we do not allow a Special Activity to be performed when no Assault
-      // can be done.
-      if (checkOpPossible(doAssaultOperation().nonEmpty))
-        doAssaultOperation()
-      else
-        None
+        //  First candidates where all vulnerable enemies would be removed
+        nextAssault(assaultRemovesAllVulnerable, false)
+
+        val didSpecial = params.addSpecialActivity && doSpecialActivity()
+
+        // Add an attack with add ARVN assault
+        val canAffordARVN = momentumInPlay(Mo_BodyCount) ||  // Make ARVN Assault free
+                            params.free                  ||
+                            !game.trackResources(ARVN)   ||
+                            (game.arvnResources - 3) >= game.econ
+        if (params.cubeTreatment == NormalTroops && canAffordARVN)
+          nextAssault(assaultWithArvn, true)
+
+        // Assault in all remaining spaces with US Troops where effective
+        nextAssault(assaultWithTroops, false)
+
+        if (assaultSpaces.nonEmpty || didSpecial)
+          Some(Assault -> didSpecial)
+        else {
+          logNoOp(US, Assault)
+          None
+        }
+      }
     }
 
     //  -------------------------------------------------------------
@@ -7280,37 +7270,6 @@ object Bot {
     movedPieces.reset()
   }
 
-  def preserveTurnVariables[T](code: => T): T = {
-    val saved_moveDestinations      = moveDestinations
-    val saved_transportDestinations = transportDestinations
-    val saved_transportOrigin       = transportOrigin
-    val saved_trainingSpaces        = trainingSpaces
-    val saved_adviseSpaces          = adviseSpaces
-    val saved_m48PattonSpaces       = m48PattonSpaces
-    val saved_abramsUnshadedUsed    = abramsUnshadedUsed
-    val saved_movedPieces           = movedPieces
-
-    val result = code
-
-    moveDestinations      = saved_moveDestinations
-    transportDestinations = saved_transportDestinations
-    transportOrigin       = saved_transportOrigin
-    trainingSpaces        = saved_trainingSpaces
-    adviseSpaces          = saved_adviseSpaces
-    m48PattonSpaces       = saved_m48PattonSpaces
-    abramsUnshadedUsed    = saved_abramsUnshadedUsed
-    movedPieces           = saved_movedPieces
-
-    result
-  }
-
-  def checkOpPossible(code: => Boolean): Boolean = {
-    val savedGame = game    
-    val result = suspendLogging(preserveTurnVariables(code))
-    game = savedGame
-    result
-  }
-
   def executeEvent(faction: Faction, card: EventCard): Unit = {
     card.eventType match {
       case DualEvent =>
@@ -7489,7 +7448,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
         (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
         US_Bot.adviseActivity(params) ||
@@ -7504,23 +7463,13 @@ object Bot {
           TrungNoOp
       }
       else {
-        // The Trung card specifies that the SA is performed first
-        // so we must check that the Op is possible so we do not allow the SA only.
-        val trainPossible = checkOpPossible {
-          // The special activity may influence whether or not the Op can be carried out
-          if (params.addSpecialActivity)
-            doSpecialActivity()
+        // Special activity comes first!
+        val didSpecial = params.addSpecialActivity && doSpecialActivity()
 
-          US_Bot.trainOp(params, actNum).nonEmpty
-        }
-
-        if (trainPossible) {
-          // Special activity comes first!
-          val didSpecial = params.addSpecialActivity && doSpecialActivity()
-
-          US_Bot.trainOp(params, actNum)
+        // If the special activty was done we return TrungComplete
+        // even if the opeation was ineffective
+        if (US_Bot.trainOp(params, actNum).nonEmpty || didSpecial)
           TrungComplete(didSpecial)
-        }
         else
           TrungNoOp
       }
@@ -7560,7 +7509,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecial(): Boolean = {
         (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
         US_Bot.airLiftActivity(params)
@@ -7619,7 +7568,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
         (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
         US_Bot.adviseActivity(params) ||
@@ -7633,23 +7582,13 @@ object Bot {
           TrungNoOp
       }
       else {
-        // The Trung card specifies that the SA is performed first
-        // so we must check that the Op is possible so we do not allow the SA only.
-        val trainPossible = checkOpPossible {
-          // The special activity may influence whether or not the Op can be carried out
-          if (params.addSpecialActivity)
-            doSpecialActivity()
+        // Special activity comes first!
+        val didSpecial = params.addSpecialActivity && doSpecialActivity()
 
-          US_Bot.trainOp(params, actNum).nonEmpty
-        }
-
-        if (trainPossible) {
-          // Special activity comes first!
-          val didSpecial = params.addSpecialActivity && doSpecialActivity()
-
-          US_Bot.trainOp(params, actNum)
+        // If the special activty was done we return TrungComplete
+        // even if the opeation was ineffective
+        if (US_Bot.trainOp(params, actNum).nonEmpty || didSpecial)
           TrungComplete(didSpecial)
-        }
         else
           TrungNoOp
       }
@@ -7689,7 +7628,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
         (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
         US_Bot.airLiftActivity(params)
@@ -7743,7 +7682,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
         US_Bot.adviseActivity(params) ||
         (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
@@ -7767,77 +7706,52 @@ object Bot {
 
   // ---------------------------------------------------------------
   object Trung_US_F extends TrungCard(US, "F", actNum = 3) {
-      def doSpecialActivity(params: Params): Boolean = {
-        (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
-        US_Bot.airLiftActivity(params)
-      }
 
     // ------------------------------------------------------------
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
+      def doSpecialActivity(): Boolean = {
+        (US_Bot.usPolicyIsLBJ && US_Bot.airStrikeActivity(params)) ||
+        US_Bot.airLiftActivity(params)
+      }
+
       if (!US_Bot.allUSBasesinSouthWithUSTroopsNoNVATroops)
         TrungDraw
       else if (params.specialActivityOnly) {
         // No need to check the flip card condition
         // for special only.
-        if (doSpecialActivity(params))
+        if (doSpecialActivity())
           TrungComplete(true)
         else
           TrungNoOp
       }
-      else if (!US_Bot.allLocRoutesCanTho_HueBlockedAndNoShadedM48)
-          flipCard(params)
       else {
-        // The Trung card specifies that the SA is performed first
-        // so we must check that the Op is possible so we do not allow the SA only.
-        val patrolPossible = checkOpPossible {
-          // The special activity may influence whether or not the Op can be carried out
-          if (params.addSpecialActivity)
-            doSpecialActivity(params)
-
-          US_Bot.patrolOp(params).nonEmpty
-        }
-
-        if (patrolPossible) {
-          val didSpecial = params.addSpecialActivity && doSpecialActivity(params)
-          US_Bot.patrolOp(params) match {
-            case Some(_) => TrungComplete(didSpecial)
-            case None    => TrungNoOp
-          }
-        }
+        val didSpecial = params.addSpecialActivity && doSpecialActivity()
+        if (!US_Bot.allLocRoutesCanTho_HueBlockedAndNoShadedM48)
+          flipCard(params, didSpecial)
         else
-          TrungNoOp
-
+          US_Bot.patrolOp(params) match {
+            case Some(_)            => TrungComplete(didSpecial)
+            case None if didSpecial => TrungComplete(true)
+            case None               => TrungNoOp
+          }
       }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
-      // The Trung card specifies that the SA is performed first
-      // so we must check that the Op is possible so we do not allow the SA only.
-      val opPossible = checkOpPossible {
-        // The special activity may influence whether or not the Op can be carried out
-        if (params.addSpecialActivity)
-          doSpecialActivity(params)
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
+      val operation = if (US_Bot.any2PopNotAtActiveSupportWithCoinControlUsTroops)
+        US_Bot.trainOp(params, actNum)
+      else
+        US_Bot.sweepOp(params)
 
-        if (US_Bot.any2PopNotAtActiveSupportWithCoinControlUsTroops)
-          US_Bot.trainOp(params, actNum).nonEmpty
-        else
-          US_Bot.sweepOp(params).nonEmpty
-      }
-
-      if (opPossible) {
-        val didSpecial = params.addSpecialActivity && doSpecialActivity(params)
-
-        if (US_Bot.any2PopNotAtActiveSupportWithCoinControlUsTroops)
-          US_Bot.trainOp(params, actNum)
-        else
-          US_Bot.sweepOp(params)
-        TrungComplete(didSpecial)
-      }
+      // The special activity will have been done
+      // on the front side of the card.
+      if (specialDone || operation.nonEmpty)
+        TrungComplete(specialDone)
       else
         TrungNoOp
     }
@@ -7888,7 +7802,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecial(): Boolean =
         ARVN_Bot.governActivity(params) ||
         ARVN_Bot.transportActivity(params)
@@ -7915,68 +7829,49 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_ARVN_H extends TrungCard(ARVN, "H", actNum = 3) {
 
-    def doSpecialActivity(params: Params): Boolean = ARVN_Bot.transportActivity(params)
 
     // ------------------------------------------------------------
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
+      def doSpecialActivity(): Boolean = ARVN_Bot.transportActivity(params)
 
       if (!ARVN_Bot.fiveArvnTroopsPlusRangersInAnySpace)
         TrungDraw
       else if (params.specialActivityOnly) {
-        if (doSpecialActivity(params))
+        if (doSpecialActivity())
           TrungComplete(true)
         else
           TrungNoOp
       }
       else {
-        // The Trung card specifies that the SA is performed first
-        // so we must check that the Op is possible so we do not allow the SA only.
-        val assaultPossible = checkOpPossible {
-          // The special activity may influence whether or not the Op can be carried out
-          if (params.addSpecialActivity)
-            doSpecialActivity(params)
+        val didSpecial = params.addSpecialActivity && doSpecialActivity()
 
-          ARVN_Bot.arvnAssaultWouldAddControlOrUnblockCanTo_Hue
-        }
-
-        if (assaultPossible) {
-          val didSpecial = params.addSpecialActivity && doSpecialActivity(params)
+        if (ARVN_Bot.arvnAssaultWouldAddControlOrUnblockCanTo_Hue) {
           ARVN_Bot.assaultOp(params, actNum)
           ARVN_Bot.armoredCavalryAssault()
           TrungComplete(didSpecial)
         }
         else
-          flipCard(params) // Let back of card know if we did Transport activity
+          flipCard(params, didSpecial) // Let back of card know if we did Transport activity
       }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
-      // The Trung card specifies that the SA is performed first
-      // so we must check that the Op is possible so we do not allow the SA only.
-      val opPossible = checkOpPossible {
-        // The special activity may influence whether or not the Op can be carried out
-        if (params.addSpecialActivity)
-          doSpecialActivity(params)
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
+      // Special Activity (Transport) is selected on the Front of the card!
+      val operation = if (ARVN_Bot.threeD6_LE_AvailARVN)
+        ARVN_Bot.trainOp(params, actNum)
+      else
+        ARVN_Bot.assaultOp(params, actNum)
 
-        if (ARVN_Bot.threeD6_LE_AvailARVN)
-          ARVN_Bot.trainOp(params, actNum).nonEmpty
-        else
-          ARVN_Bot.assaultOp(params, actNum).nonEmpty
-      }
-
-      if (opPossible) {
-        val didSpecial = params.addSpecialActivity && doSpecialActivity(params)
-        if (ARVN_Bot.threeD6_LE_AvailARVN)
-          ARVN_Bot.trainOp(params, actNum)
-        else
-          ARVN_Bot.assaultOp(params, actNum)
+      // If the special activity was done, return TrungComplete
+      // even if the operation was ineffective
+      if (operation.nonEmpty || specialDone) {
         ARVN_Bot.armoredCavalryAssault()
-        TrungComplete(didSpecial)
+        TrungComplete(specialDone)
       }
       else
         TrungNoOp
@@ -8020,7 +7915,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecial(op: CoinOp): Boolean =
         (op == Patrol && ARVN_Bot.governActivity(params)) ||
         ARVN_Bot.raidActivity(params)                     ||
@@ -8073,36 +7968,25 @@ object Bot {
           TrungNoOp
       }
       else {
-        // The Trung card specifies that the SA is performed first
-        // so we must check that the Op is possible so we do not allow the SA only.
-        val patrolPossible = checkOpPossible {
-          // The special activity may influence whether or not the Op can be carried out
-          if (params.addSpecialActivity)
-            doSpecialActivity()
+        val didSpecial = params.addSpecialActivity && doSpecialActivity()
 
-          ARVN_Bot.patrolOp(params).nonEmpty
+        ARVN_Bot.patrolOp(params) match {
+          case Some(_) =>
+            ARVN_Bot.armoredCavalryAssault()
+            TrungComplete(didSpecial)
+
+          case None if didSpecial =>
+            TrungComplete(didSpecial)
+          case None =>
+            TrungNoOp
         }
-
-        if (patrolPossible) {
-          val didSpecial = params.addSpecialActivity && doSpecialActivity()
-
-          ARVN_Bot.patrolOp(params) match {
-            case Some(_) =>
-              ARVN_Bot.armoredCavalryAssault()
-              TrungComplete(didSpecial)
-            case None =>
-              TrungNoOp
-          }
-        }
-        else
-          TrungNoOp
       }
     }
 
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecial(op: CoinOp): Boolean =
         (op == Train && ARVN_Bot.governActivity(params)) ||
         ARVN_Bot.transportActivity(params)
@@ -8167,7 +8051,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean =
         ARVN_Bot.raidActivity(params) ||
         ARVN_Bot.transportActivity(params)
@@ -8232,7 +8116,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean =
         (allLocRoutesCanTho_HueBlocked && ARVN_Bot.governActivity(params)) ||
         ARVN_Bot.raidActivity(params) ||
@@ -8299,10 +8183,10 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean =
         NVA_Bot.infiltrateActivity(params, needDiceRoll = false, replaceVCBase = false)
-      
+
       if (params.specialActivityOnly) {
         if (doSpecialActivity())
           TrungComplete(true)
@@ -8311,26 +8195,13 @@ object Bot {
       }
       else {
         if (NVA_Bot.eightTroopsOutsideSouth) {
-          // The Trung card specifies that the Infiltrate SA is performed first
-          // so we must check that the Op is possible so we do not allow the SA only.
-          val marchPossible = checkOpPossible {
-            // The special activity may influence whether or not the Op can be carried out
-            if (params.addSpecialActivity)
-              doSpecialActivity()
+          val infiltrated = params.addSpecialActivity && doSpecialActivity()
 
-            NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false).nonEmpty
+          NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false) match {
+            case Some(_)             => TrungComplete(infiltrated)
+            case None if infiltrated => TrungComplete(infiltrated) // SA only
+            case None                => TrungNoOp
           }
-
-          if (marchPossible) {
-            val infiltrated = params.addSpecialActivity && doSpecialActivity()
-  
-            NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false) match {
-              case Some(_)             => TrungComplete(infiltrated)
-              case None                => TrungNoOp
-            }
-          }
-          else
-            TrungNoOp
         }
         else {
           NVA_Bot.rallyOp(params, actNum) match {
@@ -8366,30 +8237,15 @@ object Bot {
           TrungNoOp
       }
       else {
-        // The Trung card specifies that the Infiltrate SA is performed first
-        // so we must check that the Op is possible so we do not allow the SA only.
-        val opPossible = checkOpPossible {
-          // The special activity may influence whether or not the Op can be carried out
-          if (params.addSpecialActivity)
-            doSpecialActivity()
+        val bombarded = params.addSpecialActivity && doSpecialActivity()
 
-          if (NVA_Bot.sixTroopsWithCOINTroopsOrBase)
-            NVA_Bot.attackOp(params, actNum, addAmbush = false).nonEmpty
-          else
-            NVA_Bot.marchOp(params, marchActNum, withLoC = false, withLaosCambodia = false).nonEmpty
-        }
+        val operation = if (NVA_Bot.sixTroopsWithCOINTroopsOrBase)
+          NVA_Bot.attackOp(params, actNum, addAmbush = false) map (_._1)
+        else
+          NVA_Bot.marchOp(params, marchActNum, withLoC = false, withLaosCambodia = false)
 
-        if (opPossible) {
-          val bombarded = params.addSpecialActivity && doSpecialActivity()
-
-          val operation = if (NVA_Bot.sixTroopsWithCOINTroopsOrBase)
-            NVA_Bot.attackOp(params, actNum, addAmbush = false)
-              .map(_._1)
-          else
-            NVA_Bot.marchOp(params, marchActNum, withLoC = false, withLaosCambodia = false)
-
+        if (bombarded || operation.nonEmpty)
           TrungComplete(bombarded)
-        }
         else
           TrungNoOp
       }
@@ -8398,7 +8254,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean =
         NVA_Bot.infiltrateActivity(params, needDiceRoll = false, replaceVCBase = false)
 
@@ -8420,21 +8276,10 @@ object Bot {
           }
         }
         else {
-          // The Trung card specifies that the Infiltrate SA is performed first
-          // so we must check that the Op is possible so we do not allow the SA only.
-          val opPossible = checkOpPossible {
-            // The special activity may influence whether or not the Op can be carried out
-            if (params.addSpecialActivity)
-              doSpecialActivity()
-
-            NVA_Bot.marchOp(params, marchActNum, withLoC = false, withLaosCambodia = false).nonEmpty
-          }
-
-          if (opPossible) {
-            val infiltrated = params.addSpecialActivity && doSpecialActivity()
-            val operation = NVA_Bot.marchOp(params, marchActNum, withLoC = false, withLaosCambodia = false)
+          val infiltrated = params.addSpecialActivity && doSpecialActivity()
+          val operation = NVA_Bot.marchOp(params, marchActNum, withLoC = false, withLaosCambodia = false)
+          if (infiltrated || operation.nonEmpty)
             TrungComplete(infiltrated)
-          }
           else
             TrungNoOp
         }
@@ -8466,7 +8311,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
         NVA_Bot.infiltrateActivity(params, needDiceRoll = true, replaceVCBase = true) ||
         NVA_Bot.bombardActivity(params)        
@@ -8516,21 +8361,11 @@ object Bot {
           TrungNoOp
       }
       else {
-        // The Trung card specifies that the Infiltrate SA is performed first
-        // so we must check that the Op is possible so we do not allow the SA only.
-        val opPossible = checkOpPossible {
-          // The special activity may influence whether or not the Op can be carried out
-          if (params.addSpecialActivity)
-            doSpecialActivity()
+        val infiltrated = params.addSpecialActivity && doSpecialActivity()
+        val operation = NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true)
 
-          NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true).nonEmpty
-        }
-
-        if (opPossible) {
-          val infiltrated = params.addSpecialActivity && doSpecialActivity()
-          NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = true)
+        if (infiltrated || operation.nonEmpty)
           TrungComplete(infiltrated)
-        }
         else
           TrungNoOp
       }
@@ -8539,7 +8374,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       if (params.specialActivityOnly) {
         // Ambush is not possible since we are not actually marching!
         if (NVA_Bot.bombardActivity(params))
@@ -8616,7 +8451,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       if (params.specialActivityOnly) {
         val success = NVA_Bot.attackOp(params, actNum, addAmbush = true).nonEmpty ||
                       NVA_Bot.bombardActivity(params)
@@ -8683,7 +8518,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(tryInfiltrate: Boolean) =
         (tryInfiltrate && NVA_Bot.infiltrateActivity(params, needDiceRoll = true, replaceVCBase = true)) ||
          NVA_Bot.bombardActivity(params)
@@ -8710,21 +8545,11 @@ object Bot {
           }
         }
         else {
-          // The Trung card specifies that the Infiltrate SA is performed first
-          // so we must check that the Op is possible so we do not allow the SA only.
-          val opPossible = checkOpPossible {
-            // The special activity may influence whether or not the Op can be carried out
-            if (params.addSpecialActivity)
-              doSpecialActivity(true)
+          val didSpecial = params.addSpecialActivity && doSpecialActivity(true)
+          val operation = NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false)
 
-            NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false).nonEmpty
-          }
-
-          if (opPossible) {
-            val didSpecial = params.addSpecialActivity && doSpecialActivity(true)
-            NVA_Bot.marchOp(params, marchActNum, withLoC = true, withLaosCambodia = false)
+          if (didSpecial || operation.nonEmpty)
             TrungComplete(didSpecial)
-          }
           else
             TrungNoOp
         }
@@ -8769,7 +8594,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
 
       def doSpecialActivity(op: InsurgentOp): Boolean = {
         if (op == March && VC_Bot.canFollowMarchWithAmbush) {
@@ -8837,7 +8662,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean =
         VC_Bot.subvertActivity(params)
 
@@ -8895,7 +8720,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean =
         VC_Bot.subvertActivity(params)
 
@@ -8956,7 +8781,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
         if (VC_Bot.canFollowMarchWithAmbush) {
           ambushActivity(VC, VC_Bot.vcMarchAmbushCandidates, March, actNum, params, false)
@@ -9016,7 +8841,7 @@ object Bot {
     // ------------------------------------------------------------
     // Back Operation
     // ------------------------------------------------------------
-    def executeBack(params: Params): TrungResult = {
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
       def doSpecialActivity(): Boolean = {
         (VC_Bot.patronage_GE_17 && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
       }
@@ -9038,47 +8863,36 @@ object Bot {
   // ---------------------------------------------------------------
   object Trung_VC_Z extends TrungCard(VC, "Z", actNum = 2) {
 
-    def doSpecialActivity(params: Params): Boolean = {
-      (VC_Bot.patronage_GE_17 && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
-    }
-
     // ------------------------------------------------------------
     // Front Operation
     // ------------------------------------------------------------
     def executeFront(params: Params): TrungResult = {
+      def doSpecialActivity(): Boolean = {
+        (VC_Bot.patronage_GE_17 && VC_Bot.subvertActivity(params)) || VC_Bot.taxActivity(params)
+      }
 
       if (!VC_Bot.fifteenPlusVCGuerrilasOnMap)
         TrungDraw
       else if (params.specialActivityOnly) {
         // No need to check the flip card condition
         // for special activity only
-        if (doSpecialActivity(params))
+        if (doSpecialActivity())
           TrungComplete(true)
         else
           TrungNoOp
       }
       else {
+        val specialDone = params.addSpecialActivity && doSpecialActivity()
+
         if (VC_Bot.threePlusGuerrillasInSpace) {
-          // The Trung card specifies that the Infiltrate SA is performed first
-          // so we must check that the Op is possible so we do not allow the SA only.
-          val opPossible = checkOpPossible {
-            // The special activity may influence whether or not the Op can be carried out
-            if (params.addSpecialActivity)
-              doSpecialActivity(params)
-
-            VC_Bot.marchOp(params, actNum).nonEmpty
-          }
-
-          if (opPossible) {
-            val didSpecial = params.addSpecialActivity && doSpecialActivity(params)
-            VC_Bot.marchOp(params, actNum)
-            TrungComplete(didSpecial)
-          }
+          val operation = VC_Bot.marchOp(params, actNum)
+          if (specialDone || operation.nonEmpty)
+            TrungComplete(specialDone)
           else
             TrungNoOp
         }
         else
-          flipCard(params)
+          flipCard(params, specialDone)
       }
     }
 
@@ -9090,28 +8904,16 @@ object Bot {
     //         If the Special Activity was done and we cannot find
     //         any valid spaces for the Operation we must still
     //         return TrungComplete(true)
-    def executeBack(params: Params): TrungResult = {
-      // The Trung card specifies that the Infiltrate SA is performed first
-      // so we must check that the Op is possible so we do not allow the SA only.
-      val opPossible = checkOpPossible {
-        // The special activity may influence whether or not the Op can be carried out
-        if (params.addSpecialActivity)
-          doSpecialActivity(params)
+    def executeBack(params: Params, specialDone: Boolean): TrungResult = {
+      val operation = if (VC_Bot.undergroundAtNoActiveOpposition)
+        VC_Bot.terrorOp(params, actNum)
+      else
+        VC_Bot.marchOp(params, actNum)
 
-        if (VC_Bot.undergroundAtNoActiveOpposition)
-          VC_Bot.terrorOp(params, actNum).nonEmpty
-        else
-          VC_Bot.marchOp(params, actNum).nonEmpty
-      }
-
-      if (opPossible) {
-        val didSpecial = params.addSpecialActivity && doSpecialActivity(params)
-        if (VC_Bot.undergroundAtNoActiveOpposition)
-          VC_Bot.terrorOp(params, actNum)
-        else
-          VC_Bot.marchOp(params, actNum)
-          TrungComplete(didSpecial)
-      }
+      // This special activity will have been done on the front
+      // of the card
+      if (operation.nonEmpty || specialDone)
+        TrungComplete(specialDone)
       else
         TrungNoOp
     }

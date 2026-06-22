@@ -6083,7 +6083,10 @@ object FireInTheLake {
       path    <- glob(gamesDir/name/"save-*")
       saveNum <- getSaveFileNumber(path)
               if saveNum >= num
-    } path.delete()
+    } {
+      path.sub("save-", "log-").delete()
+      path.delete()
+    }
   }
 
 

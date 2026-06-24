@@ -84,7 +84,8 @@ object Card_092 extends EventCard(92, "SEALORDS",
   }
 
   def canAssultOrSweep(faction: Faction)(sp: Space) =
-    canAssault(faction)(sp) || canSweep(faction)(sp)
+    canAssault(faction)(sp) ||
+    canSweep(faction)(sp)
 
   val unshadedCandidate = (sp: Space) =>
     canAssultOrSweep(ARVN)(sp) ||

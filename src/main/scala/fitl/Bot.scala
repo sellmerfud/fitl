@@ -2738,7 +2738,8 @@ object Bot {
       
       if (!exhausted) {
         // For Air Lift don't allow moving into any origin space
-        val prohibited = if (action == AirLift)
+        // Transport will only have on origin, but should never move in place in that origin.
+        val prohibited = if (action == AirLift || action == Transport)
           moveDestinations.toSet ++ notReachable ++ allOrigins
         else
           moveDestinations.toSet ++ notReachable

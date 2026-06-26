@@ -61,7 +61,7 @@ object Card_092 extends EventCard(92, "SEALORDS",
           NVA  -> (Performed   -> Shaded),
           VC   -> (Ignored -> Shaded))) {
 
-  val adjacentToCanTho = spaces(getAdjacent(CanTho))
+  def adjacentToCanTho = spaces(getAdjacent(CanTho))
   val SweepOp   = "Sweep"
   val AssaultOp = "Assault"
   val Ops       = SweepOp::AssaultOp::Nil

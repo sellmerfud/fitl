@@ -3256,7 +3256,7 @@ object Bot {
 
           log(s"\n$US selects ${sp.name} for Train")
           log(separator())
-          if (game.trackResources(ARVN))
+          if (game.trackResources(ARVN) && !params.free)
             decreaseResources(ARVN, 3)
           placePieces(sp.name, toPlace)
           needArvnCheck = true
@@ -3277,7 +3277,7 @@ object Bot {
 
           log(s"\n$US selects ${sp.name} for Train")
           log(separator())
-          if (game.trackResources(ARVN))
+          if (game.trackResources(ARVN) && !params.free)
             decreaseResources(ARVN, 3)
           placePieces(sp.name, toPlace)
           needArvnCheck = true
@@ -4784,7 +4784,7 @@ object Bot {
 
             log(s"\n$ARVN selects ${sp.name} for Train")
             log(separator())
-            if (game.trackResources(ARVN))
+            if (game.trackResources(ARVN) && !params.free)
               decreaseResources(ARVN, 3)
 
             placePieces(sp.name, toPlace)
@@ -4810,7 +4810,7 @@ object Bot {
 
             log(s"\n$ARVN selects ${sp.name} for Train")
             log(separator())
-            if (game.trackResources(ARVN))
+            if (game.trackResources(ARVN) && !params.free)
               decreaseResources(ARVN, 3)
             placePieces(sp.name, toPlace)
             trainingSpaces += sp.name
@@ -4843,7 +4843,7 @@ object Bot {
         var placedBase = false
         if (game.availablePieces.has(ARVNBase) && baseCandidates.nonEmpty) {
           val sp = pickSpacePlaceBases(baseCandidates)
-          val mustPay = game.trackResources(ARVN) && !trainingSpaces(sp.name)
+          val mustPay = game.trackResources(ARVN) && !params.free && !trainingSpaces(sp.name)
           // If we have not already trained in this space and we are
           // tracking ARVN resources, make sure there is cash in the bank.
           if (!mustPay || game.arvnResources >= 3) {
@@ -4916,7 +4916,7 @@ object Bot {
     //  M48Patton_Shaded - After US/ARVN patrol NVA removes up to 2 cubes that moved (US to casualties)
     //  Mo_BodyCount     - Cost=0 AND +3 Aid per guerrilla removed
     def patrolOp(params: Params): Option[CoinOp] = {
-      if (momentumInPlay(Mo_BodyCount) || !game.trackResources(ARVN) || game.arvnResources >= 3 ) {
+      if (momentumInPlay(Mo_BodyCount) || params.free || !game.trackResources(ARVN) || game.arvnResources >= 3 ) {
         // Select a LoC Patrol destination candidate
         // ARVN Patrol never needs an activation roll
         val nextPatrolCandidate: MoveDestGetter = (lastWasSuccess, needActivation, prohibited) => {
@@ -4932,7 +4932,7 @@ object Bot {
         if (!params.event)
           logOpChoice(ARVN, Patrol)
 
-        if (!momentumInPlay(Mo_BodyCount) && game.trackResources(ARVN))
+        if (!momentumInPlay(Mo_BodyCount) && !params.free && game.trackResources(ARVN))
           decreaseResources(ARVN, 3)
         movePiecesToDestinations(
           ARVN,

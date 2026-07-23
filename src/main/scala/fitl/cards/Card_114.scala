@@ -129,7 +129,9 @@ object Card_114 extends EventCard(114, "Tri Quang",
         decreaseSupport(sp.name, 1)
   
       log()
-      placePieces(Saigon, toPlace)
+      toPlace.explode()
+      if (toPlace.nonEmpty)
+        placePiecesOnMap(faction, 1, toPlace.explode(), validSpaces = List(Saigon))
     }
   }
 }

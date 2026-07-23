@@ -67,7 +67,7 @@ object Card_081 extends EventCard(81, "CIDG",
     game.totalOnMap(_.pieces.totalOf(VCGuerrillas)) > 0 &&
     game.availablePieces.has(CoinTypes)
 
-  def humanReplacements(numRemaining: Int): Unit = if (numRemaining > 0) {
+  def humanReplacements(faction: Faction, numRemaining: Int): Unit = if (numRemaining > 0) {
     val avail   = game.availablePieces.only(CoinTypes)
     val toPlace = game.piecesToPlace.only(CoinTypes)
     val replacements = if (avail.nonEmpty)
@@ -96,8 +96,9 @@ object Card_081 extends EventCard(81, "CIDG",
       Pieces()
       
     removePieces(name, guerrilla)
-    placePieces(name, replacement)
-    humanReplacements(numRemaining - 1)
+    if (replacement.nonEmpty)
+      placePiecesOnMap(faction, 1, replacement.explode(), validSpaces = List(name))
+    humanReplacements(faction, numRemaining - 1)
   }
 
   def botReplacements(faction: Faction, numRemaining: Int): Unit = if (numRemaining > 0) {
@@ -122,7 +123,7 @@ object Card_081 extends EventCard(81, "CIDG",
 
     loggingControlChanges {
       if (game.isHuman(faction))
-        humanReplacements(num)
+        humanReplacements(faction, num)
       else
         botReplacements(faction, num)
     }

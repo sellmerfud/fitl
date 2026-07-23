@@ -77,7 +77,7 @@ object Card_074 extends EventCard(74, "Lam Son 719",
 
       if (finalNum > 0) {
         val name = askSimpleMenu(choices, "\nPlace ARVN Troops in which space:").head
-        placePieces(name, Pieces().set(finalNum, ARVNTroops))
+        placePiecesOnMap(faction, finalNum, List(ARVNTroops), validSpaces = List(name))
         name
       }
       else

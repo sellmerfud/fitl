@@ -91,7 +91,7 @@ object Card_068 extends EventCard(68, "Green Berets",
         loggingControlChanges {
           val num = Human.numToPlace(forceType, 3)
           val pieces = Pieces().set(num, forceType)
-          placePieces(name, pieces)
+          placePiecesOnMap(faction, num, List(forceType), validSpaces = List(name))
           setSupport(name, ActiveSupport)
         }
       }

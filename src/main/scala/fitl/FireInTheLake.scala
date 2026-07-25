@@ -3119,6 +3119,11 @@ object FireInTheLake {
     val desc = "Roll back to the start of any turn"
   }
 
+  object InspectCmd extends Command {
+    val name = "inspect"
+    val desc = "Inspect the game state at a previous save point."
+  }
+
   object QuitCmd extends Command {
     val name = "quit"
     val desc = "Quit the game.  All plays for the current turn will be saved."
@@ -3129,7 +3134,7 @@ object FireInTheLake {
     val desc = "List available commands"
   }
 
-  val CommonCmds = List(ShowCmd, HistoryCmd, RollbackCmd, AdjustCmd, HelpCmd, QuitCmd)
+  val CommonCmds = List(ShowCmd, HistoryCmd, RollbackCmd, InspectCmd, AdjustCmd, HelpCmd, QuitCmd)
 
 
   def doCommonCommand(cmd: Command, param: Option[String]): Unit = {
@@ -3137,6 +3142,7 @@ object FireInTheLake {
       case ShowCmd     => showCommand(param)
       case HistoryCmd  => showHistory(param)
       case RollbackCmd => rollback(param)
+      case InspectCmd  => inspect()
       case AdjustCmd   => adjustSettings(param)
       case QuitCmd     => if (askYorN("Really quit (y/n)? ")) throw ExitGame
       case HelpCmd     => // Handled in the askCommand() function
@@ -4181,7 +4187,7 @@ object FireInTheLake {
   // This function does not return!
   // It can throw either ExitGame, or Rollback exceptions.
   def endgameCommand(): Unit = {
-    val Commands = List(ShowCmd, HistoryCmd, RollbackCmd, HelpCmd, QuitCmd)
+    val Commands = List(ShowCmd, HistoryCmd, RollbackCmd, InspectCmd, HelpCmd, QuitCmd)
 
     val opts      = orList(List("quit", "?"))
     val prompt = {
@@ -6014,67 +6020,127 @@ object FireInTheLake {
     }
   }
 
-  // Allows the user to roll back to the beginning of any turn.
-  def rollback(input: Option[String]): Unit = {
-
-    try {
+  // Returns (savePoint, pageNum)
+  // `savePoint` the saveNumber of turn to roll back to.
+  // `pageNum` is the current page that was show when the user made a
+  // selection.  It is used so that this funciton call be called again
+  // if necessary showing the same page for consistency.
+  def askSavePoint(prompt: String, startPage: Int): Option[(Int, Int)] = {
+      try {
       val pages = game.history.reverse.drop(1).sliding(25, 25).toList
       val firstPage = 0
-      val lastPage  = pages.size -1
+      val lastPage  = pages.size - 1
       val PAGE_UP   = -1
       val PAGE_DOWN = -2
       val CANCEL    = -3
 
-      def showPage(pageNum: Int): Unit = {
-        val saveChoices: List[(Int, (String, Seq[String]))] = pages(pageNum).toList map {
-          case GameSegment(save_number, card, summary) => save_number -> (s"Save point ${save_number} [$card]", summary)
+      def showPage(pageNum: Int): Option[(Int, Int)] = {
+        val width = longestString(pages(pageNum).map(_.save_number.toString))
+        val fmt = s"%${width}d"
+        val saveChoices: List[(Int, (String, Seq[String]))] = pages(pageNum)
+          .toList
+          .map {
+          case GameSegment(save_number, card, summary) => 
+            save_number -> (s"[Save point $fmt] [$card]".format(save_number), summary)
         }
         val otherChoices: List[(Int, (String, Seq[String]))] = List(
           choice(pageNum > firstPage, PAGE_UP,   "Page up, show newer save points ", Seq.empty),
           choice(pageNum < lastPage,  PAGE_DOWN, "Page down, show older save points ", Seq.empty),
-          choice(true,                CANCEL,    "Cancel, do not roll back ", Seq.empty)
+          choice(true,                CANCEL,    "Cancel ", Seq.empty)
         ).flatten
 
         val current = game.history.last
-        println()
-        wrap(s"Current save point: ${current.save_number} [${current.card}] ", current.summary) foreach (l => println(l))
-        println("\nRollback to the beginning of a previous save point.")
-        println("The save points are displayed with the most recent first.")
+        displayLine("The save points are displayed with the most recent first.", Color.Info)
 
         askMenuWithWrap(saveChoices:::otherChoices, "Choose a save point:").head match {
-          case CANCEL      =>
+          case CANCEL      => None
           case PAGE_UP     => showPage(pageNum - 1)
           case PAGE_DOWN   => showPage(pageNum + 1)
-          case save_number =>
-            if (askYorN(s"Are you sure you want to rollback to this save point? (y/n) ")) {
-              // Games are saved at the end of the turn, so we actually want
-              // to load the file with turnNumber -1.
-              val name         = gameName.get
-              val oldGameState = game
-              loadGameState(name, save_number)
-              saveGameDescription()  // Update the description file
-
-              // Remove all safe files that succeed this one.
-              // We are exploring anew
-              removeSaveFiles(name, save_number + 1)
-              displayGameStateDifferences(oldGameState, game)
-              throw Rollback
-            }
-            else
-              showPage(pageNum)
+          case save_number => Some(save_number -> pageNum)
         }
       }
 
       if (game.history.size > 1)
-        showPage(0)
-      else
+        showPage(startPage)
+      else {
         println("\nThere are no previous save points")
+        None
+      }
     }
     catch {
-      case AbortAction =>
+      case AbortAction => None
     }
   }
 
+  // Allows the user to roll back to the beginning of any turn.
+  def rollback(input: Option[String]): Unit = {
+    val prompt = "Roll back to replay starting at which save point:"
+
+    def promptUser(startPage: Int): Option[Int] = {
+      displayLine("\nRollback to the beginning of a selected save point.", Color.Info)
+      askSavePoint(prompt, 0) match {
+        case Some((saveNumber, pageNum)) =>
+          if (askYorN(s"Are you sure you want to rollback to this save point? (y/n) "))
+            Some(saveNumber)
+          else
+            promptUser(pageNum)
+        case None =>
+          None
+      }
+    }
+    
+    promptUser(0)
+      .foreach { saveNumber =>
+        val name = gameName.get
+        val target = saveNumber // - 1 // We actually load the previous savePoint
+        val oldGameState = game
+        val segment = game.history.find(_.save_number == saveNumber).get
+        displayLine(s"\nRolling back to start of [Save point ${segment.save_number}] ${segment.summary.head}", Color.Info)
+        loadGameState(name, target)
+        saveGameDescription()  // Update the description file
+
+        // Remove all safe files that succeed this one.
+        // We are exploring anew
+        removeSaveFiles(name, target + 1)
+        displayGameStateDifferences(oldGameState, game)
+        throw Rollback
+      }
+  }
+
+  // Allow the user to select a save point.
+  // Then they can use the show command to explore the
+  // game state at that save point.
+  def inspect(): Unit = {
+    // Pronpt for what to show while inspecting a seleted save point
+    def inspectPrompt(segment: GameSegment): Unit = {
+      displayLine(s"\nInspecting prior to [Save point ${segment.save_number}] ${segment.summary.head}", Color.Info)
+      displayLine(separator(), Color.Info)
+      readLine("Inspect (blank to cancel): ") match {
+        case null | "" =>
+        case input =>
+          showCommand(Some(input))
+          inspectPrompt(segment)
+      }
+    }
+
+    def nextInspect(startPage: Int): Unit = {
+      val prompt = "Inspect which save point:"
+      displayLine("\nInspect the game at the start of a selected save point.", Color.Info)
+      askSavePoint(prompt, startPage) match {
+        case Some((saveNumber, pageNum)) =>
+          val segment = game.history.find(_.save_number == saveNumber).get
+          val target = saveNumber // - 1
+          val oldGameState = game
+          loadGameState(gameName.get, target)
+          inspectPrompt(segment)
+          game = oldGameState
+          nextInspect(pageNum)
+        case None =>
+      }
+    }
+
+    nextInspect(0)
+  }  
   // Remove turn files starting with the given save file number and all
   // those that follow that number.
   def removeSaveFiles(name: String, num: Int): Unit = {

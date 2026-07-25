@@ -81,23 +81,21 @@ object Card_012 extends EventCard(12, "Capt Buck Adams",
       removePiecesFromMap(faction, 1, Set(NVABase), false, spaceNames(baseSpaces))
   }
 
+  val isNVABaseCandidate = (sp: Space) =>
+      isOutsideSouth(sp.name) &&
+      sp.canTakeBase &&
+      sp.nvaControlled
     
   def shadedEffective(faction: Faction): Boolean = {
     val baseAvail = game.availablePieces.has(NVABase)
-    val canPlaceBase = game.spaces.exists { sp =>
-      isOutsideSouth(sp.name) &&
-      sp.totalBases < 2 &&
-      sp.nvaControlled
-    }
+    val canPlaceBase = game.spaces.exists(isNVABaseCandidate)
 
     (baseAvail && canPlaceBase) ||
     (game totalOnMap (_.pieces.totalOf(NVAGuerrillas_A))) > 0
   }
 
   def executeShaded(faction: Faction): Unit = {
-    val baseSpaces = game.spaces filter { sp =>
-      isOutsideSouth(sp.name) && sp.totalBases < 2
-    }
+    val baseSpaces = game.spaces.filter(isNVABaseCandidate)
     def guerrillaSpaces = game.spaces filter (sp => sp.pieces.has(NVAGuerrillas_A))
 
     def humanFlip(numRemaining: Int): Unit = if (numRemaining > 0) {

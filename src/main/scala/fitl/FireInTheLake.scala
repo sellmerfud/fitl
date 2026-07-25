@@ -5172,28 +5172,19 @@ object FireInTheLake {
   }
 
 
-
-  // Returns comma separated string with last choice separated by "and"
+  // Returns comma separated string with last choice separated by given conjunction
   //    List("apples")                      => "apples"
   //    List("apples", "oranges")           => "apples and oranges"
   //    List("apples", "oranges", "grapes") => "apples, oranges and grapes"
-  def andList(x: Iterable[Any]) = x.to(Seq) match {
+  def conjunctionList(x: Iterable[Any], conjunction: String) = x.to(Seq) match {
     case Seq()     => ""
     case Seq(a)    => a.toString
-    case Seq(a, b) => s"${a.toString} and ${b.toString}"
-    case s         => s.dropRight(1).mkString(", ") + ", and " + s.last.toString
+    case Seq(a, b) => s"${a.toString} $conjunction ${b.toString}"
+    case s         => s.dropRight(1).mkString(", ") + s", $conjunction " + s.last.toString
   }
 
-  // Returns comma separated string with last choice separated by "or"
-  //    List("apples")                      => "apples"
-  //    List("apples", "oranges")           => "apples or oranges"
-  //    List("apples", "oranges", "grapes") => "apples, oranges or grapes"
-  def orList(x: Seq[Any]) = x match {
-    case Seq()     => ""
-    case Seq(a)    => a.toString
-    case Seq(a, b) => s"${a.toString} or ${b.toString}"
-    case _         => x.dropRight(1).mkString(", ") + ", or " + x.last.toString
-  }
+  def andList(x: Iterable[Any]) = conjunctionList(x, "and")
+  def orList(x: Seq[Any]) = conjunctionList(x, "or")
 
   def pluralize(num: Int, name: String, optPlural: Option[String] = None): String = {
     val plural = optPlural getOrElse { if (name endsWith "s") s"${name}es" else s"${name}s" }
@@ -5324,6 +5315,12 @@ object FireInTheLake {
     summary foreach (msg => log(msg, echo = echo))
   }
 
+  def longestString(strings: Seq[String]): Int =
+    if (strings.isEmpty)
+      0
+    else
+      strings.map(_.length).max
+
   def padLeft(x: Any, width: Int) = "%%-%ds".format(width).format(x.toString)
 
   // Get ordinal number.  Good for 1 to 20.
@@ -5340,6 +5337,7 @@ object FireInTheLake {
   // otherwise either use the plural if given or add an 's' to the name.
   def amountOf(num: Int, name: String, plural: Option[String] = None) = s"$num ${pluralize(num, name, plural)}"
   def amtPiece(num: Int, pieceType: PieceType) = amountOf(num, pieceType.singular, Some(pieceType.plural))
+  def amtGenericPiece(num: Int, pieceType: PieceType) = amountOf(num, pieceType.genericSingular, Some(pieceType.genericPlural))
 
   //  Show user the changes need to the physical game board when changing from
   //  one game state another.  This happens when the user aborts in the middle of a turn,

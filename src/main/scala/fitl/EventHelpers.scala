@@ -241,86 +241,19 @@ object EventHelpers {
     spacesUsed
   }
 
-  // Place pieces from available
+  // Called by events to place pieces on the map from the Available Box.
+  // For human players, they are givent the chance to voluntarily remove
+  // pieces from the map to the Available Box if necessary.
   // Returns the set of spaces where pieces were placed
-  def placePiecesOnMap(faction: Faction, numToPlace: Int, pieceTypes: Iterable[PieceType],
-                          validSpaces: Iterable[String]): Set[String] = {
-    val validNames = validSpaces.to(Set)
-    val isValid = (sp: Space) => validNames(sp.name)
-    val canTakeBase  = (sp: Space) => isValid(sp) && sp.totalBases < 2
-    val desc = andList((pieceTypes.to(List) map (_.genericPlural)).distinct)
-    var spacesUsed = Set.empty[String]
-
-    def nextHumanPlacement(numRemaining: Int): Unit = if (numRemaining > 0) {
-      val bases      = game.piecesToPlace.only(pieceTypes).only(BasePieces)
-      val forces     = game.piecesToPlace.only(pieceTypes).except(BasePieces)
-      val candidates = if (forces.nonEmpty)
-        spaceNames(game.spaces filter isValid)
-      else
-        spaceNames(game.spaces filter canTakeBase)
-
-      if (candidates.nonEmpty) {
-        println(s"\nPlacing pieces from AVAILABLE")
-        println(separator())
-        println(s"Selecting among: $desc")
-        println(s"Number placed  : ${numToPlace - numRemaining} of ${numToPlace}")
-        val name      = askCandidate(s"\nPlace pieces in which space: ", candidates)
-        val sp        = game.getSpace(name)
-        val placeBase = bases.nonEmpty && canTakeBase(sp) &&
-                        askYorN(s"Do you wish to place a base in $name? (y/n) ")
-        val pieces    = if (placeBase)
-          askToPlaceBase(name, bases.explode().head)
-        else
-          askPiecesToPlace(name, forces.getTypes, numRemaining)
-        if (pieces.nonEmpty) {
-          println()
-          placePieces(name, pieces)
-          spacesUsed += name
-        }
-        nextHumanPlacement(numRemaining - pieces.total)
-      }
-    }
-
-    def nextBotPlacement(numRemaining: Int, availPieces: Pieces): Unit = if (numRemaining > 0 && availPieces.nonEmpty) {
-      val piece = Bot.selectFriendlyToPlaceOrMove(availPieces, 1)
-      val optSpace = if (piece.has(BasePieces)) {
-        val candidates = game.spaces filter canTakeBase
-        if (candidates.nonEmpty)
-          Some(Bot.pickSpacePlaceBases(faction)(candidates))
-        else
-          None
-      }
-      else {
-        val candidates = game.spaces filter isValid
-        if (candidates.nonEmpty) {
-          val isTroop = piece.has(USTroops::NVATroops::ARVNTroops::Nil)
-          Some(Bot.pickSpacePlaceForces(faction, isTroop)(candidates))
-        }
-        else
-          None
-      }
-      optSpace match {
-        case Some(sp) =>
-          placePieces(sp.name, piece)
-          spacesUsed += sp.name
-          nextBotPlacement(numRemaining - 1, availPieces - piece)
-        case None =>
-          // It is possible that there are base available but no
-          // space can accomodate a base, so remove the piece from
-          // consideration and continue
-          nextBotPlacement(numRemaining, availPieces - piece)
-      }
-    }
-
-    loggingControlChanges {
-      if (game.isHuman(faction))
-        nextHumanPlacement(numToPlace min game.piecesToPlace.only(pieceTypes).total)
-      else
-        nextBotPlacement(numToPlace, game.availablePieces.only(pieceTypes))
-    }
-    spacesUsed
-  }
-
+  def placePiecesOnMap(
+    faction: Faction,
+    numToPlace: Int,
+    pieceTypes: Iterable[PieceType],
+    validSpaces: Iterable[String]): Set[String] = if (game.isHuman(faction))
+      Human.placePiecesOnMap(faction, numToPlace, pieceTypes, validSpaces)
+    else
+      Bot.placePiecesOnMap(faction, numToPlace, pieceTypes, validSpaces)
+    
 
   // Place pieces from Casualties
   // Returns the set of spaces where pieces were placed

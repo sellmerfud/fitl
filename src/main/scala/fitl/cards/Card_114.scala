@@ -101,37 +101,26 @@ object Card_114 extends EventCard(114, "Tri Quang",
     (game.availablePieces.has(VCBase) && game.getSpace(Saigon).canTakeBase)
 
   def executeShaded(faction: Faction): Unit = {
-    val saigon   = game.getSpace(Saigon)
-    val pool     = if (game.isHuman(faction) && faction == VC) game.piecesToPlace else game.availablePieces
-    val haveBase = pool.has(VCBase) && saigon.canTakeBase
-    val haveG    = pool.has(VCGuerrillas_U)
-
-    val toPlace = if (game.isHuman(faction)) {
-      (haveBase, haveG) match {
-        case (true, true) =>
-          val choices = List(Pieces(vcBases = 1) -> "VC Base", Pieces(vcGuerrillas_U = 1) -> "VC Guerrilla")
-          askMenu(choices, "\nChoose piece to place in Saigon").head
-        case (true, false)  => Pieces(vcBases = 1)
-        case (false, true)  => Pieces(vcGuerrillas_U = 1)
-        case (false, false) => Pieces()
-      }
-    }
-    else if (haveBase && (saigon.support < PassiveSupport || !haveG))
-      Pieces(vcBases = 1)
-    else if (haveG)
-      Pieces(vcGuerrillas_U = 1)
-    else
-      Pieces()
-    
     println()
     loggingControlChanges {
       for (sp <- shadedCandidates)
         decreaseSupport(sp.name, 1)
   
       log()
-      toPlace.explode()
-      if (toPlace.nonEmpty)
-        placePiecesOnMap(faction, 1, toPlace.explode(), validSpaces = List(Saigon))
+      if (game.isHuman(faction))
+        placePiecesOnMap(faction, 1, List(VCGuerrillas_U, VCBase), List(Saigon))
+      else {
+        val saigon   = game.getSpace(Saigon)      
+        val haveBase = game.availablePieces.has(VCBase) && saigon.canTakeBase
+        val haveG    = game.availablePieces.has(VCGuerrillas_U)
+        val toPlace = if (haveBase && (saigon.support < PassiveSupport || !haveG))
+          Pieces(vcBases = 1)
+        else if (haveG)
+          Pieces(vcGuerrillas_U = 1)
+        else
+          Pieces()
+        placePieces(Saigon, toPlace)
+      }    
     }
   }
 }

@@ -51,7 +51,7 @@ object Human {
   private var pt76_shaded_used   = false       // NVA attack in one space
   private var m48PattonSpaces    = List.empty[String]
   private var abramsUnshadedUsed = false       // Abrams may only be used in one Assault space per turn
-  
+
   def canUseAbramsUnshaded(faction: Faction) = faction == US && capabilityInPlay(Abrams_Unshaded) && !abramsUnshadedUsed
 
   def logOpChoice(faction: Faction, op: Operation, notes: Iterable[String] = Nil): Unit = {
@@ -117,7 +117,7 @@ object Human {
     def cancelled() = specialTaken = false
   }
 
-  
+
   // Used by events that allow a faction to choose a special activity.
   def chooseSpecialActivity(faction: Faction, only: Set[SpecialActivity] = AllSpecials): SpecialActivity = {
     val (allowedActivities, notes) = allowedSpecialActivities(FactionSpecials(faction).filter(only))
@@ -156,7 +156,7 @@ object Human {
       .getOrElse {
         if (momentumInPlay(Mo_TyphoonKate)) {
           displayLine("\nAmbush may only affect 1 space [Momentum: $Mo_TyphoonKate]", Color.Event)
-          1 
+          1
         }
         else
           2
@@ -200,8 +200,8 @@ object Human {
 
         case _ =>
       }
-    }  
-    
+    }
+
     if (ambushCandidates.isEmpty)
       displayLine(s"\nThere are no spaces where $faction can successfully ambush", Color.Event)
     else
@@ -217,7 +217,7 @@ object Human {
   // they wish to place and have them make up the difference
   // by voluntarily removing pieces from the map.
   // Returns the final number of piece to be placed.
-  // 
+  //
   // This should not be called with US Troops/Bases
   def numToPlace(pieceType: PieceType, num: Int): Int = {
     val numToPlace = game.piecesToPlace.totalOf(pieceType) min num
@@ -784,7 +784,7 @@ object Human {
             val toRemove = askPieces(sp.pieces, 2, VCGuerrillas, Some(s"Remove guerrillas for [$Cadres_Unshaded]"))
             removeToAvailable(name, toRemove)
           }
-          
+
           if (!free)
             decreaseResources(VC, num)
           removeTerror(name, num min sp.terror)
@@ -853,7 +853,7 @@ object Human {
     if (numPieces > 0) {
       val prompt = "Choose US Pieces to remove from Out of Play"
       val pieces = askPieces(game.outOfPlay, numPieces, USPieces, Some(prompt))
-      placeInCity(pieces)      
+      placeInCity(pieces)
     }
     else
       log("There are no US pieces in the Out of Play box.")
@@ -1050,7 +1050,7 @@ object Human {
       Event
     else
       askMenu(actionMenuItems, "\nChoose one:").head
-    
+
     action match {
       case Event         => executeEvent(faction)
       case OpPlusSpecial => executeOp(faction, Params(addSpecialActivity = true))
@@ -1697,13 +1697,13 @@ object Human {
       logSAChoice(ARVN, Govern, notes)
 
     nextGovernAction()
-    
+
     //  Young turks always applies if in play
     if (young_turks) {
       log(s"$RVN_Leader_YoungTurks leader effect triggers", Color.Event)
       increasePatronage(2)
     }
-    
+
   }
 
   // ARVN special activity
@@ -1930,12 +1930,12 @@ object Human {
       loggingControlChanges {
         if (sp.support < Neutral)
           increaseSupport(name, 1)
-  
+
         if (sp.pieces.has(VCPieces)) {
           log()
           val vcPiece = askPieces(sp.pieces, 1, VCBases:::VCGuerrillas,  Some("Selecting a VC piece to replace"))
           val nvaType = getInsurgentCounterPart(vcPiece.explode().head)
-  
+
           if (vcPiece.has(VCBases)) {
             removeToAvailable(name, vcPiece)
             ensurePieceTypeAvailable(NVABase, 1)
@@ -2897,7 +2897,7 @@ object Human {
     val moveDesc        = andList(moveTypes)
 
     def canSpecial = Special.allowed
-    
+
     def moveTroopsTo(destName: String, count: Int): Unit = {
       val candidates = spaceNames(sweepSources(destName, faction, alreadyMoved))
       val choices = (candidates map (name => name -> name)) :+ ("finished" -> s"Finished moving troops to $destName")
@@ -2986,7 +2986,7 @@ object Human {
     }
 
     def resolveSweepSpaces(sweepCandidates: List[String]): Unit = {
-      
+
       def resolveSweep(name: String): Unit = {
         if (!activateGuerrillasForSweep(name, faction, params.cubeTreatment))
           log(s"\nNo guerrillas were activated in $name")
@@ -2994,7 +2994,7 @@ object Human {
           cobrasSpaces = cobrasSpaces + name
         checkShadedBoobyTraps(name, faction)
       }
-      
+
       if (sweepCandidates.nonEmpty) {
         if (canSpecial) {
           val topChoices = List(
@@ -3003,16 +3003,16 @@ object Human {
           ).flatten
           val spaceChoices = sweepCandidates.sorted.map(n => n -> s"Resolve Sweep in $n")
           val choices = topChoices ::: spaceChoices
-  
+
           askMenu(choices, "\nSweep activation:").head match {
             case "all" =>
               for (name <- sweepCandidates)
                 resolveSweep(name)
-  
+
             case "special" =>
               executeSpecialActivity(faction, params, specialActivities)
               resolveSweepSpaces(sweepCandidates)
-  
+
             case name =>
               resolveSweep(name)
               resolveSweepSpaces(sweepCandidates.filterNot(_ == name))
@@ -3072,7 +3072,7 @@ object Human {
     val abramsInPlay       = asUS && capabilityInPlay(Abrams_Unshaded)
     val remove1Underground = asUS && capabilityInPlay(SearchAndDestroy_Unshaded)
     val searchDestroy      = capabilityInPlay(SearchAndDestroy_Shaded)  // US and ARVN
-        
+
     def validEnemy(types: Iterable[PieceType]): Iterable[PieceType] =
       params.assault.onlyTarget match {
         case Some(f) => types filter (t => owner(t) == f)
@@ -3084,7 +3084,7 @@ object Human {
       validEnemy(InsurgentNonTunnels)
 
     val addPatton = canUseM48PattonUnshaded(faction, params.cubeTreatment, name) &&
-                    m48PattonCount < 2 && 
+                    m48PattonCount < 2 &&
                     askYorN(s"\nRemove 2 extra pieces in this Assault [$M48Patton_Unshaded]? (y/n) ")
     val pattonLosses = if (addPatton) 2 else 0
     val sp          = game.getSpace(name)
@@ -3106,15 +3106,15 @@ object Human {
         else
           decreaseResources(ARVN, 3)
       }
-      
+
       if (addPatton) {
         log(s"\nUS removes up to 2 extra enemy pieces [$M48Patton_Unshaded]", Color.Event)
-        m48PattonSpaces = name :: m48PattonSpaces        
+        m48PattonSpaces = name :: m48PattonSpaces
       }
 
       log(s"The assault inflicts ${amountOf(totalLosses, "hit")}")
 
-      
+
       // Abrams unshaded
       if (remaining > 0 && baseFirst && !abramsUnshadedUsed &&
           askYorN(s"Do you wish to use the unshaded Abrams capability to remove an insurgent base first? (y/n) ")) {
@@ -3207,7 +3207,7 @@ object Human {
   //    Assault prohibited
   //    This is handled in executeCoinOp()
 
-  
+
   def executeAssault(faction: Faction, params: Params): Unit = {
     val specialActivities = if (faction == US)
       AirLift::AirStrike::Nil
@@ -3223,7 +3223,7 @@ object Human {
     val sdShaded            = asUS && capabilityInPlay(SearchAndDestroy_Shaded)
     var assaultSpaces       = List.empty[String]
     var addedARVNAssault    = false
-    
+
     val isCandidate = (sp: Space) => {
       params.spaceAllowed(sp.name) &&           // If event limits command to certain spaces
       !assaultSpaces.contains(sp.name) &&       // Not already selected
@@ -3610,7 +3610,7 @@ object Human {
     def nextMarchAction(): Unit = {
       val AmbushOpt  = "ambush:(.*)".r
       val MoveOpt    = "move:(.*)".r
-      val candidates = spaceNames(game.spaces filter { sp => 
+      val candidates = spaceNames(game.spaces filter { sp =>
         params.spaceAllowed(sp.name) && !destinations.contains(sp.name)
       })
       val canSelect  = candidates.nonEmpty && destinations.size < maxDestinations
@@ -3867,5 +3867,117 @@ object Human {
     if (canSpecial && askYorN("\nDo you wish to perform a special activity? (y/n) "))
       executeSpecialActivity(faction, params, specialActivities)
 
+  }
+
+  // Place pieces on the map.  Pieces must come from the Available Box if possible.
+  // When there are no pieces of a given PieceType in the Available Box, then the player
+  // may voluntarily remove pieces from the map to the Available Box to then be placed.
+  // The total number of pieces to be placed must be placed as long as there are sufficient
+  // pieces in the Available Box.
+  //
+  // We first determine which space the user wishes to place pieces, then we ask which
+  // PieceType should be placed and how many.  If there are sufficient pieces of this type
+  // in the Available Box, then they are simply added to the space.  If there are not enough
+  // pieces in the Available Box, then we ask if the user would like to voluntarily remove
+  // pieces from the map.  We continue until all of the pieces have been placed, or until
+  // none of the specified piece types are in the Available Box and the user does not wish
+  // to remove any from the map.
+  // Returns the set of spaces where pieces were placed
+  def placePiecesOnMap(
+    faction: Faction,
+    numToPlace: Int,
+    pieceTypes: Iterable[PieceType],
+    validSpaceNames: Iterable[String]): Set[String] = {
+
+    var spacesUsed = Set.empty[String]
+    val basesOnly = pieceTypes.forall(isBase)
+    def validSpaces = validSpaceNames
+      .toList
+      .map(game.getSpace)
+      .filter(sp => !basesOnly || sp.canTakeBase)
+
+    def nextPlacement(numRemaining: Int): Unit = if (numRemaining > 0 && validSpaces.nonEmpty) {
+      // If there are valid pieces in the available box then the user must place them.
+      // If not, then the user may choose to voluntarily remove pieces from the map.
+      val baseTargets = validSpaces.filter(_.canTakeBase)
+      val placementTypes = if (baseTargets.isEmpty)
+        pieceTypes.filterNot(isBase)
+      else
+        pieceTypes
+      val availPieces = game.availablePieces.only(placementTypes)
+      // val mapPieces = game.allPiecesOnMap.normalized.only(placementTypes)
+
+      displayLine(s"\n${amountOf(numRemaining, "placement")} remaining.")
+      val keepGoing = availPieces.nonEmpty || {
+        displayLine(s"\nThere are no ${orList(placementTypes.toSeq.map(_.plural))} in the Available Box", Some(Color.Red))
+        askYorN("Would you like to continue by voluntarily removing pieces from the map? (y/n) ")
+      }
+
+      if (keepGoing) {
+        // Select a target space
+        val name = askCandidate("\nPlace pieces in which space:", spaceNames(validSpaces))
+        printSummary(spaceSummary(name))
+  
+        val baseOK = game.getSpace(name).canTakeBase
+        val typeItems = if (numRemaining == 1)
+          placementTypes
+            .filter(t => baseOK || !isBase(t))
+            .toList
+            .map(t => t -> t.genericSingular)
+        else
+          placementTypes
+            .toList
+            .filter(t => baseOK || !isBase(t))
+            .map(t => t -> t.genericPlural)
+
+        val placementType = if (placementTypes.size == 1)
+          placementTypes.head
+        else
+          askMenu(typeItems, "\nSelect type of piece to place:").head
+  
+        // TODO: Display the number of pieces in the available box
+        val numAvail = availPieces.totalOf(placementType)
+        val verb = if (numAvail == 1) "is" else "are"
+        displayLine(s"\nThere $verb ${amtGenericPiece(numAvail, placementType)} in the Available Box", Some(Color.Green))
+        if (numAvail < numRemaining)
+          displayLine(s"(You may voluntarily remove pieces from the map)", Some(Color.Red))
+
+        val maxNum = if (isBase(placementType))
+          numRemaining min (2 - game.getSpace(name).pieces.totalBases)
+        else
+          numRemaining
+        val num = askInt(s"\nPlace how many ${placementType.genericPlural}", 0, maxNum)
+
+        // If there are not enough pieces in the available box then ask the user to voluntarily
+        // remove pieces
+        if (num > numAvail)
+          voluntaryRemoval(num - numAvail, placementType)
+
+        if (num > 0) {
+          placePieces(name, Pieces().set(num, placementType))
+          spacesUsed += name
+        }
+        nextPlacement(numRemaining - num)
+      }
+    }
+
+    assert(pieceTypes.size > 0, s"Human.placePiecesOnMap() called with no pieceTypes")
+    // No-op if we were called with an empty list of target spaces
+    if (validSpaces.nonEmpty) {
+      val piecesDesc = if (pieceTypes.size == 1)
+        amtPiece(numToPlace, pieceTypes.head)
+      else if (numToPlace == 1)
+        s"1 ${orList(pieceTypes.toSeq.map(_.singular))}"
+      else
+        s"$numToPlace ${conjunctionList(pieceTypes.toSeq.map(_.plural), "and/or")}"
+
+      displayLine(s"\nPlace $piecesDesc on the map.")
+      displayLine(separator())
+      loggingControlChanges {
+        nextPlacement(numToPlace)
+      }
+    }
+
+    spacesUsed
   }
 }

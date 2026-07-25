@@ -8952,4 +8952,70 @@ object Bot {
         TrungNoOp
     }
   }
+
+  def isSafeForBase(faction: Faction)(space: Space): Boolean =
+    faction match {
+      case US => space.pieces.totalOf(USForces) > 1
+      case ARVN => space.pieces.totalOf(ARVNForces) > 1
+      case NVA => space.pieces.totalOf(NVAForces) > 1
+      case VC => space.pieces.totalOf(VCGuerrillas) > 1
+    }
+
+  // Used by events that allow placing one or more pieces of one more types on the map.
+  // The Bots will never voluntarily remove piece from the map.
+
+  def placePiecesOnMap(
+    faction: Faction,
+    numToPlace: Int,
+    pieceTypes: Iterable[PieceType],
+    validSpaceNames: Iterable[String]): Set[String] = {
+
+    var spacesUsed = Set.empty[String]
+    val basesOnly = pieceTypes.forall(isBase)
+
+    def validSpaces = validSpaceNames
+      .toList
+      .map(game.getSpace)
+      .filter(sp => !basesOnly || sp.canTakeBase)
+
+    def availPieces = game.availablePieces.only(pieceTypes)
+
+    def nextPlacement(numRemaining: Int): Unit = if (numRemaining > 0 && availPieces.nonEmpty) {
+      val baseCandidates = validSpaces.filter(_.canTakeBase)
+      val safeBaseCandidates = baseCandidates.filter(isSafeForBase(faction))
+      val availBase = availPieces.has(BasePieces)
+      val availForce = availPieces.has(Forces)
+
+      // piece can be emtpy if we only have available bases, but there are no
+      // spaces that can take a base!  We check this below before calling
+      // placePieces()
+      val piece = if (baseCandidates.isEmpty || (availForce && safeBaseCandidates.isEmpty))
+        Bot.selectFriendlyToPlaceOrMove(availPieces.except(BasePieces), 1)
+      else
+        Bot.selectFriendlyToPlaceOrMove(availPieces, 1)
+
+      val space = if (piece.has(BasePieces))
+        Bot.pickSpacePlaceBases(faction)(baseCandidates)
+      else {
+          val isTroop = piece.has(USTroops::NVATroops::ARVNTroops::Nil)
+          Bot.pickSpacePlaceForces(faction, isTroop)(validSpaces)
+      }
+
+      if (piece.nonEmpty) {
+        placePieces(space.name, piece)
+        spacesUsed += space.name
+        nextPlacement(numRemaining - 1)
+      }
+    }      
+        
+    assert(pieceTypes.size > 0, s"Bot.placePiecesOnMap() called with no pieceTypes")
+    // No-op if we were called with an empty list of target spaces
+    if (validSpaces.nonEmpty) {
+      loggingControlChanges {
+        nextPlacement(numToPlace)
+      }
+    }
+
+    spacesUsed
+  }
 }

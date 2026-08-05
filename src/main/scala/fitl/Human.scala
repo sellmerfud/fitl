@@ -712,13 +712,27 @@ object Human {
 
     log(s"\nPacifying in $name")
     log(separator())
+    if (nguyenCaoKy)
+      log(s"The cost to pacify is $cost per level/terror marker [Leader: $RVN_Leader_NguyenCaoKy]")
+    else if (coupRound && blowtorch)
+      log(s"The cost to pacify is $cost per level/terror marker [Momentum: $Mo_BlowtorchKomer]")
+    else
+      log(s"The cost to pacify is $cost per level/terror marker")
+
     if (momentumInPlay(Mo_BlowtorchKomer))
       log(s"Each terror/shift cost only 1 resource [Momentum: $Mo_BlowtorchKomer]", Color.Event)
     if (maxSupport == PassiveSupport)
       log(s"Cannot shift to Active Suport [$CORDS_Shaded]", Color.Event)
 
     if (maxPossible == 0) {
-      println(s"\nIt is not possible to pacify in $name")
+      displayLine(s"\nIt is not possible to pacify in $name", Color.Event)
+      val reason = if (maxInSpace == 0)
+        s"Already at $maxSupport and no terror marker present"
+      else if (faction == ARVN)
+        s"Only ${amountOf(game.arvnResources, "ARVN resource")} available"
+      else
+        s"Only ${amountOf(game.arvnResources, "ARVN resource")} available and Econ is ${game.econ}"
+      displayLine(reason, Color.Event)
       false
     }
     else {

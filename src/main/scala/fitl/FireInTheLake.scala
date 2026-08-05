@@ -149,7 +149,7 @@ object FireInTheLake {
   //  dual == false and the event condtions and execution use the `unshaded` fields
   abstract class EventCard(
     val number: Int,
-    val name: String,
+    val cardName: String,
     val eventType: EventType,  // single/dual
     val factionOrder: List[Faction],
     val botPriorities: ListMap[Faction, (BotEventPriority, EventPart)]) {
@@ -163,7 +163,7 @@ object FireInTheLake {
 
     val isCoup = factionOrder.isEmpty
 
-    def numAndName = s"#$number - $name"
+    def numAndName = s"#$number - $cardName"
     override def toString() = numAndName
 
     def botPriority(faction: Faction) = botPriorities(faction)._1

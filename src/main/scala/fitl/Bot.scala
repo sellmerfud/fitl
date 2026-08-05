@@ -7309,17 +7309,17 @@ object Bot {
       case DualEvent =>
         card.eventPart(faction) match {
           case Unshaded =>
-            log(s"\n$faction executes the Unshaded Event: ${card.name}")
+            log(s"\n$faction executes the Unshaded Event: ${card.cardName}")
             log(separator())
             card.executeUnshaded(faction)
           case Shaded =>
-            log(s"\n$faction executes the Shaded Event: ${card.name}")
+            log(s"\n$faction executes the Shaded Event: ${card.cardName}")
             log(separator())
             card.executeShaded(faction)
         }
 
       case SingleEvent =>
-        log(s"\n$faction executes the Event: ${card.name}")
+        log(s"\n$faction executes the Event: ${card.cardName}")
         log(separator())
         card.executeUnshaded(faction)
     }
@@ -7339,7 +7339,7 @@ object Bot {
 
     val action = if (game.executingPivotalEvent) {
       //  The Pivotal events are single events which are always in the executeUnshaded() function.
-      log(s"\n$faction executes its Pivotal Event: ${card.name}", Color.Event)
+      log(s"\n$faction executes its Pivotal Event: ${card.cardName}", Color.Event)
       card.executeUnshaded(faction)
       Event
     }

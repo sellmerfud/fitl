@@ -2358,17 +2358,17 @@ object Human {
         val choices = List("Unshaded", "Shaded")
         askSimpleMenu(choices, "\nExecute which part of the event:").head match {
           case "Unshaded" =>
-            log(s"\n$faction executes the Unshaded Event: ${card.name}")
+            log(s"\n$faction executes the Unshaded Event: ${card.cardName}")
             log(separator())
             card.executeUnshaded(faction)
             case _ =>
-            log(s"\n$faction executes the Shaded Event: ${card.name}")
+            log(s"\n$faction executes the Shaded Event: ${card.cardName}")
             log(separator())
             card.executeShaded(faction)
         }
 
       case SingleEvent =>
-        log(s"\n$faction executes the Event: ${card.name}")
+        log(s"\n$faction executes the Event: ${card.cardName}")
         log(separator())
         card.executeUnshaded(faction)
     }

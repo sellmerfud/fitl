@@ -114,7 +114,7 @@ object Card_036 extends EventCard(36, "Hamburger Hill",
       val base = Bot.selectEnemyRemoveReplaceActivate(sp.pieces.only(InsurgentBases), 1)
 
       loggingControlChanges {
-        moveMapPiecesToSpace(US, 4, true, name, Set(USTroops))
+        moveMapPiecesToSpace(US, 4, true, sp.name, Set(USTroops))
         removeToAvailable(sp.name, base)
       }
     }

@@ -96,17 +96,21 @@ object Card_124 extends EventCard(124, "Tet Offensive",
 
     if (sp.terror == 0 && game.terrorMarkersAvailable > 0)
       addTerror(name, 1) // Terror/Sabotage marker
+    else
+      log("There are no Terror/Sabotage markers available", Color.Event)
 
-      if (sp.canHaveSupport && sp.support != ActiveOpposition)
-        decreaseSupport(name, 1)
+    if (sp.canHaveSupport && sp.support != ActiveOpposition)
+      decreaseSupport(name, 1)
   }
 
   def humanTerror(terrorSpaces: List[String]): Unit = {
-    def nextTerror(candiates: List[String]): Unit = {
-      val name = askSimpleMenu(candiates, "\nChoose next space to terrorize:").head
-      terrorizeSpace(name)
-      pause()
-      nextTerror(candiates filterNot (_ == name))
+    def nextTerror(candidates: List[String]): Unit = candidates match {
+      case Nil =>
+      case _ =>
+        val name = askSimpleMenu(candidates, "\nChoose next space to terrorize:").head
+        terrorizeSpace(name)
+        pause()
+        nextTerror(candidates filterNot (_ == name))
     }
     
     println("\nThere are not enough Terror/Sabatoge markers for all spaces.")
@@ -126,14 +130,16 @@ object Card_124 extends EventCard(124, "Tet Offensive",
   )
 
   def botTerror(terrorSpaces: List[Space]): Unit = {
-    def nextTerror(candidates: List[Space]): Unit = if (candidates.nonEmpty) {
-      // Have Bot place terror markers in spaces that can have support first
-      val narrowed = Bot.narrowCandidates(candidates, terrorPreferences)
-      val sp = VC_Bot.pickSpaceTowardActiveOpposition(narrowed)
+    def nextTerror(candidates: List[Space]): Unit = candidates match {
+      case Nil =>
+      case _ =>
+        // Have Bot place terror markers in spaces that can have support first
+        val narrowed = Bot.narrowCandidates(candidates, terrorPreferences)
+        val sp = VC_Bot.pickSpaceTowardActiveOpposition(narrowed)
 
-      terrorizeSpace(sp.name)
-      pause()
-      nextTerror(candidates filterNot(_.name == sp.name))
+        terrorizeSpace(sp.name)
+        pause()
+        nextTerror(candidates filterNot(_.name == sp.name))
     }
 
     nextTerror(terrorSpaces)

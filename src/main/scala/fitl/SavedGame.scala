@@ -57,14 +57,14 @@ object SavedGame {
         println(s"Error writing saved game ($filepath)$suffix")
     }
   }
-  
+
   private def toJson(gameState: GameState): String = {
-    val top = Map(
+    val top = Json.Obj(
       "file-version"     -> CurrentFileVersion,
       "software-version" -> SOFTWARE_VERSION,
-      "game-state"       -> gameStateToMap(gameState)
+      "game-state"       -> gameStateToObj(gameState)
     )
-    Json.build(top)
+    Json.output(top, indent = Some(2))
   }
 
   // The path should be the full path to the file to load.
@@ -84,117 +84,100 @@ object SavedGame {
   }
 
   private def fromJson(jsonValue: String): GameState = {
-    val top = asMap(Json.parse(jsonValue))
+    val top = Json.parse(jsonValue).obj
     if (!top.contains("file-version"))
       throw new IllegalArgumentException(s"Invalid save file - No file version number")
-    
+
     if (!top.contains("game-state"))
       throw new IllegalArgumentException(s"Invalid save file - No game-state")
 
-    asInt(top("file-version")) match {
-      case 1 => gameFromVersion1(asMap(top("game-state")))
+    top("file-version").int match {
+      case 1 => gameFromVersion1(top("game-state"))
       case v => throw new IllegalArgumentException(s"Invalid save file version: $v")
     }
   }
-  
-  private def asString(x: Any): String = x.toString
-  private def asBoolean(x: Any): Boolean = x match {
-    case b: Boolean => b
-    case _          => throw new Exception(s"Not a valid Boolean value: $x")
-  }  
-  private def asInt(x: Any): Int = x match {
-    case i: Int => i
-    case _      => throw new Exception(s"Not a valid Boolean value: $x")
-  }  
-  private def asMap(x: Any): Map[String, Any] = x match {
-    case m: Map[_, _] => m.asInstanceOf[Map[String, Any]]
-    case _            => throw new Exception(s"Not a valid Map value!")
-  }  
-  private def asList(x: Any): List[Any] = x match {
-    case l: List[_] => l.asInstanceOf[List[Any]]
-    case _          => throw new Exception(s"Not a valid List value!")
-  }  
-  private def asSet(x: Any): Set[Any] = x match {
-    case l: List[_] => l.asInstanceOf[List[Any]].toSet
-    case _          => throw new Exception(s"Not a valid Set value!")
-  }  
-    
-  private def actorToMap(actor: Actor): Map[String, Any] =
-    Map(
+
+  private def actorToObj(actor: Actor) =
+    Json.Obj(
       "faction" -> actor.faction.name,
       "action"  -> actor.action.name
     )
 
-  private def actorFromMap(data: Map[String, Any]): Actor = {
+  private def actorFromObj(data: Json.Value): Actor = {
     Actor(
-      Faction(asString(data("faction"))),
-      Action(asString(data("action")))
+      Faction(data.obj("faction").str),
+      Action(data.obj("action").str)
     )
   }
 
-  private def capabilityToMap(cap: Capability): Map[String, Any] =
-    Map(
+  private def capabilityToObj(cap: Capability) =
+    Json.Obj(
       "name"    -> cap.name,
       "shaded"  -> cap.shaded,
-      "faction" -> cap.faction.toString
+      "faction" -> cap.faction.name
     )
 
-  private def capabilityFromMap(data: Map[String, Any]): Capability = {
+  private def capabilityFromObj(data: Json.Value): Capability = {
+    val params = data.obj
     Capability(
-      asString(data("name")),
-      asBoolean(data("shaded")),
-      Faction(asString(data("faction")))
+      params("name").str,
+      params("shaded").bool,
+      Faction(params("faction").str)
     )
   }
 
-  private def gameSegmentToMap(seg: GameSegment): Map[String, Any] =
-    Map(
+  private def gameSegmentToObj(seg: GameSegment) =
+    Json.Obj(
       "save_number" -> seg.save_number,
       "card"        -> seg.card,
-      "summary"     -> seg.summary
+      "summary"     -> Json.Arr.from(seg.summary)
     )
 
-  private def gameSegmentFromMap(data: Map[String, Any]): GameSegment = {
+  private def gameSegmentFromObj(data: Json.Value): GameSegment = {
+    val params = data.obj
     GameSegment(
-      asInt(data("save_number")),
-      asString(data("card")),
-      asList(data("summary")) map (_.toString)
+      params("save_number").int,
+      params("card").str,
+      params("summary").arr.map(_.str).toList
     )
   }
 
-  private def sequenceOfPlayToMap(seq: SequenceOfPlay): Map[String, Any] =
-    Map(
-      "eligibleThisTurn"   -> seq.eligibleThisTurn,
-      "actors"             -> (seq.actors map (a => Map("faction" -> a.faction.name, "action" -> a.action.name))),
-      "passed"             -> seq.passed,
-      "eligibleNextTurn"   -> seq.eligibleNextTurn,
-      "ineligibleNextTurn" -> seq.ineligibleNextTurn
+  private def sequenceOfPlayToObj(seq: SequenceOfPlay) =
+    Json.Obj(
+      "eligibleThisTurn"   -> Json.Arr.from(seq.eligibleThisTurn.map(_.name)),
+      "actors"             -> Json.Arr.from(
+        seq.actors.map(a => Json.Obj("faction" -> a.faction.name, "action" -> a.action.name))
+      ),
+      "passed"             -> Json.Arr.from(seq.passed.map(_.name)),
+      "eligibleNextTurn"   -> Json.Arr.from(seq.eligibleNextTurn.map(_.name)),
+      "ineligibleNextTurn" -> Json.Arr.from(seq.ineligibleNextTurn.map(_.name))
     )
-  
-  private def sequenceOfPlayFromMap(data: Map[String, Any]): SequenceOfPlay = {
+
+  private def sequenceOfPlayFromObj(data: Json.Value): SequenceOfPlay = {
+    val params = data.obj
     SequenceOfPlay(
-      asSet(data("eligibleThisTurn"))   map (name => Faction(name.toString)),
-      asList(data("actors"))            map (data => actorFromMap(asMap(data))),
-      asSet(data("passed"))             map (name => Faction(name.toString)),
-      asSet(data("eligibleNextTurn"))   map (name => Faction(name.toString)),
-      asSet(data("ineligibleNextTurn")) map (name => Faction(name.toString))
+      params("eligibleThisTurn").arr.map(name => Faction(name.str)).toSet,
+      params("actors").arr.map(actorFromObj).toList,
+      params("passed").arr.map(name => Faction(name.str)).toSet,
+      params("eligibleNextTurn").arr.map(name => Faction(name.str)).toSet,
+      params("ineligibleNextTurn").arr.map(name => Faction(name.str)).toSet
     )
   }
-    
-  private def spaceToMap(sp: Space): Map[String, Any] =
-    Map(
+
+  private def spaceToObj(sp: Space) =
+    Json.Obj(
       "name"       -> sp.name,
-      "spaceType"  -> sp.spaceType,
+      "spaceType"  -> sp.spaceType.name,
       "population" -> sp.population,
       "coastal"    -> sp.coastal,
-      "support"    -> sp.support,
-      "support"    -> sp.support,
-      "pieces"     -> (sp.pieces.explode() map (_.name)),
+      "support"    -> sp.support.name,
+      "pieces"     -> Json.Arr.from(sp.pieces.explode().map(_.name)),
       "terror"     -> sp.terror
     )
-  
-  
-  private def spaceFromMap(data: Map[String, Any]): Space = {
+
+
+  private def spaceFromObj(data: Json.Value): Space = {
+    val params = data.obj
     //  Some space names have been fixed for typos etc.
     //  This will allow us to load game files that were saved
     //  with the obsolete names
@@ -202,27 +185,27 @@ object SavedGame {
       case "Quang Tin Quang Ngai" => FireInTheLake.QuangTin_QuangNgai  // Added a hypen between the two Names
       case other                  => other
     }
-    
+
     Space(
-      spaceNameFixup(asString(data("name"))),
-      SpaceType(asString(data("spaceType"))),
-      asInt(data("population")),
-      asBoolean(data("coastal")),
-      SupportType(asString(data("support"))),
-      Pieces.fromTypes(asList(data("pieces")) map (name => PieceType(name.toString))),
-      asInt(data("terror"))
+      spaceNameFixup(params("name").str),
+      SpaceType(params("spaceType").str),
+      params("population").int,
+      params("coastal").bool,
+      SupportType(params("support").str),
+      Pieces.fromTypes(params("pieces").arr.map(name => PieceType(name.str))),
+      params("terror").int
     )
   }
-  
-  
-  private def gameStateToMap(gameState: GameState): Map[String, Any] = {
-    Map(
+
+
+  private def gameStateToObj(gameState: GameState) = {
+    Json.Obj(
       "scenarioName"           -> gameState.scenarioName,
-      "humanFactions"          -> gameState.humanFactions,
+      "humanFactions"          -> Json.Arr.from(gameState.humanFactions.map(_.name)),
       "cardsPerCampaign"       -> gameState.cardsPerCampaign,
       "totalCoupCards"         -> gameState.totalCoupCards,   // Total number in the current scenario
       "humanWinInVictoryPhase" -> gameState.humanWinInVictoryPhase,
-      "spaces"                 -> (gameState.spaces map spaceToMap),
+      "spaces"                 -> Json.Arr.from(gameState.spaces.map(spaceToObj)),
       "arvnResources"          -> gameState.arvnResources,
       "nvaResources"           -> gameState.nvaResources,
       "vcResources"            -> gameState.vcResources,
@@ -231,102 +214,103 @@ object SavedGame {
       "econ"                   -> gameState.econ,
       "trail"                  -> gameState.trail,
       "usPolicy"               -> gameState.usPolicy,
-      "casualties"             -> (gameState.casualties.explode() map (_.name)),
-      "outOfPlay"              -> (gameState.outOfPlay.explode() map (_.name)),
-      "pivotCardsAvailable"    -> gameState.pivotCardsAvailable,
-      "capabilities"           -> (gameState.capabilities map capabilityToMap),
-      "ongoingEvents"          -> gameState.ongoingEvents,
-      "rvnLeaders"             -> gameState.rvnLeaders,
+      "casualties"             -> Json.Arr.from(gameState.casualties.explode().map(_.name)),
+      "outOfPlay"              -> Json.Arr.from(gameState.outOfPlay.explode().map(_.name)),
+      "pivotCardsAvailable"    -> Json.Arr.from(gameState.pivotCardsAvailable.map(_.name)),
+      "capabilities"           -> Json.Arr.from(gameState.capabilities.map(capabilityToObj)),
+      "ongoingEvents"          -> Json.Arr.from(gameState.ongoingEvents),
+      "rvnLeaders"             -> Json.Arr.from(gameState.rvnLeaders),
       "rvnLeaderFlipped"       -> gameState.rvnLeaderFlipped,
-      "trungDeck"              -> (gameState.trungDeck map (_.id)),
-      "momentum"               -> gameState.momentum,
-      "sequence"               -> sequenceOfPlayToMap(gameState.sequence),
+      "trungDeck"              -> Json.Arr.from(gameState.trungDeck.map(_.id)),
+      "momentum"               -> Json.Arr.from(gameState.momentum),
+      "sequence"               -> sequenceOfPlayToObj(gameState.sequence),
       "currentCard"            -> gameState.currentCard,
       "onDeckCard"             -> gameState.onDeckCard,
       "prevCardWasCoup"        -> gameState.prevCardWasCoup,
       "coupCardsPlayed"        -> gameState.coupCardsPlayed,
-      "cardsSeen"              -> gameState.cardsSeen,
+      "cardsSeen"              -> Json.Arr.from(gameState.cardsSeen),
       "gameOver"               -> gameState.gameOver,
       "peaceTalks"             -> gameState.peaceTalks,
       "botDebug"               -> gameState.botDebug,
       "botTest"                -> gameState.botTest,
       "logTrung"               -> gameState.logTrung,
-      "botIntents"             -> gameState.botIntents.toString,
-      "history"                -> (gameState.history map gameSegmentToMap),
+      "botIntents"             -> gameState.botIntents.description,
+      "history"                -> Json.Arr.from(gameState.history.map(gameSegmentToObj)),
       "showColor"              -> gameState.showColor
     )
   }
-    
-  private def gameFromVersion1(data: Map[String, Any]): GameState = {
+
+  private def gameFromVersion1(data: Json.Value): GameState = {
+    val params = data.obj
     GameState(
-      asString(data("scenarioName")),
-      (asSet(data("humanFactions")) map (name => Faction(name.toString))),
-      asInt(data("cardsPerCampaign")),
-      asInt(data("totalCoupCards")),
-      asBoolean(data("humanWinInVictoryPhase")),
-      asList(data("spaces")) map (s => spaceFromMap(asMap(s))),
-      asInt(data("arvnResources")),
-      asInt(data("nvaResources")),
-      asInt(data("vcResources")),
-      asInt(data("usAid")),
-      asInt(data("patronage")),
-      asInt(data("econ")),
-      asInt(data("trail")),
-      asString(data("usPolicy")),
-      Pieces.fromTypes(asList(data("casualties")) map (name => PieceType(name.toString))),
-      Pieces.fromTypes(asList(data("outOfPlay")) map (name => PieceType(name.toString))),
-      (asSet(data("pivotCardsAvailable")) map (name => Faction(name.toString))),
-      asList(data("capabilities")) map (c => capabilityFromMap(asMap(c))),
-      asList(data("ongoingEvents")) map (_.toString),
-      asList(data("rvnLeaders")) map (_.toString),
-      asBoolean(data("rvnLeaderFlipped")),
-      asList(data("trungDeck")) map (id => trungFromId(id.toString)),
-      asList(data("momentum")) map (_.toString),
-      sequenceOfPlayFromMap(asMap(data("sequence"))),
-      asInt(data("currentCard")),
-      asInt(data("onDeckCard")),
-      asBoolean(data("prevCardWasCoup")),
-      asInt(data("coupCardsPlayed")),
-      asList(data("cardsSeen")) map (_.toString.toInt),
-      asBoolean(data("gameOver")),
-      asBoolean(data("peaceTalks")),
-      asBoolean(data("botDebug")),
-      asBoolean(data.get("botTest") getOrElse false),
-      asBoolean(data.get("logTrung") getOrElse true),
-      BotIntents(asString(data.get("botIntents") getOrElse BotIntentsVerbose.toString)),
-      (asList(data("history")) map (s => gameSegmentFromMap(asMap(s)))).toVector,
-      asBoolean(data.get("showColor") getOrElse true)
+      params("scenarioName").str,
+      params("humanFactions").arr.map(name => Faction(name.str)).toSet,
+      params("cardsPerCampaign").int,
+      params("totalCoupCards").int,
+      params("humanWinInVictoryPhase").bool,
+      params("spaces").arr.map(spaceFromObj).toList,
+      params("arvnResources").int,
+      params("nvaResources").int,
+      params("vcResources").int,
+      params("usAid").int,
+      params("patronage").int,
+      params("econ").int,
+      params("trail").int,
+      params("usPolicy").str,
+      Pieces.fromTypes(params("casualties").arr.map(name => PieceType(name.str))),
+      Pieces.fromTypes(params("outOfPlay").arr.map(name => PieceType(name.str))),
+      params("pivotCardsAvailable").arr.map(name => Faction(name.str)).toSet,
+      params("capabilities").arr.map(capabilityFromObj).toList,
+      params("ongoingEvents").arr.map(_.str).toList,
+      params("rvnLeaders").arr.map(_.str).toList,
+      params("rvnLeaderFlipped").bool,
+      params("trungDeck").arr.map(id => trungFromId(id.str)).toList,
+      params("momentum").arr.map(_.str).toList,
+      sequenceOfPlayFromObj(params("sequence")),
+      params("currentCard").int,
+      params("onDeckCard").int,
+      params("prevCardWasCoup").bool,
+      params("coupCardsPlayed").int,
+      params("cardsSeen").arr.map(_.int).toList,
+      params("gameOver").bool,
+      params("peaceTalks").bool,
+      params("botDebug").bool,
+      params.get("botTest").map(_.bool).getOrElse(false),
+      params.get("logTrung").map(_.bool).getOrElse(true),
+      BotIntents(params.get("botIntents").map(_.str).getOrElse(BotIntentsVerbose.description)),
+      params("history").arr.map(gameSegmentFromObj).toVector,
+      params.get("showColor").map(_.bool).getOrElse(true)
     )
   }
 
 
   // Methods to save and load the log files
-  private def logEntryToMap(entry: LogEntry): Map[String, Any] = 
-    Map(
+  private def logEntryToObj(entry: LogEntry) =
+    Json.Obj(
       "text" -> entry.text,
-      "color" -> entry.color.map(_.name).getOrElse(null)
+      "color" -> entry.color.map(c => Json.Str(c.name)).getOrElse(Json.Null)
     )
-  
-  private def logEntryFromMap(data: Map[String, Any]): LogEntry = {
-    val color = if (data("color") == null)
+
+  private def logEntryFromObj(data: Json.Value): LogEntry = {
+    val color = if (data.obj("color").isNull)
       None
     else
-      Some(Color.fromName(asString(data("color"))));
-  
-    LogEntry(asString(data("text")), color)
+      Some(Color.fromName(data.obj("color").str))
+
+    LogEntry(data.obj("text").str, color)
   }
 
   private def logToJson(entries: Vector[LogEntry]): String = {
-    val top = Map(
+    val top = Json.Obj(
       "file-version"     -> CurrentLogVersion,
       "software-version" -> SOFTWARE_VERSION,
-      "log"              -> (entries map logEntryToMap)
+      "log"              -> Json.Arr.from(entries.map(logEntryToObj))
     )
-    Json.build(top)
+    Json.output(top, indent = Some(2))
   }
 
-  private def logFromVersion1(entries: List[Any]): Vector[LogEntry] = {
-    entries.map(e => logEntryFromMap(asMap(e))).toVector
+  private def logFromVersion1(entries: List[Json.Value]): Vector[LogEntry] = {
+    entries.map(logEntryFromObj).toVector
   }
 
   def saveLog(filepath: Pathname, entries: Vector[LogEntry]): Unit = {
@@ -344,26 +328,26 @@ object SavedGame {
   }
 
   private def logFromJson(jsonValue: String): Vector[LogEntry] = {
-      val top = asMap(Json.parse(jsonValue))
+      val top = Json.parse(jsonValue).obj
       if (!top.contains("file-version"))
         throw new IllegalArgumentException(s"Invalid save file - missing file version number")
-      
+
       if (!top.contains("log"))
         throw new IllegalArgumentException(s"Invalid save file - missing log entries")
-  
-      asInt(top("file-version")) match {
-        case 1 => logFromVersion1(asList(top("log")))
+
+      top("file-version").int match {
+        case 1 => logFromVersion1(top("log").arr.toList)
         case v => throw new IllegalArgumentException(s"Invalid log file version: $v")
       }
   }
-  
+
 
    // The path should be the full path to the file to load.
   // Will set the game global variable
   def loadLog(filepath: Pathname): Vector[LogEntry] = {
     try logFromJson(filepath.readFile())
     catch {
-      case e: JsonException =>
+      case e: Json.JsonException =>
           // Older versions did not store the log as json
         // If we cannot parse the file then treat it as a regular
         // text file.

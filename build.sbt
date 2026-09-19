@@ -21,7 +21,7 @@ lazy val fitl = (project in file("."))
     name        := "Fire-in-the-Lake",
     description := "A scala implementation of the solo Tru'ng Bots for Fire in the Lake",
     libraryDependencies ++= Seq(
-      "org.scala-lang.modules" %% "scala-parser-combinators" % "2.1.1"
+      "org.scala-lang.modules" %% "scala-parser-combinators" % "2.4.0"
     ),
     sourceOther := sourceDirectory.value / "other",
     Compile / resourceGenerators += Def.task {

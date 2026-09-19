@@ -78,6 +78,14 @@ object FireInTheLake {
 
   val INTEGER = """(\d+)""".r
 
+  implicit class ThrowableWrapper(exception: Throwable) {
+    def stackTrace: String = {
+      val w = new java.io.StringWriter
+      exception.printStackTrace(new java.io.PrintWriter(w))
+      w.toString
+    }
+  }
+
   def d6 = nextInt(6) + 1
   def d3 = nextInt(3) + 1
   def rollDice(numDice: Int) = List.fill(numDice)(d6).sum
@@ -2895,6 +2903,10 @@ object FireInTheLake {
     }
     catch {
       case ExitGame =>
+
+      case t: Throwable =>
+        System.err.println(t.stackTrace)
+        pause()
     }
   }
 

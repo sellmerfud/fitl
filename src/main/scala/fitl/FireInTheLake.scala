@@ -2117,7 +2117,7 @@ object FireInTheLake {
 
   object BotIntents {
     val ALL       = Set[BotIntents](BotIntentsVerbose, BotIntentsConcise, BotIntentsNone)
-    def apply(name: String): BotIntents = ALL find (_.toString.toLowerCase == name.toLowerCase) getOrElse {
+    def apply(name: String): BotIntents = ALL find (_.description.toLowerCase == name.toLowerCase) getOrElse {
       throw new IllegalArgumentException(s"Invalid BotIntents name: $name")
     }
   }
